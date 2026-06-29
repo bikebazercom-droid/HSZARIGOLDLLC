@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "html2pdf.js": "^0.14.0",
     "qrcode.react": "^4.2.0"
   }
 }

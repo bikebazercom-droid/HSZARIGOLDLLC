@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Link, useParams } from "wouter";
 import {
   useGetInvoice,
@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, Download } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -93,6 +93,23 @@ export default function InvoiceDetail() {
   // Split address only on explicit newlines (as typed in the textarea)
   const addressLines = companyAddress.split("\n").map(s => s.trim()).filter(Boolean);
 
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadPdf = async () => {
+    if (!invoiceRef.current) return;
+    const html2pdf = (await import("html2pdf.js")).default;
+    html2pdf()
+      .set({
+        margin: 0,
+        filename: `Invoice-${invoice.invoiceNumber}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(invoiceRef.current)
+      .save();
+  };
+
   return (
     <div className="max-w-4xl mx-auto pb-20 print:p-0 print:m-0 print:max-w-none">
       <div className="flex justify-between items-center mb-6 no-print">
@@ -102,11 +119,14 @@ export default function InvoiceDetail() {
           </Link>
           <h1 className="text-2xl font-bold tracking-tight text-primary">Invoice {invoice.invoiceNumber}</h1>
         </div>
-        <Button onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Print Invoice</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleDownloadPdf}><Download className="w-4 h-4 mr-2" /> Download PDF</Button>
+          <Button onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Print Invoice</Button>
+        </div>
       </div>
 
       {/* ─── INVOICE DOCUMENT ─── */}
-      <div className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}` }}>
+      <div ref={invoiceRef} className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}` }}>
 
         {/* Gold top border */}
         <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
