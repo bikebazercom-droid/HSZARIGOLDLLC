@@ -82,7 +82,7 @@ export default function NewInvoice() {
   const [notes, setNotes] = useState("");
   const [metalRate, setMetalRate] = useState<number>(goldRate);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
-  const [vatRate] = useState<number>(5);
+  const [vatRate, setVatRate] = useState<number>(5);
   const [roundOffDiscount, setRoundOffDiscount] = useState<number>(0);
 
   const [items, setItems] = useState<LineItem[]>(DEFAULT_ITEMS.map(i => ({ ...i, id: Math.random().toString(36).substring(7) })));
@@ -431,8 +431,20 @@ export default function NewInvoice() {
                     <span className="text-muted-foreground">Total Before VAT</span>
                     <span className="font-medium">{fmt(totalBeforeVat)} AED</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">VAT ({vatRate}%)</span>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span>VAT</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        className="w-16 h-7 text-center text-sm px-1"
+                        value={vatRate}
+                        onChange={e => setVatRate(parseFloat(e.target.value) || 0)}
+                      />
+                      <span>%</span>
+                    </div>
                     <span className="font-medium">+ {fmt(vatAmount)} AED</span>
                   </div>
                   <div className="flex justify-between items-center">
