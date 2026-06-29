@@ -192,19 +192,19 @@ export default function NewInvoice() {
               <CardTitle>Invoice Items</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded overflow-hidden border border-border">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b-2 border-border">
-                      <th className="py-2 px-2 text-left font-semibold text-muted-foreground w-6">S.No</th>
-                      <th className="py-2 px-2 text-left font-semibold text-muted-foreground min-w-[180px]">Description</th>
-                      <th className="py-2 px-2 text-right font-semibold text-muted-foreground w-[90px]">Gross Wt (g)</th>
-                      <th className="py-2 px-2 text-right font-semibold text-muted-foreground w-[130px]">Purity</th>
-                      <th className="py-2 px-2 text-right font-semibold text-muted-foreground w-[80px]">Pure Wt (g)</th>
-                      <th className="py-2 px-2 text-right font-semibold text-muted-foreground w-[110px]">Making Rate</th>
-                      <th className="py-2 px-2 text-right font-semibold text-muted-foreground w-[110px]">Making Amt AED</th>
-                      <th className="py-2 px-2 text-right font-semibold text-muted-foreground w-[110px]">Total AED</th>
-                      <th className="w-8"></th>
+                    <tr style={{ backgroundColor: "#1e3a5f" }}>
+                      <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap w-10">S.No.</th>
+                      <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap min-w-[180px]">Stock Description</th>
+                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[100px]">Gross Wt.</th>
+                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[130px]">Purity</th>
+                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[90px]">Pure Wt.</th>
+                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Making Rate</th>
+                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Making Amt. (AED)</th>
+                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Total (AED)</th>
+                      <th className="w-8 bg-[#1e3a5f]"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -218,27 +218,27 @@ export default function NewInvoice() {
                     {items.map((item, index) => {
                       const isCustomPurity = customPurityIdx[index];
                       return (
-                        <tr key={item.id} className="border-b border-border/50">
-                          <td className="py-2 px-2 text-muted-foreground">{index + 1}</td>
-                          <td className="py-2 px-2">
+                        <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
+                          <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
+                          <td className="py-2 px-3">
                             <Input
-                              placeholder="Description"
+                              placeholder="Stock description"
                               value={item.description}
                               onChange={e => updateItem(index, "description", e.target.value)}
                               className="h-8 text-sm"
                             />
                           </td>
-                          <td className="py-2 px-2">
+                          <td className="py-2 px-3">
                             <Input
                               type="number"
                               min="0"
                               step="0.001"
                               value={item.grossWeight || ""}
                               onChange={e => updateItem(index, "grossWeight", parseFloat(e.target.value) || 0)}
-                              className="h-8 text-sm text-right"
+                              className="h-8 text-sm text-center"
                             />
                           </td>
-                          <td className="py-2 px-2">
+                          <td className="py-2 px-3">
                             {isCustomPurity ? (
                               <Input
                                 type="number"
@@ -247,7 +247,7 @@ export default function NewInvoice() {
                                 step="0.0001"
                                 value={item.purity || ""}
                                 onChange={e => updateItem(index, "purity", parseFloat(e.target.value) || 0)}
-                                className="h-8 text-sm text-right"
+                                className="h-8 text-sm text-center"
                                 placeholder="0.9167"
                               />
                             ) : (
@@ -273,23 +273,23 @@ export default function NewInvoice() {
                               </Select>
                             )}
                           </td>
-                          <td className="py-2 px-2 text-right font-mono text-sm">
+                          <td className="py-2 px-3 text-center font-mono text-sm">
                             {item.pureWeight.toFixed(4)}
                           </td>
-                          <td className="py-2 px-2">
+                          <td className="py-2 px-3">
                             <Input
                               type="number"
                               min="0"
                               step="0.01"
                               value={item.makingRate || ""}
                               onChange={e => updateItem(index, "makingRate", parseFloat(e.target.value) || 0)}
-                              className="h-8 text-sm text-right"
+                              className="h-8 text-sm text-center"
                             />
                           </td>
-                          <td className="py-2 px-2 text-right font-mono text-sm">
+                          <td className="py-2 px-3 text-center font-mono text-sm">
                             {fmt(item.makingAmt)}
                           </td>
-                          <td className="py-2 px-2 text-right font-semibold font-mono text-sm text-primary">
+                          <td className="py-2 px-3 text-center font-semibold font-mono text-sm text-primary">
                             {fmt(item.totalPrice)}
                           </td>
                           <td className="py-2 px-1">

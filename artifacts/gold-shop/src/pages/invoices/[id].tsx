@@ -95,33 +95,33 @@ export default function InvoiceDetail() {
         {hasWeightData ? (
           <table className="w-full mb-6 text-xs border-collapse">
             <thead>
-              <tr className="border-y-2 border-gray-700 bg-gray-50">
-                <th className="py-2 px-2 text-left font-bold">S.No</th>
-                <th className="py-2 px-2 text-left font-bold">Description</th>
-                <th className="py-2 px-2 text-right font-bold">Gross Wt (g)</th>
-                <th className="py-2 px-2 text-right font-bold">Purity</th>
-                <th className="py-2 px-2 text-right font-bold">Pure Wt (g)</th>
-                <th className="py-2 px-2 text-right font-bold">Making Rate</th>
-                <th className="py-2 px-2 text-right font-bold">Making Amt AED</th>
-                <th className="py-2 px-2 text-right font-bold">Total AED</th>
+              <tr style={{ backgroundColor: "#1e3a5f" }}>
+                <th className="py-2.5 px-3 text-left font-bold text-white text-xs">S.No.</th>
+                <th className="py-2.5 px-3 text-left font-bold text-white text-xs">Stock Description</th>
+                <th className="py-2.5 px-3 text-center font-bold text-white text-xs">Gross Wt.</th>
+                <th className="py-2.5 px-3 text-center font-bold text-white text-xs">Purity</th>
+                <th className="py-2.5 px-3 text-center font-bold text-white text-xs">Pure Wt.</th>
+                <th className="py-2.5 px-3 text-center font-bold text-white text-xs">Making Rate</th>
+                <th className="py-2.5 px-3 text-center font-bold text-white text-xs">Making Amt. (AED)</th>
+                <th className="py-2.5 px-3 text-center font-bold text-white text-xs">Total (AED)</th>
               </tr>
             </thead>
             <tbody>
               {invoice.items?.map((item, index) => (
-                <tr key={item.id} className="border-b border-gray-200">
-                  <td className="py-2.5 px-2">{index + 1}</td>
-                  <td className="py-2.5 px-2 font-medium">
+                <tr key={item.id} className="border-b border-gray-200 even:bg-gray-50">
+                  <td className="py-2.5 px-3">{index + 1}</td>
+                  <td className="py-2.5 px-3 font-medium">
                     {item.description}
                     {item.category && (
                       <span className="block text-gray-400 text-xs capitalize">{item.category.replace(/_/g, " ")}</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2 text-right font-mono">{fmt4(item.grossWeight)}</td>
-                  <td className="py-2.5 px-2 text-right font-mono">{fmt4(item.purity)}</td>
-                  <td className="py-2.5 px-2 text-right font-mono">{fmt4(item.pureWeight)}</td>
-                  <td className="py-2.5 px-2 text-right font-mono">{fmt4(item.makingRate)}</td>
-                  <td className="py-2.5 px-2 text-right font-mono">{fmt(item.makingAmt)}</td>
-                  <td className="py-2.5 px-2 text-right font-bold font-mono">{fmt(item.totalPrice)}</td>
+                  <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.grossWeight)}</td>
+                  <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.purity)}</td>
+                  <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.pureWeight)}</td>
+                  <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.makingRate)}</td>
+                  <td className="py-2.5 px-3 text-center font-mono">{fmt(item.makingAmt)}</td>
+                  <td className="py-2.5 px-3 text-center font-bold font-mono">{fmt(item.totalPrice)}</td>
                 </tr>
               ))}
             </tbody>
