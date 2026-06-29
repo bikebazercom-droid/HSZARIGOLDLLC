@@ -31,8 +31,10 @@ interface LineItem {
 }
 
 function calcItem(item: LineItem, goldRate: number): LineItem {
+  const parsedPurity = parseFloat(item.purity);
+  const pureWeight = isNaN(parsedPurity) ? 0 : parseFloat((item.grossWeight * parsedPurity).toFixed(4));
   const totalPrice = parseFloat((item.grossWeight * goldRate + item.makingAmt).toFixed(2));
-  return { ...item, pureWeight: 0, totalPrice };
+  return { ...item, pureWeight, totalPrice };
 }
 
 export default function NewInvoice() {
@@ -241,8 +243,8 @@ export default function NewInvoice() {
                               className="h-8 text-sm text-center"
                             />
                           </td>
-                          <td className="py-2 px-3 text-center text-muted-foreground text-sm">
-                            —
+                          <td className="py-2 px-3 text-center font-mono text-sm">
+                            {item.pureWeight > 0 ? item.pureWeight.toFixed(4) : "—"}
                           </td>
                           <td className="py-2 px-3">
                             <Input
