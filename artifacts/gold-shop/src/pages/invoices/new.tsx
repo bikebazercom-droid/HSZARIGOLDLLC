@@ -41,9 +41,8 @@ const PURITY_OPTIONS = [
 
 function calcItem(item: LineItem, goldRate: number): LineItem {
   const pureWeight = parseFloat((item.grossWeight * item.purity).toFixed(4));
-  const makingAmt = parseFloat((item.grossWeight * item.makingRate).toFixed(2));
-  const totalPrice = parseFloat((pureWeight * goldRate + makingAmt).toFixed(2));
-  return { ...item, pureWeight, makingAmt, totalPrice };
+  const totalPrice = parseFloat((pureWeight * goldRate + item.makingAmt).toFixed(2));
+  return { ...item, pureWeight, totalPrice };
 }
 
 export default function NewInvoice() {
@@ -285,8 +284,15 @@ export default function NewInvoice() {
                               className="h-8 text-sm text-center"
                             />
                           </td>
-                          <td className="py-2 px-3 text-center font-mono text-sm">
-                            {fmt(item.makingAmt)}
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.makingAmt || ""}
+                              onChange={e => updateItem(index, "makingAmt", parseFloat(e.target.value) || 0)}
+                              className="h-8 text-sm text-center"
+                            />
                           </td>
                           <td className="py-2 px-3 text-center font-semibold font-mono text-sm text-primary">
                             {fmt(item.totalPrice)}
@@ -314,7 +320,7 @@ export default function NewInvoice() {
 
               {items.length > 0 && (
                 <div className="mt-4 p-3 bg-muted/40 rounded text-xs text-muted-foreground">
-                  Formula: Pure Wt = Gross Wt × Purity &nbsp;|&nbsp; Making Amt = Gross Wt × Making Rate &nbsp;|&nbsp; Total = (Pure Wt × Gold Rate AED {goldRate}/g) + Making Amt
+                  Formula: Pure Wt = Gross Wt × Purity &nbsp;|&nbsp; Total = (Pure Wt × Gold Rate AED {goldRate}/g) + Making Amt
                 </div>
               )}
             </CardContent>
