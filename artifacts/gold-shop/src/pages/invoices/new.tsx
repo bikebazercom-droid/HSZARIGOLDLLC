@@ -218,13 +218,22 @@ export default function NewInvoice() {
                       return (
                         <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
                           <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
-                          <td className="py-2 px-3">
-                            <Input
-                              placeholder="Stock description"
+                          <td className="py-2 px-3 min-w-[160px]">
+                            <Select
                               value={item.description}
-                              onChange={e => updateItem(index, "description", e.target.value)}
-                              className="h-8 text-sm"
-                            />
+                              onValueChange={val => updateItem(index, "description", val)}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
+                                <SelectItem value="GOLD">GOLD</SelectItem>
+                                <SelectItem value="TT BAR">TT BAR</SelectItem>
+                                <SelectItem value="KG BAR">KG BAR</SelectItem>
+                                <SelectItem value="Silver">Silver</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="py-2 px-3">
                             <Input
