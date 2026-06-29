@@ -19,4 +19,6 @@ export interface CompanySettings {
   locationUrl?: string | null;
   logoType: string;
   logoInitial: string;
+  /** @nullable */
+  logoImageUrl?: string | null;
 }

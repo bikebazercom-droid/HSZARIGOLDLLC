@@ -16,4 +16,5 @@ export interface CompanySettingsInput {
   locationUrl?: string;
   logoType?: string;
   logoInitial?: string;
+  logoImageUrl?: string;
 }

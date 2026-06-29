@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X } from "lucide-react";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [locationUrl, setLocationUrl] = useState("");
   const [logoType, setLogoType] = useState("monogram");
   const [logoInitial, setLogoInitial] = useState("H");
+  const [logoImageUrl, setLogoImageUrl] = useState<string>("");
 
   useEffect(() => {
     if (settings) {
@@ -44,6 +45,7 @@ export default function SettingsPage() {
       setLocationUrl(settings.locationUrl ?? "");
       setLogoType(settings.logoType ?? "monogram");
       setLogoInitial(settings.logoInitial ?? "H");
+      setLogoImageUrl(settings.logoImageUrl ?? "");
     }
   }, [settings]);
 
@@ -59,6 +61,7 @@ export default function SettingsPage() {
         locationUrl,
         logoType,
         logoInitial,
+        logoImageUrl,
       }
     }, {
       onSuccess: () => {
@@ -145,57 +148,153 @@ export default function SettingsPage() {
           </div>
           <CardDescription>Choose how your company logo appears on invoices</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div className="space-y-2">
-              <Label>Logo Type</Label>
-              <Select value={logoType} onValueChange={setLogoType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monogram">Monogram (Letter)</SelectItem>
-                  <SelectItem value="none">No Logo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {logoType === "monogram" && (
-              <div className="space-y-2">
-                <Label>Monogram Letter</Label>
-                <Input
-                  value={logoInitial}
-                  onChange={e => setLogoInitial(e.target.value.slice(0, 2).toUpperCase())}
-                  placeholder="H"
-                  maxLength={2}
-                  className="w-24 text-center text-2xl font-bold"
-                />
-              </div>
-            )}
+        <CardContent className="space-y-5">
+          {/* Logo type selector */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { value: "image", label: "Upload Image", icon: <Upload className="w-5 h-5" /> },
+              { value: "monogram", label: "Monogram Letter", icon: <span className="text-lg font-bold font-serif">H</span> },
+              { value: "none", label: "No Logo", icon: <X className="w-5 h-5" /> },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setLogoType(opt.value)}
+                className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
+                  logoType === opt.value
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border hover:border-primary/40 text-muted-foreground"
+                }`}
+              >
+                {opt.icon}
+                <span className="text-xs font-medium">{opt.label}</span>
+              </button>
+            ))}
           </div>
 
-          {/* Logo preview */}
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-muted-foreground">Preview:</div>
-            {logoType === "monogram" ? (
-              <div style={{
-                width: "60px", height: "60px", background: "#1e3a5f", borderRadius: "6px",
-                display: "flex", alignItems: "center", justifyContent: "center"
-              }}>
-                <span style={{ color: "#c8a43a", fontSize: "26px", fontWeight: "bold", fontFamily: "Georgia, serif" }}>
-                  {logoInitial || "H"}
-                </span>
-              </div>
-            ) : (
-              <div className="w-15 h-15 bg-muted rounded flex items-center justify-center text-muted-foreground text-sm px-3 py-2">
-                No logo
-              </div>
-            )}
-            <div>
-              <div style={{ fontSize: "18px", fontWeight: "bold", color: "#c8a43a", fontFamily: "Georgia, serif" }}>
-                {companyName.split(" ").slice(0, 2).join(" ") || "Hazari Gold"}
-              </div>
-              <div style={{ fontSize: "13px", fontWeight: "bold", color: "#1e3a5f" }}>
-                {companyName || "HAZARI GOLD L.L.C"}
+          {/* Upload image */}
+          {logoType === "image" && (
+            <div className="space-y-3">
+              <Label>Logo Image</Label>
+              {logoImageUrl ? (
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-lg border overflow-hidden bg-white flex items-center justify-center p-1">
+                    <img src={logoImageUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm text-green-700 font-medium">✓ Logo uploaded</p>
+                    <label className="cursor-pointer">
+                      <span className="text-xs text-primary underline">Replace image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => {
+                            const img = new window.Image();
+                            img.onload = () => {
+                              const canvas = document.createElement("canvas");
+                              const MAX = 300;
+                              const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                              canvas.width = img.width * scale;
+                              canvas.height = img.height * scale;
+                              canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                              setLogoImageUrl(canvas.toDataURL("image/png"));
+                            };
+                            img.src = ev.target?.result as string;
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setLogoImageUrl("")}
+                      className="block text-xs text-destructive underline"
+                    >
+                      Remove logo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all">
+                  <Upload className="w-8 h-8 text-muted-foreground" />
+                  <div className="text-center">
+                    <div className="text-sm font-medium">Click to upload your logo</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">PNG, JPG, SVG · Any size</div>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const img = new window.Image();
+                        img.onload = () => {
+                          const canvas = document.createElement("canvas");
+                          const MAX = 300;
+                          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                          canvas.width = img.width * scale;
+                          canvas.height = img.height * scale;
+                          canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                          setLogoImageUrl(canvas.toDataURL("image/png"));
+                        };
+                        img.src = ev.target?.result as string;
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* Monogram letter */}
+          {logoType === "monogram" && (
+            <div className="space-y-2 max-w-xs">
+              <Label>Monogram Letter</Label>
+              <Input
+                value={logoInitial}
+                onChange={e => setLogoInitial(e.target.value.slice(0, 2).toUpperCase())}
+                placeholder="H"
+                maxLength={2}
+                className="w-24 text-center text-2xl font-bold"
+              />
+            </div>
+          )}
+
+          {/* Preview */}
+          <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-lg border">
+            <div className="text-xs text-muted-foreground uppercase tracking-wide font-medium w-14">Preview</div>
+            <div className="flex items-center gap-3">
+              {logoType === "image" && logoImageUrl ? (
+                <div style={{ width: "60px", height: "60px", background: "#fff", borderRadius: "6px", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", padding: "4px" }}>
+                  <img src={logoImageUrl} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                </div>
+              ) : logoType === "monogram" ? (
+                <div style={{ width: "60px", height: "60px", background: "#1e3a5f", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ color: "#c8a43a", fontSize: "26px", fontWeight: "bold", fontFamily: "Georgia, serif" }}>
+                    {logoInitial || "H"}
+                  </span>
+                </div>
+              ) : (
+                <div className="w-[60px] h-[60px] bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">
+                  none
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#c8a43a", fontFamily: "Georgia, serif" }}>
+                  {companyName.split(" ").slice(0, 2).join(" ") || "Hazari Gold"}
+                </div>
+                <div style={{ fontSize: "12px", fontWeight: "bold", color: "#1e3a5f" }}>
+                  {companyName || "HAZARI GOLD L.L.C"}
+                </div>
               </div>
             </div>
           </div>

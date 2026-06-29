@@ -259,6 +259,8 @@ export interface CompanySettings {
   locationUrl?: string | null;
   logoType: string;
   logoInitial: string;
+  /** @nullable */
+  logoImageUrl?: string | null;
 }
 
 export interface CompanySettingsInput {
@@ -271,6 +273,7 @@ export interface CompanySettingsInput {
   locationUrl?: string;
   logoType?: string;
   logoInitial?: string;
+  logoImageUrl?: string;
 }
 
 export interface MonthlySale {

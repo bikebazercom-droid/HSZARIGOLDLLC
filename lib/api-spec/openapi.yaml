@@ -758,6 +758,8 @@ components:
           type: string
         logoInitial:
           type: string
+        logoImageUrl:
+          type: ["string", "null"]
 
     CompanySettingsInput:
       type: object
@@ -779,6 +781,8 @@ components:
         logoType:
           type: string
         logoInitial:
+          type: string
+        logoImageUrl:
           type: string
 
     MonthlySale:

@@ -29,6 +29,7 @@ router.put("/settings", async (req, res): Promise<void> => {
     locationUrl?: string;
     logoType?: string;
     logoInitial?: string;
+    logoImageUrl?: string;
   };
   const [updated] = await db
     .update(companySettingsTable)

@@ -63,6 +63,7 @@ export default function InvoiceDetail() {
   const locationUrl = settings?.locationUrl ?? "";
   const logoType = settings?.logoType ?? "monogram";
   const logoInitial = settings?.logoInitial ?? "H";
+  const logoImageUrl = settings?.logoImageUrl ?? "";
   const tagline = settings?.tagline ?? "";
 
   const fmt = (n: number | null | undefined) =>
@@ -127,7 +128,15 @@ export default function InvoiceDetail() {
           {/* LEFT: Logo + Company Info */}
           <div style={{ flex: "0 0 38%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-              {logoType === "monogram" ? (
+              {logoType === "image" && logoImageUrl ? (
+                <div style={{
+                  width: "60px", height: "60px", background: "#fff", borderRadius: "6px",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  border: "1px solid #e5e7eb", padding: "3px"
+                }}>
+                  <img src={logoImageUrl} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                </div>
+              ) : logoType === "monogram" ? (
                 <div style={{
                   width: "60px", height: "60px", background: NAVY, borderRadius: "6px",
                   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0

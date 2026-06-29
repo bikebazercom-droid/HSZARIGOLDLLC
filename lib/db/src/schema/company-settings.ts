@@ -11,4 +11,5 @@ export const companySettingsTable = pgTable("company_settings", {
   locationUrl: text("location_url"),
   logoType: text("logo_type").notNull().default("monogram"),
   logoInitial: text("logo_initial").notNull().default("H"),
+  logoImageUrl: text("logo_image_url"),
 });
