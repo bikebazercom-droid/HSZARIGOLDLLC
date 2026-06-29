@@ -308,6 +308,9 @@ export default function NewInvoice() {
               </table>
             </div>
 
+            <Button variant="outline" className="mt-4 w-full border-dashed" onClick={addItem}>
+              <Plus className="w-4 h-4 mr-2" /> Add Line Item
+            </Button>
           </CardContent>
         </Card>
 
