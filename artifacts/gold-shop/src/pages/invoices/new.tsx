@@ -403,29 +403,11 @@ export default function NewInvoice() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Nationality</Label>
-                  <Select value={customerNationality} onValueChange={setCustomerNationality}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select nationality" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["Afghan","Albanian","Algerian","American","Andorran","Angolan","Antiguan","Argentine","Armenian","Australian","Austrian","Azerbaijani","Bahamian","Bahraini","Bangladeshi","Barbadian","Belarusian","Belgian","Belizean","Beninese","Bhutanese","Bolivian","Bosnian","Botswanan","Brazilian","British","Bruneian","Bulgarian","Burkinabe","Burmese","Burundian","Cambodian","Cameroonian","Canadian","Cape Verdean","Central African","Chadian","Chilean","Chinese","Colombian","Comorian","Congolese","Costa Rican","Croatian","Cuban","Cypriot","Czech","Danish","Djiboutian","Dominican","Dutch","East Timorese","Ecuadorian","Egyptian","Emirati","Equatorial Guinean","Eritrean","Estonian","Ethiopian","Fijian","Finnish","French","Gabonese","Gambian","Georgian","German","Ghanaian","Greek","Grenadian","Guatemalan","Guinean","Guinea-Bissauan","Guyanese","Haitian","Honduran","Hungarian","Icelandic","Indian","Indonesian","Iranian","Iraqi","Irish","Israeli","Italian","Ivorian","Jamaican","Japanese","Jordanian","Kazakhstani","Kenyan","Kiribati","Kuwaiti","Kyrgyz","Laotian","Latvian","Lebanese","Lesothan","Liberian","Libyan","Liechtensteiner","Lithuanian","Luxembourger","Malagasy","Malawian","Malaysian","Maldivian","Malian","Maltese","Marshallese","Mauritanian","Mauritian","Mexican","Micronesian","Moldovan","Monacan","Mongolian","Montenegrin","Moroccan","Mozambican","Namibian","Nauruan","Nepali","New Zealander","Nicaraguan","Nigerian","Nigerien","Norwegian","Omani","Pakistani","Palauan","Palestinian","Panamanian","Papua New Guinean","Paraguayan","Peruvian","Filipino","Polish","Portuguese","Qatari","Romanian","Russian","Rwandan","Saint Kitts and Nevisian","Saint Lucian","Saint Vincentian","Samoan","San Marinese","Saudi","Senegalese","Serbian","Sierra Leonean","Singaporean","Slovak","Slovenian","Solomon Islander","Somali","South African","South Korean","South Sudanese","Spanish","Sri Lankan","Sudanese","Surinamese","Swazi","Swedish","Swiss","Syrian","Taiwanese","Tajik","Tanzanian","Thai","Togolese","Tongan","Trinidadian","Tunisian","Turkish","Turkmen","Tuvaluan","Ugandan","Ukrainian","Uruguayan","Uzbek","Vanuatuan","Venezuelan","Vietnamese","Yemeni","Zambian","Zimbabwean"].map(n => (
-                        <SelectItem key={n} value={n}>{n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input value={customerNationality} onChange={e => setCustomerNationality(e.target.value)} placeholder="e.g. Indian" />
                 </div>
                 <div className="space-y-2">
                   <Label>Country</Label>
-                  <Select value={customerCountry} onValueChange={setCustomerCountry}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["UAE","India","Pakistan","Bangladesh","Philippines","Egypt","Nepal","Sri Lanka","Jordan","Lebanon","Syria","Iraq","Iran","Kuwait","Saudi Arabia","Qatar","Bahrain","Oman","Yemen","Afghanistan","Ethiopia","Kenya","Nigeria","Ghana","Sudan","Somalia","Tanzania","Uganda","Eritrea","Morocco","Tunisia","Algeria","Libya","South Africa","China","Japan","South Korea","Indonesia","Malaysia","Thailand","Vietnam","Myanmar","USA","UK","Canada","Australia","Germany","France","Italy","Spain","Russia","Turkey","Brazil","Mexico","Argentina"].map(c => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input value={customerCountry} onChange={e => setCustomerCountry(e.target.value)} placeholder="e.g. UAE" />
                 </div>
               </div>
               <div className="space-y-2">
