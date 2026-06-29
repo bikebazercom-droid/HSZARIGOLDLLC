@@ -90,8 +90,8 @@ export default function InvoiceDetail() {
   const totalMakingAmt = invoice.items?.reduce((s, i) => s + (i.makingAmt ?? 0), 0) ?? 0;
   const totalPrice = invoice.items?.reduce((s, i) => s + (i.totalPrice ?? 0), 0) ?? 0;
 
-  // Split address for multiline display
-  const addressLines = companyAddress.split(",").map(s => s.trim());
+  // Split address only on explicit newlines (as typed in the textarea)
+  const addressLines = companyAddress.split("\n").map(s => s.trim()).filter(Boolean);
 
   return (
     <div className="max-w-4xl mx-auto pb-20 print:p-0 print:m-0 print:max-w-none">
