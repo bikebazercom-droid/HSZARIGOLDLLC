@@ -9,6 +9,52 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Get company settings
+ */
+export const GetSettingsResponse = zod.object({
+  "id": zod.number(),
+  "companyName": zod.string(),
+  "tagline": zod.string().nullish(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "trn": zod.string(),
+  "locationUrl": zod.string().nullish(),
+  "logoType": zod.string(),
+  "logoInitial": zod.string()
+})
+
+
+/**
+ * @summary Update company settings
+ */
+export const UpdateSettingsBody = zod.object({
+  "companyName": zod.string().optional(),
+  "tagline": zod.string().optional(),
+  "address": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "email": zod.string().optional(),
+  "trn": zod.string().optional(),
+  "locationUrl": zod.string().optional(),
+  "logoType": zod.string().optional(),
+  "logoInitial": zod.string().optional()
+})
+
+export const UpdateSettingsResponse = zod.object({
+  "id": zod.number(),
+  "companyName": zod.string(),
+  "tagline": zod.string().nullish(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "trn": zod.string(),
+  "locationUrl": zod.string().nullish(),
+  "logoType": zod.string(),
+  "logoInitial": zod.string()
+})
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

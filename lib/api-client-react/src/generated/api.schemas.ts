@@ -238,6 +238,33 @@ export interface InvoiceInput {
   items: InvoiceItemInput[];
 }
 
+export interface CompanySettings {
+  id: number;
+  companyName: string;
+  /** @nullable */
+  tagline?: string | null;
+  address: string;
+  phone: string;
+  email: string;
+  trn: string;
+  /** @nullable */
+  locationUrl?: string | null;
+  logoType: string;
+  logoInitial: string;
+}
+
+export interface CompanySettingsInput {
+  companyName?: string;
+  tagline?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  trn?: string;
+  locationUrl?: string;
+  logoType?: string;
+  logoInitial?: string;
+}
+
 export interface MonthlySale {
   month: string;
   total: number;

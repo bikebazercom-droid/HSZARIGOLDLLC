@@ -19,8 +19,40 @@ tags:
     description: Invoice management
   - name: prices
     description: Gold/silver price management
+  - name: settings
+    description: Company settings
 
 paths:
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get company settings
+      responses:
+        "200":
+          description: Company settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanySettings"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update company settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanySettingsInput"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanySettings"
+
   /healthz:
     get:
       operationId: healthCheck
@@ -686,6 +718,53 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceItemInput"
+
+    CompanySettings:
+      type: object
+      required: [id, companyName, address, phone, email, trn, logoType, logoInitial]
+      properties:
+        id:
+          type: integer
+        companyName:
+          type: string
+        tagline:
+          type: ["string", "null"]
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        trn:
+          type: string
+        locationUrl:
+          type: ["string", "null"]
+        logoType:
+          type: string
+        logoInitial:
+          type: string
+
+    CompanySettingsInput:
+      type: object
+      properties:
+        companyName:
+          type: string
+        tagline:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        trn:
+          type: string
+        locationUrl:
+          type: string
+        logoType:
+          type: string
+        logoInitial:
+          type: string
 
     MonthlySale:
       type: object

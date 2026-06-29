@@ -1,6 +1,12 @@
 import React from "react";
 import { Link, useParams } from "wouter";
-import { useGetInvoice, getGetInvoiceQueryKey } from "@workspace/api-client-react";
+import {
+  useGetInvoice,
+  getGetInvoiceQueryKey,
+  useGetSettings,
+  getGetSettingsQueryKey,
+} from "@workspace/api-client-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import { format } from "date-fns";
@@ -37,6 +43,9 @@ export default function InvoiceDetail() {
   const { data: invoice, isLoading } = useGetInvoice(id, {
     query: { queryKey: getGetInvoiceQueryKey(id), enabled: !!id }
   });
+  const { data: settings } = useGetSettings({
+    query: { queryKey: getGetSettingsQueryKey(), staleTime: 60_000 }
+  });
 
   if (isLoading) {
     return <div className="p-8 space-y-6"><Skeleton className="h-8 w-64" /><Skeleton className="h-96" /></div>;
@@ -44,6 +53,17 @@ export default function InvoiceDetail() {
   if (!invoice) {
     return <div className="p-8">Invoice not found</div>;
   }
+
+  // Company info from settings (fall back to defaults)
+  const companyName = settings?.companyName ?? "HAZARI GOLD L.L.C";
+  const companyAddress = settings?.address ?? "Matar Abdul Rahman Khalfan Al Muhairi Building, 1st Floor, Room# 101, Deira, Dubai, UAE";
+  const companyPhone = settings?.phone ?? "+971 50 536 4193";
+  const companyEmail = settings?.email ?? "hazarigoldllc@gmail.com";
+  const companyTrn = settings?.trn ?? "105301944200003";
+  const locationUrl = settings?.locationUrl ?? "";
+  const logoType = settings?.logoType ?? "monogram";
+  const logoInitial = settings?.logoInitial ?? "H";
+  const tagline = settings?.tagline ?? "";
 
   const fmt = (n: number | null | undefined) =>
     (n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -69,6 +89,9 @@ export default function InvoiceDetail() {
   const totalMakingAmt = invoice.items?.reduce((s, i) => s + (i.makingAmt ?? 0), 0) ?? 0;
   const totalPrice = invoice.items?.reduce((s, i) => s + (i.totalPrice ?? 0), 0) ?? 0;
 
+  // Split address for multiline display
+  const addressLines = companyAddress.split(",").map(s => s.trim());
+
   return (
     <div className="max-w-4xl mx-auto pb-20 print:p-0 print:m-0 print:max-w-none">
       <div className="flex justify-between items-center mb-6 no-print">
@@ -84,7 +107,7 @@ export default function InvoiceDetail() {
       {/* ─── INVOICE DOCUMENT ─── */}
       <div className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}` }}>
 
-        {/* Gold top border accent */}
+        {/* Gold top border */}
         <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
 
         {/* Top line: Arabic + PARTY COPY */}
@@ -104,28 +127,39 @@ export default function InvoiceDetail() {
           {/* LEFT: Logo + Company Info */}
           <div style={{ flex: "0 0 38%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-              <div style={{
-                width: "60px", height: "60px", background: NAVY, borderRadius: "6px",
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-              }}>
-                <span style={{ color: GOLD, fontSize: "28px", fontWeight: "bold", fontFamily: "Georgia, serif", letterSpacing: "-2px" }}>H</span>
-              </div>
+              {logoType === "monogram" ? (
+                <div style={{
+                  width: "60px", height: "60px", background: NAVY, borderRadius: "6px",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                }}>
+                  <span style={{ color: GOLD, fontSize: "28px", fontWeight: "bold", fontFamily: "Georgia, serif", letterSpacing: "-2px" }}>
+                    {logoInitial}
+                  </span>
+                </div>
+              ) : null}
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold", color: GOLD, fontFamily: "Georgia, serif", lineHeight: 1.1 }}>Hazari</div>
-                <div style={{ fontSize: "20px", fontWeight: "bold", color: GOLD, fontFamily: "Georgia, serif", lineHeight: 1.1 }}>Gold</div>
+                <div style={{ fontSize: "20px", fontWeight: "bold", color: GOLD, fontFamily: "Georgia, serif", lineHeight: 1.1 }}>
+                  {companyName.split(" ").slice(0, 1).join(" ")}
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: "bold", color: GOLD, fontFamily: "Georgia, serif", lineHeight: 1.1 }}>
+                  {companyName.split(" ").slice(1, 2).join(" ")}
+                </div>
               </div>
             </div>
-            <div style={{ fontWeight: "bold", fontSize: "13px", color: NAVY, marginBottom: "4px" }}>HAZARI GOLD L.L.C</div>
-            <div style={{ color: "#333", lineHeight: "1.6" }}>
-              <div>📍 Matar Abdul Rahman Khalfan Al Muhairi Building</div>
-              <div style={{ paddingLeft: "18px" }}>1st Floor, Room# 101, Deira, Dubai, UAE</div>
-              <div>📞 Phone: &nbsp;+971 50 536 4193</div>
-              <div>✉ Email: &nbsp;&nbsp;hazarigoldllc@gmail.com</div>
-              <div>🏢 TRN: &nbsp;&nbsp;&nbsp;&nbsp;105301944200003</div>
+            <div style={{ fontWeight: "bold", fontSize: "13px", color: NAVY, marginBottom: "2px" }}>{companyName}</div>
+            {tagline && <div style={{ fontSize: "10px", color: "#555", marginBottom: "4px", fontStyle: "italic" }}>{tagline}</div>}
+            <div style={{ color: "#333", lineHeight: "1.7", fontSize: "10px" }}>
+              <div>📍 {addressLines[0]}</div>
+              {addressLines.slice(1).map((line, i) => (
+                <div key={i} style={{ paddingLeft: "18px" }}>{line}</div>
+              ))}
+              <div>📞 Phone: &nbsp;{companyPhone}</div>
+              <div>✉ Email: &nbsp;&nbsp;{companyEmail}</div>
+              <div>🏢 TRN: &nbsp;&nbsp;&nbsp;&nbsp;{companyTrn}</div>
             </div>
           </div>
 
-          {/* CENTER: TAX INVOICE banner */}
+          {/* CENTER: TAX INVOICE + QR */}
           <div style={{ flex: "0 0 28%", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
             <div style={{
               background: NAVY, color: "white", padding: "10px 18px", textAlign: "center",
@@ -136,12 +170,22 @@ export default function InvoiceDetail() {
               TAX INVOICE
               <span style={{ color: GOLD }}>❖</span>
             </div>
-            <div style={{
-              width: "80px", height: "80px", border: `1px solid #ccc`,
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: "#999"
-            }}>
-              QR Code
+            <div style={{ padding: "4px", border: `1px solid #ddd`, background: "white", borderRadius: "4px" }}>
+              {locationUrl ? (
+                <QRCodeSVG value={locationUrl} size={80} />
+              ) : (
+                <div style={{
+                  width: "80px", height: "80px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "9px", color: "#aaa", textAlign: "center", padding: "8px"
+                }}>
+                  Add location in Settings
+                </div>
+              )}
             </div>
+            {locationUrl && (
+              <div style={{ fontSize: "8px", color: "#777", textAlign: "center" }}>Scan to find us</div>
+            )}
           </div>
 
           {/* RIGHT: Invoice details */}
@@ -154,8 +198,8 @@ export default function InvoiceDetail() {
               { label: "Place of Supply:", value: (invoice as any).placeOfSupply ?? "" },
             ].map(({ label, value }) => (
               <div key={label} style={{ display: "flex", marginBottom: "5px", alignItems: "baseline" }}>
-                <span style={{ fontWeight: "bold", minWidth: "100px", color: NAVY }}>{label}</span>
-                <span style={{ borderBottom: "1px solid #999", flex: 1, minWidth: "80px", paddingLeft: "4px" }}>{value}</span>
+                <span style={{ fontWeight: "bold", minWidth: "105px", color: NAVY }}>{label}</span>
+                <span style={{ borderBottom: "1px solid #aaa", flex: 1, minWidth: "70px", paddingLeft: "4px" }}>{value}</span>
               </div>
             ))}
           </div>
@@ -163,41 +207,43 @@ export default function InvoiceDetail() {
 
         {/* Customer Details */}
         <div style={{ margin: "8px 16px" }}>
-          <div style={{ background: NAVY, color: "white", padding: "5px 10px", fontWeight: "bold", fontSize: "11px", letterSpacing: "1px", marginBottom: "0" }}>
+          <div style={{ background: NAVY, color: "white", padding: "5px 10px", fontWeight: "bold", fontSize: "11px", letterSpacing: "1px" }}>
             CUSTOMER DETAILS (BUYER)
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid ${NAVY}` }}>
             <tbody>
-              <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY }}>Name</td>
-                <td style={{ padding: "4px 8px", width: "2%" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc", width: "28%" }}>{invoice.customerName || ""}</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY }}>Address</td>
-                <td style={{ padding: "4px 8px", width: "2%" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc" }}></td>
-              </tr>
-              <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY }}>Phone</td>
-                <td style={{ padding: "4px 8px" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc" }}>{invoice.customerMobile || ""}</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY }}>Nationality</td>
-                <td style={{ padding: "4px 8px" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc" }}>{(invoice as any).customerNationality || ""}</td>
-              </tr>
-              <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY }}>Email</td>
-                <td style={{ padding: "4px 8px" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc" }}>{invoice.customerEmail || ""}</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY }}>Country</td>
-                <td style={{ padding: "4px 8px" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc" }}>{(invoice as any).customerCountry || ""}</td>
-              </tr>
-              <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY }}>Passport</td>
-                <td style={{ padding: "4px 8px" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ccc" }}>{invoice.customerPassportNumber || ""}</td>
-                <td colSpan={3}></td>
-              </tr>
+              {[
+                [
+                  { label: "Name", value: invoice.customerName ?? "" },
+                  { label: "Address", value: "" }
+                ],
+                [
+                  { label: "Phone", value: invoice.customerMobile ?? "" },
+                  { label: "Nationality", value: (invoice as any).customerNationality ?? "" }
+                ],
+                [
+                  { label: "Email", value: invoice.customerEmail ?? "" },
+                  { label: "Country", value: (invoice as any).customerCountry ?? "" }
+                ],
+                [
+                  { label: "Passport", value: invoice.customerPassportNumber ?? "" },
+                  null
+                ],
+              ].map((row, ri) => (
+                <tr key={ri}>
+                  {row.map((cell, ci) =>
+                    cell ? (
+                      <React.Fragment key={ci}>
+                        <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap" }}>{cell.label}</td>
+                        <td style={{ padding: "4px 8px", width: "2%" }}>:</td>
+                        <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: ri === 3 ? "38%" : "28%" }}>{cell.value}</td>
+                      </React.Fragment>
+                    ) : (
+                      <td key={ci} colSpan={3} />
+                    )
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -207,14 +253,13 @@ export default function InvoiceDetail() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
             <thead>
               <tr style={{ background: NAVY, color: "white" }}>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "5%" }}>S.No.</th>
-                <th style={{ padding: "6px 8px", textAlign: "left", border: `1px solid ${NAVY}`, width: "22%" }}>Stock Description</th>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "10%" }}>Gross Wt.</th>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "10%" }}>Purity</th>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "10%" }}>Pure Wt.</th>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "10%" }}>Making<br />Rate</th>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "12%" }}>Making Amt.<br />(AED)</th>
-                <th style={{ padding: "6px 6px", textAlign: "center", border: `1px solid ${NAVY}`, width: "10%" }}>Total<br />(AED)</th>
+                {["S.No.", "Stock Description", "Gross Wt.", "Purity", "Pure Wt.", "Making Rate", "Making Amt. (AED)", "Total (AED)"].map((h, i) => (
+                  <th key={i} style={{
+                    padding: "6px 6px", textAlign: i <= 1 ? "left" : "center",
+                    border: `1px solid ${NAVY}`,
+                    width: ["5%","24%","10%","10%","10%","10%","12%","10%"][i]
+                  }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -230,7 +275,7 @@ export default function InvoiceDetail() {
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
                 </tr>
               ))}
-              {/* Total row */}
+              {/* Totals row */}
               <tr style={{ background: "#eef2f7", fontWeight: "bold" }}>
                 <td colSpan={2} style={{ padding: "5px 8px", border: "1px solid #ccc" }}>Total ({itemCount} Items)</td>
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{fmtWt(totalGross)}</td>
@@ -246,28 +291,19 @@ export default function InvoiceDetail() {
 
         {/* Summary */}
         <div style={{ margin: "4px 16px 8px", display: "flex", justifyContent: "flex-end" }}>
-          <table style={{ width: "60%", borderCollapse: "collapse", fontSize: "10px" }}>
+          <table style={{ width: "58%", borderCollapse: "collapse", fontSize: "10px" }}>
             <tbody>
-              <tr>
-                <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>
-                  GOLD VALUE @ {metalRate > 0 ? metalRate.toFixed(3) : "0.000"} / GOZ (AED)
-                </td>
-                <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold", minWidth: "80px" }}>
-                  {fmt(totalBeforeVat)}
-                </td>
-              </tr>
-              <tr>
-                <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>Total Amount Before VAT (AED)</td>
-                <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold" }}>{fmt(totalBeforeVat)}</td>
-              </tr>
-              <tr>
-                <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>Total VAT Amount ({vatRate}%) (AED)</td>
-                <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold" }}>{fmt(vatAmount)}</td>
-              </tr>
-              <tr>
-                <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>Round Off Discount (AED)</td>
-                <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold" }}>{fmt(roundOffDiscount)}</td>
-              </tr>
+              {[
+                { label: `GOLD VALUE @ ${metalRate > 0 ? metalRate.toFixed(3) : "0.000"} / GOZ (AED)`, value: fmt(totalBeforeVat), bold: false },
+                { label: "Total Amount Before VAT (AED)", value: fmt(totalBeforeVat), bold: false },
+                { label: `Total VAT Amount (${vatRate}%) (AED)`, value: fmt(vatAmount), bold: false },
+                { label: "Round Off Discount (AED)", value: fmt(roundOffDiscount), bold: false },
+              ].map(({ label, value }) => (
+                <tr key={label}>
+                  <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>{label}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold", minWidth: "80px" }}>{value}</td>
+                </tr>
+              ))}
               <tr style={{ background: NAVY, color: "white" }}>
                 <td style={{ padding: "6px 10px", fontWeight: "bold", fontSize: "11px" }}>Total Amount Including VAT (AED)</td>
                 <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: "bold", fontSize: "12px" }}>{fmt(totalIncludingVat)}</td>
@@ -294,8 +330,8 @@ export default function InvoiceDetail() {
         <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between" }}>
           {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
             <div key={label} style={{ textAlign: "center", width: "30%" }}>
-              <div style={{ fontWeight: "bold", fontSize: "10px", color: NAVY, marginBottom: "24px" }}>{label}</div>
-              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "9px", color: "#666" }}>
+              <div style={{ fontWeight: "bold", fontSize: "10px", color: NAVY, marginBottom: "28px" }}>{label}</div>
+              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "9px", color: "#888" }}>
                 ____________________
               </div>
             </div>

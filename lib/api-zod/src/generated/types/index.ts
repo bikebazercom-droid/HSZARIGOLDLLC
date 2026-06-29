@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './companySettings';
+export * from './companySettingsInput';
 export * from './customer';
 export * from './customerInput';
 export * from './dashboardStats';
