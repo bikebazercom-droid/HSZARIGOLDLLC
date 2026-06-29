@@ -55,6 +55,11 @@ export const GetDashboardResponse = zod.object({
   "category": zod.string().nullish(),
   "quantity": zod.number(),
   "weight": zod.number().nullish(),
+  "grossWeight": zod.number().nullish(),
+  "purity": zod.number().nullish(),
+  "pureWeight": zod.number().nullish(),
+  "makingRate": zod.number().nullish(),
+  "makingAmt": zod.number().nullish(),
   "unitPrice": zod.number(),
   "totalPrice": zod.number()
 })).optional()
@@ -313,6 +318,11 @@ export const ListInvoicesResponseItem = zod.object({
   "category": zod.string().nullish(),
   "quantity": zod.number(),
   "weight": zod.number().nullish(),
+  "grossWeight": zod.number().nullish(),
+  "purity": zod.number().nullish(),
+  "pureWeight": zod.number().nullish(),
+  "makingRate": zod.number().nullish(),
+  "makingAmt": zod.number().nullish(),
   "unitPrice": zod.number(),
   "totalPrice": zod.number()
 })).optional()
@@ -342,6 +352,11 @@ export const CreateInvoiceBody = zod.object({
   "category": zod.string().optional(),
   "quantity": zod.number(),
   "weight": zod.number().optional(),
+  "grossWeight": zod.number().optional(),
+  "purity": zod.number().optional(),
+  "pureWeight": zod.number().optional(),
+  "makingRate": zod.number().optional(),
+  "makingAmt": zod.number().optional(),
   "unitPrice": zod.number(),
   "totalPrice": zod.number()
 }))
@@ -371,6 +386,11 @@ export const CreateInvoiceResponse = zod.object({
   "category": zod.string().nullish(),
   "quantity": zod.number(),
   "weight": zod.number().nullish(),
+  "grossWeight": zod.number().nullish(),
+  "purity": zod.number().nullish(),
+  "pureWeight": zod.number().nullish(),
+  "makingRate": zod.number().nullish(),
+  "makingAmt": zod.number().nullish(),
   "unitPrice": zod.number(),
   "totalPrice": zod.number()
 })).optional()
@@ -408,6 +428,11 @@ export const GetInvoiceResponse = zod.object({
   "category": zod.string().nullish(),
   "quantity": zod.number(),
   "weight": zod.number().nullish(),
+  "grossWeight": zod.number().nullish(),
+  "purity": zod.number().nullish(),
+  "pureWeight": zod.number().nullish(),
+  "makingRate": zod.number().nullish(),
+  "makingAmt": zod.number().nullish(),
   "unitPrice": zod.number(),
   "totalPrice": zod.number()
 })).optional()

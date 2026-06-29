@@ -30,6 +30,11 @@ function parseItem(item: typeof invoiceItemsTable.$inferSelect) {
     ...item,
     quantity: Number(item.quantity),
     weight: item.weight != null ? Number(item.weight) : null,
+    grossWeight: item.grossWeight != null ? Number(item.grossWeight) : null,
+    purity: item.purity != null ? Number(item.purity) : null,
+    pureWeight: item.pureWeight != null ? Number(item.pureWeight) : null,
+    makingRate: item.makingRate != null ? Number(item.makingRate) : null,
+    makingAmt: item.makingAmt != null ? Number(item.makingAmt) : null,
     unitPrice: Number(item.unitPrice),
     totalPrice: Number(item.totalPrice),
   };
@@ -140,6 +145,11 @@ router.post("/invoices", async (req, res): Promise<void> => {
           category: item.category ?? null,
           quantity: String(item.quantity),
           weight: item.weight != null ? String(item.weight) : null,
+          grossWeight: item.grossWeight != null ? String(item.grossWeight) : null,
+          purity: item.purity != null ? String(item.purity) : null,
+          pureWeight: item.pureWeight != null ? String(item.pureWeight) : null,
+          makingRate: item.makingRate != null ? String(item.makingRate) : null,
+          makingAmt: item.makingAmt != null ? String(item.makingAmt) : null,
           unitPrice: String(item.unitPrice),
           totalPrice: String(item.totalPrice),
         }))

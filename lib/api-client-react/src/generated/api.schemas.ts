@@ -33,6 +33,16 @@ export interface InvoiceItem {
   quantity: number;
   /** @nullable */
   weight?: number | null;
+  /** @nullable */
+  grossWeight?: number | null;
+  /** @nullable */
+  purity?: number | null;
+  /** @nullable */
+  pureWeight?: number | null;
+  /** @nullable */
+  makingRate?: number | null;
+  /** @nullable */
+  makingAmt?: number | null;
   unitPrice: number;
   totalPrice: number;
 }
@@ -167,6 +177,11 @@ export interface InvoiceItemInput {
   category?: string;
   quantity: number;
   weight?: number;
+  grossWeight?: number;
+  purity?: number;
+  pureWeight?: number;
+  makingRate?: number;
+  makingAmt?: number;
   unitPrice: number;
   totalPrice: number;
 }

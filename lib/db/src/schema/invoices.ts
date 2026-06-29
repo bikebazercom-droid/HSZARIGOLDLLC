@@ -29,6 +29,11 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   category: text("category"),
   quantity: numeric("quantity", { precision: 12, scale: 4 }).notNull().default("1"),
   weight: numeric("weight", { precision: 12, scale: 4 }),
+  grossWeight: numeric("gross_weight", { precision: 12, scale: 4 }),
+  purity: numeric("purity", { precision: 8, scale: 4 }),
+  pureWeight: numeric("pure_weight", { precision: 12, scale: 4 }),
+  makingRate: numeric("making_rate", { precision: 12, scale: 4 }),
+  makingAmt: numeric("making_amt", { precision: 12, scale: 2 }),
   unitPrice: numeric("unit_price", { precision: 12, scale: 4 }).notNull().default("0"),
   totalPrice: numeric("total_price", { precision: 12, scale: 2 }).notNull().default("0"),
 });

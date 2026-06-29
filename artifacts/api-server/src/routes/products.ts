@@ -31,6 +31,7 @@ router.get("/products", async (req, res): Promise<void> => {
 
   const parsed = rows.map((r) => ({
     ...r,
+    createdAt: r.createdAt.toISOString(),
     pricePerUnit: r.pricePerUnit != null ? Number(r.pricePerUnit) : null,
     stock: r.stock != null ? Number(r.stock) : null,
   }));
@@ -49,6 +50,7 @@ router.post("/products", async (req, res): Promise<void> => {
 
   res.status(201).json(CreateProductResponse.parse({
     ...product,
+    createdAt: product.createdAt.toISOString(),
     pricePerUnit: product.pricePerUnit != null ? Number(product.pricePerUnit) : null,
     stock: product.stock != null ? Number(product.stock) : null,
   }));
@@ -81,6 +83,7 @@ router.put("/products/:id", async (req, res): Promise<void> => {
 
   res.json(UpdateProductResponse.parse({
     ...product,
+    createdAt: product.createdAt.toISOString(),
     pricePerUnit: product.pricePerUnit != null ? Number(product.pricePerUnit) : null,
     stock: product.stock != null ? Number(product.stock) : null,
   }));

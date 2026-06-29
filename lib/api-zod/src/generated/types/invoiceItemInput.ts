@@ -12,6 +12,11 @@ export interface InvoiceItemInput {
   category?: string;
   quantity: number;
   weight?: number;
+  grossWeight?: number;
+  purity?: number;
+  pureWeight?: number;
+  makingRate?: number;
+  makingAmt?: number;
   unitPrice: number;
   totalPrice: number;
 }

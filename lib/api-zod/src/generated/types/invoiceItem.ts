@@ -17,6 +17,16 @@ export interface InvoiceItem {
   quantity: number;
   /** @nullable */
   weight?: number | null;
+  /** @nullable */
+  grossWeight?: number | null;
+  /** @nullable */
+  purity?: number | null;
+  /** @nullable */
+  pureWeight?: number | null;
+  /** @nullable */
+  makingRate?: number | null;
+  /** @nullable */
+  makingAmt?: number | null;
   unitPrice: number;
   totalPrice: number;
 }

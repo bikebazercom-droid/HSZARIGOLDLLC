@@ -533,6 +533,16 @@ components:
           type: number
         weight:
           type: ["number", "null"]
+        grossWeight:
+          type: ["number", "null"]
+        purity:
+          type: ["number", "null"]
+        pureWeight:
+          type: ["number", "null"]
+        makingRate:
+          type: ["number", "null"]
+        makingAmt:
+          type: ["number", "null"]
         unitPrice:
           type: number
         totalPrice:
@@ -551,6 +561,16 @@ components:
         quantity:
           type: number
         weight:
+          type: number
+        grossWeight:
+          type: number
+        purity:
+          type: number
+        pureWeight:
+          type: number
+        makingRate:
+          type: number
+        makingAmt:
           type: number
         unitPrice:
           type: number

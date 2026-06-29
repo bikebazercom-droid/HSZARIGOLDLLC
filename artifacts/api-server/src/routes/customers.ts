@@ -31,7 +31,7 @@ router.get("/customers", async (req, res): Promise<void> => {
     rows = await db.select().from(customersTable).orderBy(customersTable.createdAt);
   }
 
-  res.json(ListCustomersResponse.parse(rows));
+  res.json(ListCustomersResponse.parse(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() }))));
 });
 
 router.post("/customers", async (req, res): Promise<void> => {
@@ -42,7 +42,7 @@ router.post("/customers", async (req, res): Promise<void> => {
   }
 
   const [customer] = await db.insert(customersTable).values(parsed.data).returning();
-  res.status(201).json(CreateCustomerResponse.parse(customer));
+  res.status(201).json(CreateCustomerResponse.parse({ ...customer, createdAt: customer.createdAt.toISOString() }));
 });
 
 router.get("/customers/:id", async (req, res): Promise<void> => {
@@ -59,7 +59,7 @@ router.get("/customers/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetCustomerResponse.parse(customer));
+  res.json(GetCustomerResponse.parse({ ...customer, createdAt: customer.createdAt.toISOString() }));
 });
 
 router.put("/customers/:id", async (req, res): Promise<void> => {
@@ -87,7 +87,7 @@ router.put("/customers/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdateCustomerResponse.parse(customer));
+  res.json(UpdateCustomerResponse.parse({ ...customer, createdAt: customer.createdAt.toISOString() }));
 });
 
 router.delete("/customers/:id", async (req, res): Promise<void> => {
