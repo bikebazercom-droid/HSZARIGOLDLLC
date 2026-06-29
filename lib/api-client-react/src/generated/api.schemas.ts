@@ -62,10 +62,28 @@ export interface Invoice {
   customerPassportNumber?: string | null;
   /** @nullable */
   customerEmiratesId?: string | null;
+  /** @nullable */
+  customerNationality?: string | null;
+  /** @nullable */
+  customerCountry?: string | null;
   paymentMethod: InvoicePaymentMethod;
+  /** @nullable */
+  metalRate?: number | null;
+  /** @nullable */
+  placeOfSupply?: string | null;
   subtotal: number;
   discount?: number;
   total: number;
+  /** @nullable */
+  vatRate?: number | null;
+  /** @nullable */
+  vatAmount?: number | null;
+  /** @nullable */
+  totalBeforeVat?: number | null;
+  /** @nullable */
+  totalIncludingVat?: number | null;
+  /** @nullable */
+  roundOffDiscount?: number | null;
   /** @nullable */
   notes?: string | null;
   isPending?: boolean;
@@ -202,10 +220,19 @@ export interface InvoiceInput {
   customerEmail?: string;
   customerPassportNumber?: string;
   customerEmiratesId?: string;
+  customerNationality?: string;
+  customerCountry?: string;
   paymentMethod: InvoiceInputPaymentMethod;
+  metalRate?: number;
+  placeOfSupply?: string;
   subtotal: number;
   discount?: number;
   total: number;
+  vatRate?: number;
+  vatAmount?: number;
+  totalBeforeVat?: number;
+  totalIncludingVat?: number;
+  roundOffDiscount?: number;
   notes?: string;
   isPending?: boolean;
   items: InvoiceItemInput[];

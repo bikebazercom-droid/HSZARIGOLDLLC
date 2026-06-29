@@ -23,10 +23,28 @@ export interface Invoice {
   customerPassportNumber?: string | null;
   /** @nullable */
   customerEmiratesId?: string | null;
+  /** @nullable */
+  customerNationality?: string | null;
+  /** @nullable */
+  customerCountry?: string | null;
   paymentMethod: InvoicePaymentMethod;
+  /** @nullable */
+  metalRate?: number | null;
+  /** @nullable */
+  placeOfSupply?: string | null;
   subtotal: number;
   discount?: number;
   total: number;
+  /** @nullable */
+  vatRate?: number | null;
+  /** @nullable */
+  vatAmount?: number | null;
+  /** @nullable */
+  totalBeforeVat?: number | null;
+  /** @nullable */
+  totalIncludingVat?: number | null;
+  /** @nullable */
+  roundOffDiscount?: number | null;
   /** @nullable */
   notes?: string | null;
   isPending?: boolean;

@@ -597,15 +597,33 @@ components:
           type: ["string", "null"]
         customerEmiratesId:
           type: ["string", "null"]
+        customerNationality:
+          type: ["string", "null"]
+        customerCountry:
+          type: ["string", "null"]
         paymentMethod:
           type: string
           enum: [cash, card, bank_transfer]
+        metalRate:
+          type: ["number", "null"]
+        placeOfSupply:
+          type: ["string", "null"]
         subtotal:
           type: number
         discount:
           type: number
         total:
           type: number
+        vatRate:
+          type: ["number", "null"]
+        vatAmount:
+          type: ["number", "null"]
+        totalBeforeVat:
+          type: ["number", "null"]
+        totalIncludingVat:
+          type: ["number", "null"]
+        roundOffDiscount:
+          type: ["number", "null"]
         notes:
           type: ["string", "null"]
         isPending:
@@ -633,14 +651,32 @@ components:
           type: string
         customerEmiratesId:
           type: string
+        customerNationality:
+          type: string
+        customerCountry:
+          type: string
         paymentMethod:
           type: string
           enum: [cash, card, bank_transfer]
+        metalRate:
+          type: number
+        placeOfSupply:
+          type: string
         subtotal:
           type: number
         discount:
           type: number
         total:
+          type: number
+        vatRate:
+          type: number
+        vatAmount:
+          type: number
+        totalBeforeVat:
+          type: number
+        totalIncludingVat:
+          type: number
+        roundOffDiscount:
           type: number
         notes:
           type: string

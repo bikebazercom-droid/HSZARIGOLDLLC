@@ -20,6 +20,12 @@ function parseInvoice(inv: typeof invoicesTable.$inferSelect) {
     subtotal: Number(inv.subtotal),
     discount: Number(inv.discount),
     total: Number(inv.total),
+    metalRate: inv.metalRate != null ? Number(inv.metalRate) : null,
+    vatRate: inv.vatRate != null ? Number(inv.vatRate) : null,
+    vatAmount: inv.vatAmount != null ? Number(inv.vatAmount) : null,
+    totalBeforeVat: inv.totalBeforeVat != null ? Number(inv.totalBeforeVat) : null,
+    totalIncludingVat: inv.totalIncludingVat != null ? Number(inv.totalIncludingVat) : null,
+    roundOffDiscount: inv.roundOffDiscount != null ? Number(inv.roundOffDiscount) : null,
     createdAt: inv.createdAt.toISOString(),
     items: [],
   };
@@ -129,6 +135,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
       subtotal: String(invoiceData.subtotal ?? 0),
       discount: String(invoiceData.discount ?? 0),
       total: String(invoiceData.total),
+      metalRate: invoiceData.metalRate != null ? String(invoiceData.metalRate) : null,
+      vatRate: String(invoiceData.vatRate ?? 5),
+      vatAmount: String(invoiceData.vatAmount ?? 0),
+      totalBeforeVat: String(invoiceData.totalBeforeVat ?? 0),
+      totalIncludingVat: String(invoiceData.totalIncludingVat ?? 0),
+      roundOffDiscount: String(invoiceData.roundOffDiscount ?? 0),
       isPending: invoiceData.isPending ?? false,
     })
     .returning();

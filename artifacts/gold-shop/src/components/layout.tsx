@@ -16,8 +16,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
       <aside className="w-full md:w-64 bg-sidebar text-sidebar-foreground p-6 flex flex-col no-print">
-        <div className="font-bold text-2xl mb-8 text-primary flex items-center gap-2">
-          <span>AL WAJEEH</span>
+        <div className="mb-8 flex items-center gap-3">
+          <div className="w-10 h-10 rounded flex items-center justify-center text-white font-bold text-lg flex-shrink-0" style={{ backgroundColor: "#1e3a5f" }}>
+            <span style={{ color: "#c8a43a", fontFamily: "serif", fontSize: "1.1rem" }}>H</span>
+          </div>
+          <div>
+            <div className="font-bold text-lg leading-tight" style={{ color: "#c8a43a" }}>Hazari Gold</div>
+            <div className="text-xs text-muted-foreground leading-tight">L.L.C</div>
+          </div>
         </div>
         <nav className="flex-1 space-y-2">
           {navItems.map((item) => {

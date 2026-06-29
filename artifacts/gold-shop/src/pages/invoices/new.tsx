@@ -30,6 +30,28 @@ interface LineItem {
   totalPrice: number;
 }
 
+function makeItem(description: string, category: string, purity: string): LineItem {
+  return {
+    id: Math.random().toString(36).substring(7),
+    description,
+    category,
+    grossWeight: 0,
+    purity,
+    pureWeight: 0,
+    makingRate: 0,
+    makingAmt: 0,
+    totalPrice: 0,
+  };
+}
+
+const DEFAULT_ITEMS: LineItem[] = [
+  makeItem("22K Gold Jewelry", "gold_jewelry", "22K (916)"),
+  makeItem("24K GOLD", "gold_jewelry", "24K (999.9)"),
+  makeItem("TT BAR", "tt_bar", "24K (999.9)"),
+  makeItem("KG BAR", "kg_bar", "24K (999.9)"),
+  makeItem("Silver", "silver", ""),
+];
+
 function calcItem(item: LineItem, goldRate: number): LineItem {
   const parsedPurity = parseFloat(item.purity);
   const pureWeight = isNaN(parsedPurity) ? 0 : parseFloat((item.grossWeight * parsedPurity).toFixed(4));
@@ -53,12 +75,17 @@ export default function NewInvoice() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPassportNumber, setCustomerPassportNumber] = useState("");
   const [customerEmiratesId, setCustomerEmiratesId] = useState("");
+  const [customerNationality, setCustomerNationality] = useState("");
+  const [customerCountry, setCustomerCountry] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
-  const [discount, setDiscount] = useState<number>(0);
+  const [metalRate, setMetalRate] = useState<number>(goldRate);
+  const [placeOfSupply, setPlaceOfSupply] = useState("");
+  const [vatRate] = useState<number>(5);
+  const [roundOffDiscount, setRoundOffDiscount] = useState<number>(0);
 
-  const [items, setItems] = useState<LineItem[]>([]);
+  const [items, setItems] = useState<LineItem[]>(DEFAULT_ITEMS.map(i => ({ ...i, id: Math.random().toString(36).substring(7) })));
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -91,7 +118,7 @@ export default function NewInvoice() {
     setItems(prev => {
       const next = [...prev];
       const updated = { ...next[index], [field]: value };
-      next[index] = calcItem(updated as LineItem, goldRate);
+      next[index] = calcItem(updated as LineItem, metalRate || goldRate);
       return next;
     });
   };
@@ -101,22 +128,16 @@ export default function NewInvoice() {
   };
 
   const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
-  const total = Math.max(0, subtotal - discount);
+  const totalBeforeVat = Math.max(0, subtotal);
+  const vatAmount = parseFloat((totalBeforeVat * vatRate / 100).toFixed(2));
+  const totalIncludingVat = parseFloat((totalBeforeVat + vatAmount - roundOffDiscount).toFixed(2));
+
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handleSubmit = () => {
     if (!customerName) {
       toast({ title: "Validation Error", description: "Customer name is required", variant: "destructive" });
       return;
-    }
-    if (items.length === 0) {
-      toast({ title: "Validation Error", description: "At least one item is required", variant: "destructive" });
-      return;
-    }
-    for (const item of items) {
-      if (!item.description) {
-        toast({ title: "Validation Error", description: "All items must have a description", variant: "destructive" });
-        return;
-      }
     }
 
     createInvoice.mutate({
@@ -127,22 +148,31 @@ export default function NewInvoice() {
         customerEmail,
         customerPassportNumber,
         customerEmiratesId,
+        customerNationality,
+        customerCountry,
         paymentMethod,
         isPending,
         notes,
+        metalRate: metalRate || goldRate,
+        placeOfSupply,
         subtotal,
-        discount,
-        total,
+        discount: roundOffDiscount,
+        total: totalIncludingVat,
+        vatRate,
+        vatAmount,
+        totalBeforeVat,
+        totalIncludingVat,
+        roundOffDiscount,
         items: items.map(item => ({
-          description: item.description,
+          description: item.description || "-",
           category: item.category,
           quantity: 1,
-          grossWeight: item.grossWeight,
+          grossWeight: item.grossWeight || undefined,
           purity: item.purity || undefined,
-          pureWeight: 0,
-          makingRate: item.makingRate,
-          makingAmt: item.makingAmt,
-          unitPrice: goldRate,
+          pureWeight: item.pureWeight || undefined,
+          makingRate: item.makingRate || undefined,
+          makingAmt: item.makingAmt || undefined,
+          unitPrice: metalRate || goldRate,
           totalPrice: item.totalPrice,
         })),
       }
@@ -156,8 +186,6 @@ export default function NewInvoice() {
       }
     });
   };
-
-  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-20">
@@ -176,129 +204,119 @@ export default function NewInvoice() {
       </div>
 
       <div className="space-y-6">
+        {/* Invoice Items */}
         <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Invoice Items</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto rounded overflow-hidden border border-border">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr style={{ backgroundColor: "#1e3a5f" }}>
-                      <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap w-10">S.No.</th>
-                      <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap min-w-[180px]">Stock Description</th>
-                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[100px]">Gross Wt.</th>
-                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[130px]">Purity</th>
-                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[90px]">Pure Wt.</th>
-                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Making Rate</th>
-                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Making Amt. (AED)</th>
-                      <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Total (AED)</th>
-                      <th className="w-8 bg-[#1e3a5f]"></th>
+          <CardHeader className="pb-3">
+            <CardTitle>Invoice Items</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto rounded overflow-hidden border border-border">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr style={{ backgroundColor: "#1e3a5f" }}>
+                    <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap w-10">S.No.</th>
+                    <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap min-w-[180px]">Stock Description</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[100px]">Gross Wt.</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Purity</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[90px]">Pure Wt.</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Making Rate</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Making Amt. (AED)</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Total (AED)</th>
+                    <th className="w-8 bg-[#1e3a5f]"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
+                      <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
+                      <td className="py-2 px-3 min-w-[180px]">
+                        <Select
+                          value={item.description}
+                          onValueChange={val => updateItem(index, "description", val)}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="22K Gold Jewelry">22K Gold Jewelry</SelectItem>
+                            <SelectItem value="24K GOLD">24K GOLD</SelectItem>
+                            <SelectItem value="TT BAR">TT BAR</SelectItem>
+                            <SelectItem value="KG BAR">KG BAR</SelectItem>
+                            <SelectItem value="Silver">Silver</SelectItem>
+                            <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
+                            <SelectItem value="GOLD">GOLD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="py-2 px-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={item.grossWeight || ""}
+                          onChange={e => updateItem(index, "grossWeight", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center"
+                        />
+                      </td>
+                      <td className="py-2 px-3">
+                        <Input
+                          placeholder="e.g. 22K, 999"
+                          value={item.purity || ""}
+                          onChange={e => updateItem(index, "purity", e.target.value)}
+                          className="h-8 text-sm text-center"
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-center font-mono text-sm">
+                        {item.pureWeight > 0 ? item.pureWeight.toFixed(4) : "—"}
+                      </td>
+                      <td className="py-2 px-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.makingRate || ""}
+                          onChange={e => updateItem(index, "makingRate", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center"
+                        />
+                      </td>
+                      <td className="py-2 px-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.makingAmt || ""}
+                          onChange={e => updateItem(index, "makingAmt", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center"
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-center font-semibold font-mono text-sm text-primary">
+                        {fmt(item.totalPrice)}
+                      </td>
+                      <td className="py-2 px-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => removeItem(index)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {items.length === 0 && (
-                      <tr>
-                        <td colSpan={9} className="py-8 text-center text-muted-foreground text-sm">
-                          No items yet. Click "Add Line Item" below.
-                        </td>
-                      </tr>
-                    )}
-                    {items.map((item, index) => {
-                      return (
-                        <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
-                          <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
-                          <td className="py-2 px-3 min-w-[160px]">
-                            <Select
-                              value={item.description}
-                              onValueChange={val => updateItem(index, "description", val)}
-                            >
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
-                                <SelectItem value="GOLD">GOLD</SelectItem>
-                                <SelectItem value="TT BAR">TT BAR</SelectItem>
-                                <SelectItem value="KG BAR">KG BAR</SelectItem>
-                                <SelectItem value="Silver">Silver</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="py-2 px-3">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.001"
-                              value={item.grossWeight || ""}
-                              onChange={e => updateItem(index, "grossWeight", parseFloat(e.target.value) || 0)}
-                              className="h-8 text-sm text-center"
-                            />
-                          </td>
-                          <td className="py-2 px-3">
-                            <Input
-                              placeholder="e.g. 22K, 999"
-                              value={item.purity || ""}
-                              onChange={e => updateItem(index, "purity", e.target.value)}
-                              className="h-8 text-sm text-center"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-center font-mono text-sm">
-                            {item.pureWeight > 0 ? item.pureWeight.toFixed(4) : "—"}
-                          </td>
-                          <td className="py-2 px-3">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.makingRate || ""}
-                              onChange={e => updateItem(index, "makingRate", parseFloat(e.target.value) || 0)}
-                              className="h-8 text-sm text-center"
-                            />
-                          </td>
-                          <td className="py-2 px-3">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.makingAmt || ""}
-                              onChange={e => updateItem(index, "makingAmt", parseFloat(e.target.value) || 0)}
-                              className="h-8 text-sm text-center"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-center font-semibold font-mono text-sm text-primary">
-                            {fmt(item.totalPrice)}
-                          </td>
-                          <td className="py-2 px-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => removeItem(index)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-              <Button variant="outline" className="mt-4 w-full border-dashed" onClick={addItem}>
-                <Plus className="w-4 h-4 mr-2" /> Add Line Item
-              </Button>
+            <Button variant="outline" className="mt-4 w-full border-dashed" onClick={addItem}>
+              <Plus className="w-4 h-4 mr-2" /> Add Line Item
+            </Button>
+          </CardContent>
+        </Card>
 
-              {items.length > 0 && (
-                <div className="mt-4 p-3 bg-muted/40 rounded text-xs text-muted-foreground">
-                  Formula: Pure Wt = Gross Wt × Purity (informational) &nbsp;|&nbsp; Total = (Gross Wt × Gold Rate AED {goldRate}/g) + Making Amt
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
+        {/* Invoice Details + Customer Details */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Customer Details */}
           <Card>
             <CardHeader className="pb-4">
               <CardTitle>Customer Details</CardTitle>
@@ -344,14 +362,43 @@ export default function NewInvoice() {
                 <Label>Email</Label>
                 <Input value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} placeholder="email@example.com" type="email" />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Nationality</Label>
+                  <Input value={customerNationality} onChange={e => setCustomerNationality(e.target.value)} placeholder="e.g. Indian" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Country</Label>
+                  <Input value={customerCountry} onChange={e => setCustomerCountry(e.target.value)} placeholder="e.g. UAE" />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
+          {/* Payment & Summary */}
           <Card>
             <CardHeader className="pb-4">
               <CardTitle>Payment & Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Metal Rate (AED/g)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={metalRate || ""}
+                    onChange={e => setMetalRate(parseFloat(e.target.value) || 0)}
+                    placeholder={String(goldRate)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Place of Supply</Label>
+                  <Input value={placeOfSupply} onChange={e => setPlaceOfSupply(e.target.value)} placeholder="e.g. Dubai" />
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Payment Method</Label>
                 <Select value={paymentMethod} onValueChange={(val: any) => setPaymentMethod(val)}>
@@ -374,28 +421,35 @@ export default function NewInvoice() {
 
               <div className="space-y-2">
                 <Label>Notes</Label>
-                <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes..." className="h-20 resize-none" />
+                <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes..." className="h-16 resize-none" />
               </div>
 
-              <div className="border-t pt-4 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">{fmt(subtotal)} AED</span>
+              {/* VAT Breakdown */}
+              <div className="border rounded-md overflow-hidden">
+                <div className="p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Before VAT</span>
+                    <span className="font-medium">{fmt(totalBeforeVat)} AED</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">VAT ({vatRate}%)</span>
+                    <span className="font-medium">+ {fmt(vatAmount)} AED</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Round Off Discount</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-24 h-7 text-right text-sm"
+                      value={roundOffDiscount || ""}
+                      onChange={e => setRoundOffDiscount(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Discount (AED)</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-24 h-8 text-right"
-                    value={discount}
-                    onChange={e => setDiscount(parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="flex justify-between text-lg font-bold pt-2 border-t text-primary">
-                  <span>Grand Total</span>
-                  <span>{fmt(total)} AED</span>
+                <div className="flex justify-between px-3 py-2.5 font-bold text-base border-t" style={{ backgroundColor: "#1e3a5f", color: "white" }}>
+                  <span>Total Including VAT</span>
+                  <span>{fmt(totalIncludingVat)} AED</span>
                 </div>
               </div>
 
@@ -403,7 +457,7 @@ export default function NewInvoice() {
                 className="w-full"
                 size="lg"
                 onClick={handleSubmit}
-                disabled={createInvoice.isPending || items.length === 0}
+                disabled={createInvoice.isPending}
               >
                 {createInvoice.isPending ? "Generating..." : "Generate Invoice"}
               </Button>

@@ -12,12 +12,21 @@ export const invoicesTable = pgTable("invoices", {
   customerEmail: text("customer_email"),
   customerPassportNumber: text("customer_passport_number"),
   customerEmiratesId: text("customer_emirates_id"),
+  customerNationality: text("customer_nationality"),
+  customerCountry: text("customer_country"),
   paymentMethod: text("payment_method").notNull().default("cash"), // cash, card, bank_transfer
+  metalRate: numeric("metal_rate", { precision: 12, scale: 4 }),
+  placeOfSupply: text("place_of_supply"),
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   isPending: boolean("is_pending").notNull().default(false),
+  vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull().default("5"),
+  vatAmount: numeric("vat_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalBeforeVat: numeric("total_before_vat", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalIncludingVat: numeric("total_including_vat", { precision: 12, scale: 2 }).notNull().default("0"),
+  roundOffDiscount: numeric("round_off_discount", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
