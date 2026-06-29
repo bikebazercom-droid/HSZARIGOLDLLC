@@ -146,14 +146,6 @@ export default function InvoiceDetail() {
                   </span>
                 </div>
               ) : null}
-              <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold", color: GOLD, fontFamily: "Georgia, serif", lineHeight: 1.1 }}>
-                  {companyName.split(" ").slice(0, 1).join(" ")}
-                </div>
-                <div style={{ fontSize: "20px", fontWeight: "bold", color: GOLD, fontFamily: "Georgia, serif", lineHeight: 1.1 }}>
-                  {companyName.split(" ").slice(1, 2).join(" ")}
-                </div>
-              </div>
             </div>
             <div style={{ fontWeight: "bold", fontSize: "13px", color: NAVY, marginBottom: "2px" }}>{companyName}</div>
             {tagline && <div style={{ fontSize: "10px", color: "#555", marginBottom: "4px", fontStyle: "italic" }}>{tagline}</div>}
