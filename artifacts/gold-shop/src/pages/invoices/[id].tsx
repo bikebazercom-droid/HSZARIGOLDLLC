@@ -39,6 +39,7 @@ function numberToWords(n: number): string {
 export default function InvoiceDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0");
+  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const { data: invoice, isLoading } = useGetInvoice(id, {
     query: { queryKey: getGetInvoiceQueryKey(id), enabled: !!id }
@@ -92,8 +93,6 @@ export default function InvoiceDetail() {
 
   // Split address only on explicit newlines (as typed in the textarea)
   const addressLines = companyAddress.split("\n").map(s => s.trim()).filter(Boolean);
-
-  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handleDownloadPdf = async () => {
     if (!invoiceRef.current) return;
