@@ -23,26 +23,16 @@ interface LineItem {
   description: string;
   category: string;
   grossWeight: number;
-  purity: number;
+  purity: string;
   pureWeight: number;
   makingRate: number;
   makingAmt: number;
   totalPrice: number;
 }
 
-const PURITY_OPTIONS = [
-  { label: "24K (0.9999)", value: 0.9999 },
-  { label: "22K (0.9167)", value: 0.9167 },
-  { label: "21K (0.8750)", value: 0.875 },
-  { label: "18K (0.7500)", value: 0.75 },
-  { label: "Silver (0.9990)", value: 0.999 },
-  { label: "Custom", value: 0 },
-];
-
 function calcItem(item: LineItem, goldRate: number): LineItem {
-  const pureWeight = parseFloat((item.grossWeight * item.purity).toFixed(4));
   const totalPrice = parseFloat((item.grossWeight * goldRate + item.makingAmt).toFixed(2));
-  return { ...item, pureWeight, totalPrice };
+  return { ...item, pureWeight: 0, totalPrice };
 }
 
 export default function NewInvoice() {
@@ -65,7 +55,6 @@ export default function NewInvoice() {
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
   const [discount, setDiscount] = useState<number>(0);
-  const [customPurityIdx, setCustomPurityIdx] = useState<Record<number, boolean>>({});
 
   const [items, setItems] = useState<LineItem[]>([]);
 
@@ -88,7 +77,7 @@ export default function NewInvoice() {
       description: "",
       category: "gold_jewelry",
       grossWeight: 0,
-      purity: 0.9167,
+      purity: "",
       pureWeight: 0,
       makingRate: 0,
       makingAmt: 0,
@@ -147,8 +136,8 @@ export default function NewInvoice() {
           category: item.category,
           quantity: 1,
           grossWeight: item.grossWeight,
-          purity: item.purity,
-          pureWeight: item.pureWeight,
+          purity: parseFloat(item.purity) || 0,
+          pureWeight: 0,
           makingRate: item.makingRate,
           makingAmt: item.makingAmt,
           unitPrice: goldRate,
@@ -214,7 +203,6 @@ export default function NewInvoice() {
                       </tr>
                     )}
                     {items.map((item, index) => {
-                      const isCustomPurity = customPurityIdx[index];
                       return (
                         <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
                           <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
@@ -246,42 +234,15 @@ export default function NewInvoice() {
                             />
                           </td>
                           <td className="py-2 px-3">
-                            {isCustomPurity ? (
-                              <Input
-                                type="number"
-                                min="0"
-                                max="1"
-                                step="0.0001"
-                                value={item.purity || ""}
-                                onChange={e => updateItem(index, "purity", parseFloat(e.target.value) || 0)}
-                                className="h-8 text-sm text-center"
-                                placeholder="0.9167"
-                              />
-                            ) : (
-                              <Select
-                                value={item.purity === 0 ? "custom" : String(item.purity)}
-                                onValueChange={val => {
-                                  if (val === "custom") {
-                                    setCustomPurityIdx(p => ({ ...p, [index]: true }));
-                                    updateItem(index, "purity", 0);
-                                  } else {
-                                    updateItem(index, "purity", parseFloat(val));
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="h-8 text-sm">
-                                  <SelectValue placeholder="Select purity" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {PURITY_OPTIONS.map(o => (
-                                    <SelectItem key={o.label} value={o.value === 0 ? "custom" : String(o.value)}>{o.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
+                            <Input
+                              placeholder="e.g. 22K, 999"
+                              value={item.purity || ""}
+                              onChange={e => updateItem(index, "purity", e.target.value)}
+                              className="h-8 text-sm text-center"
+                            />
                           </td>
-                          <td className="py-2 px-3 text-center font-mono text-sm">
-                            {item.pureWeight.toFixed(4)}
+                          <td className="py-2 px-3 text-center text-muted-foreground text-sm">
+                            —
                           </td>
                           <td className="py-2 px-3">
                             <Input
