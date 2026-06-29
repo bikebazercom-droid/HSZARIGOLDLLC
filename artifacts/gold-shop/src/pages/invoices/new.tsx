@@ -2,12 +2,14 @@ import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useCreateInvoice,
+  useCreateCustomer,
   InvoiceInputPaymentMethod,
   useListCustomers,
   getListCustomersQueryKey,
   useGetPrices,
   getGetPricesQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +64,9 @@ function calcItem(item: LineItem, goldRate: number): LineItem {
 export default function NewInvoice() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const createInvoice = useCreateInvoice();
+  const createCustomer = useCreateCustomer();
 
   const { data: customers } = useListCustomers({}, { query: { queryKey: getListCustomersQueryKey({}) } });
   const { data: prices } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
@@ -85,7 +89,7 @@ export default function NewInvoice() {
   const [vatRate, setVatRate] = useState<number>(5);
   const [roundOffDiscount, setRoundOffDiscount] = useState<number>(0);
 
-  const [items, setItems] = useState<LineItem[]>(DEFAULT_ITEMS.map(i => ({ ...i, id: Math.random().toString(36).substring(7) })));
+  const [items, setItems] = useState<LineItem[]>([]);
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -134,15 +138,10 @@ export default function NewInvoice() {
 
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const handleSubmit = () => {
-    if (!customerName) {
-      toast({ title: "Validation Error", description: "Customer name is required", variant: "destructive" });
-      return;
-    }
-
+  const doCreateInvoice = (resolvedCustomerId?: number) => {
     createInvoice.mutate({
       data: {
-        customerId,
+        customerId: resolvedCustomerId ?? customerId,
         customerName,
         customerMobile,
         customerEmail,
@@ -185,6 +184,40 @@ export default function NewInvoice() {
         toast({ title: "Error creating invoice", description: err.message, variant: "destructive" });
       }
     });
+  };
+
+  const handleSubmit = () => {
+    if (!customerName) {
+      toast({ title: "Validation Error", description: "Customer name is required", variant: "destructive" });
+      return;
+    }
+
+    // If this is a new (not existing) customer, auto-save them to Customers first
+    if (!customerId && customerName) {
+      createCustomer.mutate({
+        data: {
+          name: customerName,
+          mobile: customerMobile || undefined,
+          email: customerEmail || undefined,
+          passportNumber: customerPassportNumber || undefined,
+          emiratesId: customerEmiratesId || undefined,
+          nationality: customerNationality || undefined,
+          country: customerCountry || undefined,
+        }
+      }, {
+        onSuccess: (newCustomer) => {
+          queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey({}) });
+          setCustomerId(newCustomer.id);
+          doCreateInvoice(newCustomer.id);
+        },
+        onError: () => {
+          // Even if customer save fails, still create the invoice
+          doCreateInvoice();
+        }
+      });
+    } else {
+      doCreateInvoice();
+    }
   };
 
   return (
