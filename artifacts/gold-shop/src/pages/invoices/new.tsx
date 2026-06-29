@@ -41,7 +41,7 @@ const PURITY_OPTIONS = [
 
 function calcItem(item: LineItem, goldRate: number): LineItem {
   const pureWeight = parseFloat((item.grossWeight * item.purity).toFixed(4));
-  const totalPrice = parseFloat((pureWeight * goldRate + item.makingAmt).toFixed(2));
+  const totalPrice = parseFloat((item.grossWeight * goldRate + item.makingAmt).toFixed(2));
   return { ...item, pureWeight, totalPrice };
 }
 
@@ -320,7 +320,7 @@ export default function NewInvoice() {
 
               {items.length > 0 && (
                 <div className="mt-4 p-3 bg-muted/40 rounded text-xs text-muted-foreground">
-                  Formula: Pure Wt = Gross Wt × Purity &nbsp;|&nbsp; Total = (Pure Wt × Gold Rate AED {goldRate}/g) + Making Amt
+                  Formula: Pure Wt = Gross Wt × Purity (informational) &nbsp;|&nbsp; Total = (Gross Wt × Gold Rate AED {goldRate}/g) + Making Amt
                 </div>
               )}
             </CardContent>
