@@ -259,11 +259,11 @@ export default function InvoiceDetail() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
             <thead>
               <tr style={{ background: NAVY, color: "white" }}>
-                {["S.No.", "Stock Description", "Gross Wt.", "Purity", "Pure Wt.", "Making Rate", "Making Amt. (AED)", "Total (AED)"].map((h, i) => (
+                {["S.No.", "Stock Description", "Gross Wt.", "Purity", "Pure Wt.", "Making Rate", "Making Amt. (AED)", "Total (AED)", "Total VAT"].map((h, i) => (
                   <th key={i} style={{
                     padding: "6px 6px", textAlign: i <= 1 ? "left" : "center",
                     border: `1px solid ${NAVY}`,
-                    width: ["5%","24%","10%","10%","10%","10%","12%","10%"][i]
+                    width: ["4%","21%","9%","9%","9%","9%","10%","10%","9%"][i]
                   }}>{h}</th>
                 ))}
               </tr>
@@ -279,6 +279,7 @@ export default function InvoiceDetail() {
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.makingRate)}</td>
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{item.makingAmt ? fmt(item.makingAmt) : "-"}</td>
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
+                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmt(item.totalPrice * vatRate / 100)}</td>
                 </tr>
               ))}
               {/* Totals row */}
@@ -290,6 +291,7 @@ export default function InvoiceDetail() {
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>-</td>
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{totalMakingAmt ? fmt(totalMakingAmt) : "-"}</td>
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{fmt(totalPrice)}</td>
+                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc", fontWeight: "bold" }}>{fmt(vatAmount)}</td>
               </tr>
             </tbody>
           </table>
