@@ -11,6 +11,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const logoInitial = settings?.logoInitial ?? "H";
   const logoType = settings?.logoType ?? "monogram";
+  const logoImageUrl = settings?.logoImageUrl ?? "";
   const companyName = settings?.companyName ?? "Hazari Gold L.L.C";
 
   const navItems = [
@@ -26,13 +27,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
       <aside className="w-full md:w-64 bg-sidebar text-sidebar-foreground p-6 flex flex-col no-print">
         <div className="mb-8 flex items-center gap-3">
-          {logoType === "monogram" ? (
+          {logoType === "image" && logoImageUrl ? (
+            <div className="w-10 h-10 rounded flex-shrink-0 overflow-hidden bg-white flex items-center justify-center p-0.5">
+              <img src={logoImageUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+            </div>
+          ) : logoType === "monogram" ? (
             <div className="w-10 h-10 rounded flex items-center justify-center text-white font-bold text-lg flex-shrink-0" style={{ backgroundColor: "#1e3a5f" }}>
               <span style={{ color: "#c8a43a", fontFamily: "serif", fontSize: "1.1rem" }}>{logoInitial}</span>
             </div>
-          ) : (
-            <div className="w-10 h-10 rounded bg-muted flex-shrink-0" />
-          )}
+          ) : null}
           <div>
             <div className="font-bold text-base leading-tight" style={{ color: "#c8a43a" }}>
               {companyName.split(" ").slice(0, 2).join(" ")}
