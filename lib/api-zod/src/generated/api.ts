@@ -129,6 +129,10 @@ export const GetPricesResponse = zod.object({
   "id": zod.number(),
   "goldPricePerGram": zod.number(),
   "silverPricePerGram": zod.number(),
+  "goldJewelryRate": zod.number(),
+  "goldBullionRate": zod.number(),
+  "ttBarRate": zod.number(),
+  "kgBarRate": zod.number(),
   "updatedAt": zod.string()
 })
 
@@ -137,14 +141,22 @@ export const GetPricesResponse = zod.object({
  * @summary Update gold and silver prices
  */
 export const UpdatePricesBody = zod.object({
-  "goldPricePerGram": zod.number(),
-  "silverPricePerGram": zod.number()
+  "goldPricePerGram": zod.number().optional(),
+  "silverPricePerGram": zod.number().optional(),
+  "goldJewelryRate": zod.number().optional(),
+  "goldBullionRate": zod.number().optional(),
+  "ttBarRate": zod.number().optional(),
+  "kgBarRate": zod.number().optional()
 })
 
 export const UpdatePricesResponse = zod.object({
   "id": zod.number(),
   "goldPricePerGram": zod.number(),
   "silverPricePerGram": zod.number(),
+  "goldJewelryRate": zod.number(),
+  "goldBullionRate": zod.number(),
+  "ttBarRate": zod.number(),
+  "kgBarRate": zod.number(),
   "updatedAt": zod.string()
 })
 

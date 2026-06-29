@@ -1,65 +1,61 @@
 import { Router, type IRouter } from "express";
 import { db, pricesTable } from "@workspace/db";
-import {
-  UpdatePricesBody,
-  GetPricesResponse,
-  UpdatePricesResponse,
-} from "@workspace/api-zod";
+import { GetPricesResponse, UpdatePricesResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
-router.get("/prices", async (_req, res): Promise<void> => {
-  let [prices] = await db.select().from(pricesTable).limit(1);
+function parsePrices(p: typeof pricesTable.$inferSelect) {
+  return {
+    ...p,
+    goldPricePerGram: Number(p.goldPricePerGram),
+    silverPricePerGram: Number(p.silverPricePerGram),
+    goldJewelryRate: Number(p.goldJewelryRate),
+    goldBullionRate: Number(p.goldBullionRate),
+    ttBarRate: Number(p.ttBarRate),
+    kgBarRate: Number(p.kgBarRate),
+    updatedAt: p.updatedAt.toISOString(),
+  };
+}
 
-  if (!prices) {
-    [prices] = await db
-      .insert(pricesTable)
-      .values({ goldPricePerGram: "320.00", silverPricePerGram: "4.50" })
-      .returning();
+async function getOrCreate() {
+  let [row] = await db.select().from(pricesTable).limit(1);
+  if (!row) {
+    [row] = await db.insert(pricesTable).values({}).returning();
   }
+  return row;
+}
 
-  res.json(GetPricesResponse.parse({
-    ...prices,
-    goldPricePerGram: Number(prices.goldPricePerGram),
-    silverPricePerGram: Number(prices.silverPricePerGram),
-    updatedAt: prices.updatedAt.toISOString(),
-  }));
+router.get("/prices", async (_req, res): Promise<void> => {
+  const prices = await getOrCreate();
+  res.json(GetPricesResponse.parse(parsePrices(prices)));
 });
 
 router.put("/prices", async (req, res): Promise<void> => {
-  const parsed = UpdatePricesBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const body = req.body as {
+    goldPricePerGram?: number;
+    silverPricePerGram?: number;
+    goldJewelryRate?: number;
+    goldBullionRate?: number;
+    ttBarRate?: number;
+    kgBarRate?: number;
+  };
 
-  let [existing] = await db.select().from(pricesTable).limit(1);
+  const existing = await getOrCreate();
 
-  if (!existing) {
-    [existing] = await db
-      .insert(pricesTable)
-      .values({
-        goldPricePerGram: String(parsed.data.goldPricePerGram),
-        silverPricePerGram: String(parsed.data.silverPricePerGram),
-      })
-      .returning();
-  } else {
-    [existing] = await db
-      .update(pricesTable)
-      .set({
-        goldPricePerGram: String(parsed.data.goldPricePerGram),
-        silverPricePerGram: String(parsed.data.silverPricePerGram),
-        updatedAt: new Date(),
-      })
-      .returning();
-  }
+  const updates: Record<string, string | Date> = { updatedAt: new Date() };
+  if (body.goldPricePerGram != null) updates.goldPricePerGram = String(body.goldPricePerGram);
+  if (body.silverPricePerGram != null) updates.silverPricePerGram = String(body.silverPricePerGram);
+  if (body.goldJewelryRate != null) updates.goldJewelryRate = String(body.goldJewelryRate);
+  if (body.goldBullionRate != null) updates.goldBullionRate = String(body.goldBullionRate);
+  if (body.ttBarRate != null) updates.ttBarRate = String(body.ttBarRate);
+  if (body.kgBarRate != null) updates.kgBarRate = String(body.kgBarRate);
 
-  res.json(UpdatePricesResponse.parse({
-    ...existing,
-    goldPricePerGram: Number(existing.goldPricePerGram),
-    silverPricePerGram: Number(existing.silverPricePerGram),
-    updatedAt: existing.updatedAt.toISOString(),
-  }));
+  const [updated] = await db
+    .update(pricesTable)
+    .set(updates)
+    .returning();
+
+  res.json(UpdatePricesResponse.parse(parsePrices(updated)));
 });
 
 export default router;

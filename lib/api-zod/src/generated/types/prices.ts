@@ -10,5 +10,9 @@ export interface Prices {
   id: number;
   goldPricePerGram: number;
   silverPricePerGram: number;
+  goldJewelryRate: number;
+  goldBullionRate: number;
+  ttBarRate: number;
+  kgBarRate: number;
   updatedAt: string;
 }

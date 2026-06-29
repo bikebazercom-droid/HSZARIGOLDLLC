@@ -7,6 +7,10 @@
  */
 
 export interface PricesInput {
-  goldPricePerGram: number;
-  silverPricePerGram: number;
+  goldPricePerGram?: number;
+  silverPricePerGram?: number;
+  goldJewelryRate?: number;
+  goldBullionRate?: number;
+  ttBarRate?: number;
+  kgBarRate?: number;
 }

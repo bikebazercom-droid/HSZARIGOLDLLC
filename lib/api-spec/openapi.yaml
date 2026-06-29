@@ -445,7 +445,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, updatedAt]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, kgBarRate, updatedAt]
       properties:
         id:
           type: integer
@@ -453,16 +453,31 @@ components:
           type: number
         silverPricePerGram:
           type: number
+        goldJewelryRate:
+          type: number
+        goldBullionRate:
+          type: number
+        ttBarRate:
+          type: number
+        kgBarRate:
+          type: number
         updatedAt:
           type: string
 
     PricesInput:
       type: object
-      required: [goldPricePerGram, silverPricePerGram]
       properties:
         goldPricePerGram:
           type: number
         silverPricePerGram:
+          type: number
+        goldJewelryRate:
+          type: number
+        goldBullionRate:
+          type: number
+        ttBarRate:
+          type: number
+        kgBarRate:
           type: number
 
     Customer:
