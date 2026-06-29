@@ -13,7 +13,7 @@ export interface InvoiceItemInput {
   quantity: number;
   weight?: number;
   grossWeight?: number;
-  purity?: number;
+  purity?: string;
   pureWeight?: number;
   makingRate?: number;
   makingAmt?: number;

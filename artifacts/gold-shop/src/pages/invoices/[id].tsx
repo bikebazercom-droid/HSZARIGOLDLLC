@@ -117,7 +117,7 @@ export default function InvoiceDetail() {
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.grossWeight)}</td>
-                  <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.purity)}</td>
+                  <td className="py-2.5 px-3 text-center font-mono">{item.purity ?? "—"}</td>
                   <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.pureWeight)}</td>
                   <td className="py-2.5 px-3 text-center font-mono">{fmt4(item.makingRate)}</td>
                   <td className="py-2.5 px-3 text-center font-mono">{fmt(item.makingAmt)}</td>

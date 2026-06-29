@@ -20,7 +20,7 @@ export interface InvoiceItem {
   /** @nullable */
   grossWeight?: number | null;
   /** @nullable */
-  purity?: number | null;
+  purity?: string | null;
   /** @nullable */
   pureWeight?: number | null;
   /** @nullable */

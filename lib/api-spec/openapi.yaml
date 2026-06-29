@@ -536,7 +536,7 @@ components:
         grossWeight:
           type: ["number", "null"]
         purity:
-          type: ["number", "null"]
+          type: ["string", "null"]
         pureWeight:
           type: ["number", "null"]
         makingRate:
@@ -565,7 +565,7 @@ components:
         grossWeight:
           type: number
         purity:
-          type: number
+          type: string
         pureWeight:
           type: number
         makingRate:

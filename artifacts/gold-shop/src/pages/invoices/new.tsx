@@ -138,7 +138,7 @@ export default function NewInvoice() {
           category: item.category,
           quantity: 1,
           grossWeight: item.grossWeight,
-          purity: parseFloat(item.purity) || 0,
+          purity: item.purity || undefined,
           pureWeight: 0,
           makingRate: item.makingRate,
           makingAmt: item.makingAmt,
