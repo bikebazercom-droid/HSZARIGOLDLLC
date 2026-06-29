@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Gold Shop Manager"
+version = "1.0.0"
+id = "artifacts/gold-shop"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22827
+
+[services.development]
+run = "pnpm --filter @workspace/gold-shop run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gold-shop", "run", "build" ]
+publicDir = "artifacts/gold-shop/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22827"
+BASE_PATH = "/"

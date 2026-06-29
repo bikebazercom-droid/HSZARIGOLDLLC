@@ -1,22 +1,31 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Gold Shop Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+    description: Dashboard stats
+  - name: customers
+    description: Customer management
+  - name: products
+    description: Product management
+  - name: invoices
+    description: Invoice management
+  - name: prices
+    description: Gold/silver price management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +33,615 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get dashboard summary
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /prices:
+    get:
+      operationId: getPrices
+      tags: [prices]
+      summary: Get current gold and silver prices
+      responses:
+        "200":
+          description: Current prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prices"
+    put:
+      operationId: updatePrices
+      tags: [prices]
+      summary: Update gold and silver prices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricesInput"
+      responses:
+        "200":
+          description: Updated prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prices"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List all customers
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a new customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "201":
+          description: Created customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get a customer by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "200":
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    put:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List all invoices
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: paymentMethod
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create a new invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get an invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Delete an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /invoices/monthly-sales:
+    get:
+      operationId: getMonthlySales
+      tags: [invoices]
+      summary: Get monthly sales data for chart
+      responses:
+        "200":
+          description: Monthly sales breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonthlySale"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    DashboardStats:
+      type: object
+      required:
+        - todayTotalSale
+        - monthlySale
+        - cashCollection
+        - cardCollection
+        - bankTransferCollection
+        - totalCustomers
+        - totalProducts
+        - totalInvoices
+        - pendingPaymentsCount
+        - recentInvoices
+        - goldPricePerGram
+        - silverPricePerGram
+      properties:
+        todayTotalSale:
+          type: number
+        monthlySale:
+          type: number
+        cashCollection:
+          type: number
+        cardCollection:
+          type: number
+        bankTransferCollection:
+          type: number
+        totalCustomers:
+          type: integer
+        totalProducts:
+          type: integer
+        totalInvoices:
+          type: integer
+        pendingPaymentsCount:
+          type: integer
+        goldPricePerGram:
+          type: number
+        silverPricePerGram:
+          type: number
+        recentInvoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+
+    Prices:
+      type: object
+      required: [id, goldPricePerGram, silverPricePerGram, updatedAt]
+      properties:
+        id:
+          type: integer
+        goldPricePerGram:
+          type: number
+        silverPricePerGram:
+          type: number
+        updatedAt:
+          type: string
+
+    PricesInput:
+      type: object
+      required: [goldPricePerGram, silverPricePerGram]
+      properties:
+        goldPricePerGram:
+          type: number
+        silverPricePerGram:
+          type: number
+
+    Customer:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        mobile:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        passportNumber:
+          type: ["string", "null"]
+        emiratesId:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    CustomerInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        mobile:
+          type: string
+        email:
+          type: string
+        passportNumber:
+          type: string
+        emiratesId:
+          type: string
+        nationality:
+          type: string
+        address:
+          type: string
+        country:
+          type: string
+
+    Product:
+      type: object
+      required: [id, name, category, unit, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+          enum: [gold_jewelry, tt_bar, kg_bar, silver]
+        unit:
+          type: string
+        pricePerUnit:
+          type: ["number", "null"]
+        stock:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+
+    ProductInput:
+      type: object
+      required: [name, category, unit]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+          enum: [gold_jewelry, tt_bar, kg_bar, silver]
+        unit:
+          type: string
+        pricePerUnit:
+          type: number
+        stock:
+          type: number
+
+    InvoiceItem:
+      type: object
+      required: [id, invoiceId, description, quantity, unitPrice, totalPrice]
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        productId:
+          type: ["integer", "null"]
+        description:
+          type: string
+        category:
+          type: ["string", "null"]
+        quantity:
+          type: number
+        weight:
+          type: ["number", "null"]
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+
+    InvoiceItemInput:
+      type: object
+      required: [description, quantity, unitPrice, totalPrice]
+      properties:
+        productId:
+          type: integer
+        description:
+          type: string
+        category:
+          type: string
+        quantity:
+          type: number
+        weight:
+          type: number
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+
+    Invoice:
+      type: object
+      required: [id, invoiceNumber, paymentMethod, subtotal, total, createdAt]
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        customerMobile:
+          type: ["string", "null"]
+        customerEmail:
+          type: ["string", "null"]
+        customerPassportNumber:
+          type: ["string", "null"]
+        customerEmiratesId:
+          type: ["string", "null"]
+        paymentMethod:
+          type: string
+          enum: [cash, card, bank_transfer]
+        subtotal:
+          type: number
+        discount:
+          type: number
+        total:
+          type: number
+        notes:
+          type: ["string", "null"]
+        isPending:
+          type: boolean
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+
+    InvoiceInput:
+      type: object
+      required: [paymentMethod, subtotal, total, items]
+      properties:
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        customerMobile:
+          type: string
+        customerEmail:
+          type: string
+        customerPassportNumber:
+          type: string
+        customerEmiratesId:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [cash, card, bank_transfer]
+        subtotal:
+          type: number
+        discount:
+          type: number
+        total:
+          type: number
+        notes:
+          type: string
+        isPending:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItemInput"
+
+    MonthlySale:
+      type: object
+      required: [month, total, cash, card, bankTransfer]
+      properties:
+        month:
+          type: string
+        total:
+          type: number
+        cash:
+          type: number
+        card:
+          type: number
+        bankTransfer:
+          type: number
