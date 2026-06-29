@@ -127,32 +127,38 @@ export default function InvoiceDetail() {
 
           {/* LEFT: Logo + Company Info */}
           <div style={{ flex: "0 0 38%" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-              {logoType === "image" && logoImageUrl ? (
-                <div style={{
-                  width: "70px", height: "70px",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                }}>
-                  <img src={logoImageUrl} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                </div>
-              ) : logoType === "monogram" ? (
-                <div style={{
-                  width: "60px", height: "60px", background: NAVY, borderRadius: "6px",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                }}>
-                  <span style={{ color: GOLD, fontSize: "28px", fontWeight: "bold", fontFamily: "Georgia, serif", letterSpacing: "-2px" }}>
-                    {logoInitial}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            <div style={{ fontWeight: "bold", fontSize: "13px", color: NAVY, marginBottom: "2px" }}>{companyName}</div>
+            {/* Logo — large block */}
+            {logoType === "image" && logoImageUrl ? (
+              <div style={{ marginBottom: "8px" }}>
+                <img
+                  src={logoImageUrl}
+                  alt="Logo"
+                  style={{ width: "140px", height: "auto", display: "block", borderRadius: "8px" }}
+                />
+              </div>
+            ) : logoType === "monogram" ? (
+              <div style={{
+                width: "100px", height: "100px", background: NAVY, borderRadius: "8px",
+                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px"
+              }}>
+                <span style={{ color: GOLD, fontSize: "48px", fontWeight: "bold", fontFamily: "Georgia, serif" }}>
+                  {logoInitial}
+                </span>
+              </div>
+            ) : null}
+
+            {/* Company name */}
+            <div style={{ fontWeight: "bold", fontSize: "13px", color: NAVY, marginBottom: "4px" }}>{companyName}</div>
             {tagline && <div style={{ fontSize: "10px", color: "#555", marginBottom: "4px", fontStyle: "italic" }}>{tagline}</div>}
-            <div style={{ color: "#333", lineHeight: "1.7", fontSize: "10px" }}>
-              <div>📍 {addressLines[0]}</div>
-              {addressLines.slice(1).map((line, i) => (
-                <div key={i} style={{ paddingLeft: "18px" }}>{line}</div>
-              ))}
+
+            {/* Contact details */}
+            <div style={{ color: "#333", lineHeight: "1.8", fontSize: "10px" }}>
+              <div style={{ display: "flex", gap: "4px" }}>
+                <span>📍</span>
+                <div>
+                  {addressLines.map((line, i) => <div key={i}>{line}</div>)}
+                </div>
+              </div>
               <div>📞 Phone: &nbsp;{companyPhone}</div>
               <div>✉ Email: &nbsp;&nbsp;{companyEmail}</div>
               <div>🏢 TRN: &nbsp;&nbsp;&nbsp;&nbsp;{companyTrn}</div>
