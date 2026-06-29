@@ -407,7 +407,16 @@ export default function NewInvoice() {
                 </div>
                 <div className="space-y-2">
                   <Label>Country</Label>
-                  <Input value={customerCountry} onChange={e => setCustomerCountry(e.target.value)} placeholder="e.g. UAE" />
+                  <Select value={customerCountry} onValueChange={setCustomerCountry}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["UAE","India","Pakistan","Bangladesh","Philippines","Egypt","Nepal","Sri Lanka","Jordan","Lebanon","Syria","Iraq","Iran","Kuwait","Saudi Arabia","Qatar","Bahrain","Oman","Yemen","Afghanistan","Ethiopia","Kenya","Nigeria","Ghana","Sudan","Somalia","Tanzania","Uganda","Eritrea","Morocco","Tunisia","Algeria","Libya","South Africa","China","Japan","South Korea","Indonesia","Malaysia","Thailand","Vietnam","Myanmar","USA","UK","Canada","Australia","Germany","France","Italy","Spain","Russia","Turkey","Brazil","Mexico","Argentina"].map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-2">
