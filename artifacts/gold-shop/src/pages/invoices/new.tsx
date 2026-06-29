@@ -276,13 +276,11 @@ export default function NewInvoice() {
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="22K Gold Jewelry">22K Gold Jewelry</SelectItem>
-                            <SelectItem value="24K GOLD">24K GOLD</SelectItem>
+                            <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
+                            <SelectItem value="GOLD">GOLD</SelectItem>
                             <SelectItem value="TT BAR">TT BAR</SelectItem>
                             <SelectItem value="KG BAR">KG BAR</SelectItem>
                             <SelectItem value="Silver">Silver</SelectItem>
-                            <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
-                            <SelectItem value="GOLD">GOLD</SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
