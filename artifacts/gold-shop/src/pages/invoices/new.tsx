@@ -403,7 +403,16 @@ export default function NewInvoice() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Nationality</Label>
-                  <Input value={customerNationality} onChange={e => setCustomerNationality(e.target.value)} placeholder="e.g. Indian" />
+                  <Select value={customerNationality} onValueChange={setCustomerNationality}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select nationality" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["Emirati","Indian","Pakistani","Bangladeshi","Filipino","Egyptian","Nepali","Sri Lankan","Jordanian","Lebanese","Syrian","Iraqi","Iranian","Kuwaiti","Saudi","Qatari","Bahraini","Omani","Yemeni","Afghan","Ethiopian","Kenyan","Nigerian","Ghanaian","Sudanese","Somali","Tanzanian","Ugandan","Eritrean","Moroccan","Tunisian","Algerian","Libyan","South African","Chinese","Japanese","South Korean","Indonesian","Malaysian","Thai","Vietnamese","Burmese","American","British","Canadian","Australian","German","French","Italian","Spanish","Russian","Turkish","Brazilian","Mexican","Argentinian"].map(n => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Country</Label>
