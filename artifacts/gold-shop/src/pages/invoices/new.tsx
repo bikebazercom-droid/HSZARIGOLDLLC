@@ -81,6 +81,7 @@ export default function NewInvoice() {
   const [customerEmiratesId, setCustomerEmiratesId] = useState("");
   const [customerNationality, setCustomerNationality] = useState("");
   const [customerCountry, setCustomerCountry] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
@@ -101,6 +102,9 @@ export default function NewInvoice() {
       setCustomerEmail(customer.email || "");
       setCustomerPassportNumber(customer.passportNumber || "");
       setCustomerEmiratesId(customer.emiratesId || "");
+      setCustomerNationality((customer as any).nationality || "");
+      setCustomerCountry((customer as any).country || "");
+      setCustomerAddress((customer as any).address || "");
     }
   };
 
@@ -203,6 +207,7 @@ export default function NewInvoice() {
           emiratesId: customerEmiratesId || undefined,
           nationality: customerNationality || undefined,
           country: customerCountry || undefined,
+          address: customerAddress || undefined,
         }
       }, {
         onSuccess: (newCustomer) => {
@@ -404,6 +409,10 @@ export default function NewInvoice() {
                   <Label>Country</Label>
                   <Input value={customerCountry} onChange={e => setCustomerCountry(e.target.value)} placeholder="e.g. UAE" />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Textarea value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Full address..." rows={2} />
               </div>
             </CardContent>
           </Card>
