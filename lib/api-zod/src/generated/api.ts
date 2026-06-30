@@ -136,6 +136,7 @@ export const GetPricesResponse = zod.object({
   "goldBullionRate": zod.number(),
   "ttBarRate": zod.number(),
   "kgBarRate": zod.number(),
+  "customDescriptions": zod.array(zod.string()),
   "updatedAt": zod.string()
 })
 
@@ -149,7 +150,8 @@ export const UpdatePricesBody = zod.object({
   "goldJewelryRate": zod.number().optional(),
   "goldBullionRate": zod.number().optional(),
   "ttBarRate": zod.number().optional(),
-  "kgBarRate": zod.number().optional()
+  "kgBarRate": zod.number().optional(),
+  "customDescriptions": zod.array(zod.string()).optional()
 })
 
 export const UpdatePricesResponse = zod.object({
@@ -160,6 +162,7 @@ export const UpdatePricesResponse = zod.object({
   "goldBullionRate": zod.number(),
   "ttBarRate": zod.number(),
   "kgBarRate": zod.number(),
+  "customDescriptions": zod.array(zod.string()),
   "updatedAt": zod.string()
 })
 

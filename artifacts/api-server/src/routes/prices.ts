@@ -5,6 +5,8 @@ import { GetPricesResponse, UpdatePricesResponse } from "@workspace/api-zod";
 const router: IRouter = Router();
 
 function parsePrices(p: typeof pricesTable.$inferSelect) {
+  let customDescriptions: string[] = [];
+  try { customDescriptions = JSON.parse(p.customDescriptions || "[]"); } catch {}
   return {
     ...p,
     goldPricePerGram: Number(p.goldPricePerGram),
@@ -13,6 +15,7 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     goldBullionRate: Number(p.goldBullionRate),
     ttBarRate: Number(p.ttBarRate),
     kgBarRate: Number(p.kgBarRate),
+    customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
   };
 }
@@ -38,9 +41,10 @@ router.put("/prices", async (req, res): Promise<void> => {
     goldBullionRate?: number;
     ttBarRate?: number;
     kgBarRate?: number;
+    customDescriptions?: string[];
   };
 
-  const existing = await getOrCreate();
+  await getOrCreate();
 
   const updates: Record<string, string | Date> = { updatedAt: new Date() };
   if (body.goldPricePerGram != null) updates.goldPricePerGram = String(body.goldPricePerGram);
@@ -49,6 +53,7 @@ router.put("/prices", async (req, res): Promise<void> => {
   if (body.goldBullionRate != null) updates.goldBullionRate = String(body.goldBullionRate);
   if (body.ttBarRate != null) updates.ttBarRate = String(body.ttBarRate);
   if (body.kgBarRate != null) updates.kgBarRate = String(body.kgBarRate);
+  if (body.customDescriptions != null) updates.customDescriptions = JSON.stringify(body.customDescriptions);
 
   const [updated] = await db
     .update(pricesTable)

@@ -13,4 +13,5 @@ export interface PricesInput {
   goldBullionRate?: number;
   ttBarRate?: number;
   kgBarRate?: number;
+  customDescriptions?: string[];
 }

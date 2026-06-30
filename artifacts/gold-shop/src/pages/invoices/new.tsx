@@ -310,6 +310,14 @@ export default function NewInvoice() {
                             <SelectItem value="TT BAR">TT BAR</SelectItem>
                             <SelectItem value="KG BAR">KG BAR</SelectItem>
                             <SelectItem value="Silver">Silver</SelectItem>
+                            {(prices?.customDescriptions ?? []).length > 0 && (
+                              <>
+                                <div className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground tracking-wide border-t mt-1 pt-2">Custom</div>
+                                {(prices?.customDescriptions ?? []).map((d: string) => (
+                                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                                ))}
+                              </>
+                            )}
                           </SelectContent>
                         </Select>
                       </td>

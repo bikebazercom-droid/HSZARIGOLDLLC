@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, X } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -111,6 +111,9 @@ export default function Prices() {
     silverPricePerGram: 0,
   });
   const [syncingAll, setSyncingAll] = useState(false);
+  const [customDescriptions, setCustomDescriptions] = useState<string[]>([]);
+  const [newDesc, setNewDesc] = useState("");
+  const [savingDescs, setSavingDescs] = useState(false);
 
   useEffect(() => {
     if (prices) {
@@ -121,6 +124,7 @@ export default function Prices() {
         kgBarRate: prices.kgBarRate,
         silverPricePerGram: prices.silverPricePerGram,
       });
+      setCustomDescriptions(prices.customDescriptions ?? []);
     }
   }, [prices]);
 
@@ -146,6 +150,39 @@ export default function Prices() {
       );
     });
   };
+
+  const handleAddDesc = () => {
+    const trimmed = newDesc.trim();
+    if (!trimmed || customDescriptions.includes(trimmed)) return;
+    setCustomDescriptions(prev => [...prev, trimmed]);
+    setNewDesc("");
+  };
+
+  const handleRemoveDesc = (desc: string) => {
+    setCustomDescriptions(prev => prev.filter(d => d !== desc));
+  };
+
+  const handleSaveDescs = async () => {
+    setSavingDescs(true);
+    await new Promise<void>((resolve, reject) => {
+      updatePrices.mutate(
+        { data: { customDescriptions } as any },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+            toast({ title: "Custom descriptions saved", description: "They will appear in new invoice Stock Description dropdowns." });
+            resolve();
+          },
+          onError: (err: any) => {
+            toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+            reject(err);
+          },
+        }
+      );
+    }).finally(() => setSavingDescs(false));
+  };
+
+  const descChanged = JSON.stringify(customDescriptions) !== JSON.stringify(prices?.customDescriptions ?? []);
 
   const hasAnyChange = prices && RATE_KEYS.some(k => localRates[k] !== (prices as any)[k]);
 
@@ -239,6 +276,79 @@ export default function Prices() {
           />
         ))}
       </div>
+
+      {/* Custom Stock Descriptions */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+              style={{ background: `${NAVY}18`, border: `2px solid ${NAVY}40` }}
+            >
+              🏷️
+            </div>
+            <div>
+              <CardTitle className="text-base font-bold">Custom Stock Descriptions</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Add custom item names — they appear in the Stock Description dropdown on every new invoice
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g. Rose Gold Ring, Platinum Chain…"
+              value={newDesc}
+              onChange={e => setNewDesc(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAddDesc()}
+              className="flex-1"
+            />
+            <Button
+              onClick={handleAddDesc}
+              disabled={!newDesc.trim() || customDescriptions.includes(newDesc.trim())}
+              style={{ background: NAVY }}
+              className="px-4"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add
+            </Button>
+          </div>
+
+          {customDescriptions.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {customDescriptions.map(desc => (
+                <div
+                  key={desc}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border"
+                  style={{ background: `${GOLD}15`, borderColor: `${GOLD}50`, color: "#7a5f1a" }}
+                >
+                  {desc}
+                  <button
+                    onClick={() => handleRemoveDesc(desc)}
+                    className="ml-0.5 hover:text-red-500 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No custom descriptions yet — type one above and click Add.</p>
+          )}
+
+          {descChanged && (
+            <Button
+              onClick={handleSaveDescs}
+              disabled={savingDescs}
+              className="w-full"
+              style={{ background: NAVY }}
+            >
+              {savingDescs ? "Saving…" : "Save Custom Descriptions → Apply to Invoices"}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
