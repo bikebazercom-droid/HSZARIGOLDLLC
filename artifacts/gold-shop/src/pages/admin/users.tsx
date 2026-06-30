@@ -36,8 +36,13 @@ async function apiFetch(path: string, opts?: RequestInit) {
 }
 
 function PinInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref0 = useRef<HTMLInputElement>(null);
+  const ref1 = useRef<HTMLInputElement>(null);
+  const ref2 = useRef<HTMLInputElement>(null);
+  const ref3 = useRef<HTMLInputElement>(null);
+  const refs = [ref0, ref1, ref2, ref3];
+
   const digits = value.padEnd(4, "").split("").slice(0, 4);
-  const refs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
 
   const handleChange = (idx: number, val: string) => {
     const digit = val.replace(/\D/g, "").slice(-1);
@@ -49,6 +54,9 @@ function PinInput({ value, onChange }: { value: string; onChange: (v: string) =>
 
   const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !digits[idx] && idx > 0) {
+      const prev = [...digits];
+      prev[idx - 1] = "";
+      onChange(prev.join(""));
       refs[idx - 1].current?.focus();
     }
   };
@@ -60,7 +68,7 @@ function PinInput({ value, onChange }: { value: string; onChange: (v: string) =>
   };
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-3">
       {digits.map((d, idx) => (
         <input
           key={idx}
@@ -72,8 +80,22 @@ function PinInput({ value, onChange }: { value: string; onChange: (v: string) =>
           onChange={e => handleChange(idx, e.target.value)}
           onKeyDown={e => handleKeyDown(idx, e)}
           onPaste={handlePaste}
-          className="w-12 h-12 text-center text-xl font-bold border-2 rounded-lg outline-none transition-all focus:border-primary"
-          style={{ borderColor: d ? "#c8a43a" : undefined }}
+          style={{
+            width: 52,
+            height: 52,
+            textAlign: "center",
+            fontSize: 22,
+            fontWeight: 700,
+            border: `2px solid ${d ? "#c8a43a" : "#d1d5db"}`,
+            borderRadius: 10,
+            outline: "none",
+            background: "#ffffff",
+            color: "#111827",
+            boxShadow: d ? "0 0 0 3px rgba(200,164,58,0.15)" : undefined,
+            transition: "border-color 0.15s, box-shadow 0.15s",
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = "#c8a43a"; }}
+          onBlur={e => { if (!e.currentTarget.value) e.currentTarget.style.borderColor = "#d1d5db"; }}
         />
       ))}
     </div>
