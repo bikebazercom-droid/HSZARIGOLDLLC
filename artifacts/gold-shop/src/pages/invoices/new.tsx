@@ -75,10 +75,8 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
 }
 
 function calcItem(item: LineItem): LineItem {
-  const p = parsePurity(item.purity);
-  const pureWeight = p === 0 ? 0 : parseFloat((item.grossWeight * p).toFixed(4));
   const totalPrice = parseFloat((item.grossWeight * item.rate + item.makingAmt).toFixed(2));
-  return { ...item, pureWeight, totalPrice };
+  return { ...item, totalPrice };
 }
 
 export default function NewInvoice() {
@@ -410,8 +408,16 @@ export default function NewInvoice() {
                           </div>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-center font-mono text-sm">
-                        {item.pureWeight > 0 ? item.pureWeight.toFixed(4) : "—"}
+                      <td className="py-2 px-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          value={item.pureWeight || ""}
+                          onChange={e => updateItem(index, "pureWeight", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center"
+                          placeholder="0.0000"
+                        />
                       </td>
                       <td className="py-2 px-3">
                         <Input
