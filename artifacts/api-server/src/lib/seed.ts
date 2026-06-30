@@ -11,14 +11,15 @@ export async function seedAdminUser(): Promise<void> {
     .limit(1);
 
   if (existing.length === 0) {
-    const passwordHash = await bcrypt.hash("admin123", 10);
+    const pinHash = await bcrypt.hash("1234", 10);
     await db.insert(usersTable).values({
       username: "admin",
-      passwordHash,
+      mobile: "0000000000",
+      passwordHash: pinHash,
       fullName: "Administrator",
       role: "admin",
       isActive: true,
     });
-    logger.info("Default admin user created (username: admin, password: admin123)");
+    logger.info("Default admin created — mobile: 0000000000, PIN: 1234");
   }
 }

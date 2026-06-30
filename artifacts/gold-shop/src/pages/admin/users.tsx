@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, KeyRound } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/context/auth";
 
@@ -16,6 +16,7 @@ interface StaffUser {
   id: number;
   username: string;
   fullName: string;
+  mobile: string;
   role: string;
   isActive: boolean;
   createdAt: string;
@@ -34,6 +35,51 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.status === 204 ? null : res.json();
 }
 
+function PinInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const digits = value.padEnd(4, "").split("").slice(0, 4);
+  const refs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
+
+  const handleChange = (idx: number, val: string) => {
+    const digit = val.replace(/\D/g, "").slice(-1);
+    const next = [...digits];
+    next[idx] = digit;
+    onChange(next.join(""));
+    if (digit && idx < 3) refs[idx + 1].current?.focus();
+  };
+
+  const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
+      refs[idx - 1].current?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
+    if (text.length === 4) { onChange(text); refs[3].current?.focus(); }
+    e.preventDefault();
+  };
+
+  return (
+    <div className="flex gap-2">
+      {digits.map((d, idx) => (
+        <input
+          key={idx}
+          ref={refs[idx]}
+          type="password"
+          inputMode="numeric"
+          maxLength={1}
+          value={d}
+          onChange={e => handleChange(idx, e.target.value)}
+          onKeyDown={e => handleKeyDown(idx, e)}
+          onPaste={handlePaste}
+          className="w-12 h-12 text-center text-xl font-bold border-2 rounded-lg outline-none transition-all focus:border-primary"
+          style={{ borderColor: d ? "#c8a43a" : undefined }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function AdminUsersPanel() {
   const { user: me } = useAuth();
   const { toast } = useToast();
@@ -41,45 +87,39 @@ export default function AdminUsersPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editUser, setEditUser] = useState<StaffUser | null>(null);
-
-  const [form, setForm] = useState({ fullName: "", username: "", password: "", role: "staff" });
+  const [form, setForm] = useState({ fullName: "", mobile: "", pin: "", role: "staff" });
 
   const load = async () => {
     setIsLoading(true);
-    try {
-      const data = await apiFetch("/admin/users");
-      setUsers(data);
-    } catch (e: any) {
-      toast({ title: "Failed to load users", description: e.message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
+    try { setUsers(await apiFetch("/admin/users")); }
+    catch (e: any) { toast({ title: "Failed to load users", description: e.message, variant: "destructive" }); }
+    finally { setIsLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
   const openCreate = () => {
     setEditUser(null);
-    setForm({ fullName: "", username: "", password: "", role: "staff" });
+    setForm({ fullName: "", mobile: "", pin: "", role: "staff" });
     setDialogOpen(true);
   };
 
   const openEdit = (u: StaffUser) => {
     setEditUser(u);
-    setForm({ fullName: u.fullName, username: u.username, password: "", role: u.role });
+    setForm({ fullName: u.fullName, mobile: u.mobile, pin: "", role: u.role });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     try {
       if (editUser) {
-        const body: Record<string, unknown> = { fullName: form.fullName, role: form.role };
-        if (form.password) body.password = form.password;
+        const body: Record<string, unknown> = { fullName: form.fullName, mobile: form.mobile, role: form.role };
+        if (form.pin.length === 4) body.pin = form.pin;
         await apiFetch(`/admin/users/${editUser.id}`, { method: "PUT", body: JSON.stringify(body) });
         toast({ title: "User updated" });
       } else {
-        if (!form.username || !form.password || !form.fullName) {
-          toast({ title: "All fields are required", variant: "destructive" });
+        if (!form.fullName || !form.mobile || form.pin.length < 4) {
+          toast({ title: "All fields required. PIN must be 4 digits.", variant: "destructive" });
           return;
         }
         await apiFetch("/admin/users", { method: "POST", body: JSON.stringify(form) });
@@ -94,25 +134,18 @@ export default function AdminUsersPanel() {
 
   const handleToggleActive = async (u: StaffUser) => {
     try {
-      await apiFetch(`/admin/users/${u.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ isActive: !u.isActive }),
-      });
+      await apiFetch(`/admin/users/${u.id}`, { method: "PUT", body: JSON.stringify({ isActive: !u.isActive }) });
       load();
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    }
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
   };
 
   const handleDelete = async (u: StaffUser) => {
-    if (!confirm(`Delete user "${u.fullName}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${u.fullName}"? This cannot be undone.`)) return;
     try {
       await apiFetch(`/admin/users/${u.id}`, { method: "DELETE" });
       toast({ title: "User deleted" });
       load();
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    }
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
   };
 
   return (
@@ -120,9 +153,9 @@ export default function AdminUsersPanel() {
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold">Staff Accounts</h3>
-          <p className="text-sm text-muted-foreground">Manage who can access the system and their permissions.</p>
+          <p className="text-sm text-muted-foreground">Manage who can access the system. Staff log in with their mobile number and PIN.</p>
         </div>
-        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> New Staff Account</Button>
+        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> New Account</Button>
       </div>
 
       <div className="rounded-md border">
@@ -130,7 +163,7 @@ export default function AdminUsersPanel() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Username</TableHead>
+              <TableHead>Mobile</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
@@ -141,11 +174,11 @@ export default function AdminUsersPanel() {
             {isLoading ? (
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
             ) : users.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No users found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No accounts yet.</TableCell></TableRow>
             ) : users.map(u => (
               <TableRow key={u.id}>
                 <TableCell className="font-medium">{u.fullName}</TableCell>
-                <TableCell className="font-mono text-sm">{u.username}</TableCell>
+                <TableCell className="font-mono text-sm">{u.mobile || "—"}</TableCell>
                 <TableCell>
                   <Badge variant={u.role === "admin" ? "default" : "secondary"}>
                     {u.role === "admin" ? "Admin" : "Staff"}
@@ -153,24 +186,16 @@ export default function AdminUsersPanel() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Switch
-                      checked={u.isActive}
-                      onCheckedChange={() => handleToggleActive(u)}
-                      disabled={u.id === me?.id}
-                    />
+                    <Switch checked={u.isActive} onCheckedChange={() => handleToggleActive(u)} disabled={u.id === me?.id} />
                     <span className="text-sm">{u.isActive ? "Active" : "Inactive"}</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {format(new Date(u.createdAt), "MMM d, yyyy")}
-                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">{format(new Date(u.createdAt), "MMM d, yyyy")}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(u)} title="Edit">
-                      <Pencil className="w-4 h-4" />
-                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(u)}><Pencil className="w-4 h-4" /></Button>
                     {u.id !== me?.id && (
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(u)} title="Delete" className="text-destructive hover:text-destructive">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(u)} className="text-destructive hover:text-destructive">
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
@@ -185,7 +210,7 @@ export default function AdminUsersPanel() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editUser ? "Edit User" : "New Staff Account"}</DialogTitle>
+            <DialogTitle>{editUser ? "Edit Account" : "New Account"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -193,35 +218,20 @@ export default function AdminUsersPanel() {
               <Input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} placeholder="e.g. Ahmed Al Rashid" />
             </div>
             <div className="space-y-2">
-              <Label>Username *</Label>
-              <Input
-                value={form.username}
-                onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                placeholder="e.g. ahmed"
-                disabled={!!editUser}
-              />
-              {editUser && <p className="text-xs text-muted-foreground">Username cannot be changed after creation.</p>}
+              <Label>Mobile Number *</Label>
+              <Input value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} placeholder="+971 50 123 4567" type="tel" inputMode="numeric" />
             </div>
             <div className="space-y-2">
-              <Label>{editUser ? "New Password (leave blank to keep current)" : "Password *"}</Label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="password"
-                  className="pl-9"
-                  value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder={editUser ? "Leave blank to keep current" : "Set a password"}
-                />
-              </div>
+              <Label>{editUser ? "New PIN (leave blank to keep)" : "4-Digit PIN *"}</Label>
+              <PinInput value={form.pin} onChange={v => setForm(f => ({ ...f, pin: v }))} />
             </div>
             <div className="space-y-2">
               <Label>Role</Label>
               <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="staff">Staff (Invoice creation only)</SelectItem>
-                  <SelectItem value="admin">Admin (Full access)</SelectItem>
+                  <SelectItem value="staff">Staff — Invoice creation only</SelectItem>
+                  <SelectItem value="admin">Admin — Full access</SelectItem>
                 </SelectContent>
               </Select>
             </div>

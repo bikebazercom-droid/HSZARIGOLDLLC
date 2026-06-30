@@ -1,33 +1,46 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const { username, password } = req.body as { username?: string; password?: string };
+  const { mobile, pin, role } = req.body as {
+    mobile?: string;
+    pin?: string;
+    role?: string;
+  };
 
-  if (!username || !password) {
-    res.status(400).json({ error: "Username and password required" });
+  if (!mobile || !pin || !role) {
+    res.status(400).json({ error: "Mobile, PIN and role are required" });
     return;
   }
+
+  const normalizedMobile = mobile.trim().replace(/\s+/g, "");
+  const normalizedRole = role === "admin" ? "admin" : "staff";
 
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.username, username.trim().toLowerCase()))
+    .where(
+      and(
+        eq(usersTable.mobile, normalizedMobile),
+        eq(usersTable.role, normalizedRole),
+        eq(usersTable.isActive, true)
+      )
+    )
     .limit(1);
 
-  if (!user || !user.isActive) {
+  if (!user) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  const valid = await bcrypt.compare(pin, user.passwordHash);
   if (!valid) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Invalid PIN" });
     return;
   }
 
@@ -41,6 +54,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     username: user.username,
     fullName: user.fullName,
     role: user.role,
+    mobile: user.mobile,
   });
 });
 
@@ -57,6 +71,7 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
       username: usersTable.username,
       fullName: usersTable.fullName,
       role: usersTable.role,
+      mobile: usersTable.mobile,
       isActive: usersTable.isActive,
     })
     .from(usersTable)

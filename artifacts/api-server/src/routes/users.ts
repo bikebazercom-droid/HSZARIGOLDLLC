@@ -12,6 +12,7 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
       id: usersTable.id,
       username: usersTable.username,
       fullName: usersTable.fullName,
+      mobile: usersTable.mobile,
       role: usersTable.role,
       isActive: usersTable.isActive,
       createdAt: usersTable.createdAt,
@@ -23,36 +24,34 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
 });
 
 router.post("/admin/users", requireAdmin, async (req, res): Promise<void> => {
-  const { username, password, fullName, role } = req.body as {
-    username?: string;
-    password?: string;
+  const { fullName, mobile, pin, role } = req.body as {
     fullName?: string;
+    mobile?: string;
+    pin?: string;
     role?: string;
   };
 
-  if (!username || !password || !fullName) {
-    res.status(400).json({ error: "username, password and fullName are required" });
+  if (!fullName || !mobile || !pin) {
+    res.status(400).json({ error: "Full name, mobile and PIN are required" });
     return;
   }
 
-  const normalizedUsername = username.trim().toLowerCase();
-  const existing = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.username, normalizedUsername))
-    .limit(1);
-
-  if (existing.length > 0) {
-    res.status(409).json({ error: "Username already taken" });
+  if (!/^\d{4}$/.test(pin)) {
+    res.status(400).json({ error: "PIN must be exactly 4 digits" });
     return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const normalizedMobile = mobile.trim().replace(/\s+/g, "");
+
+  const username = `${normalizedMobile}_${role === "admin" ? "admin" : "staff"}`;
+  const pinHash = await bcrypt.hash(pin, 10);
+
   const [user] = await db
     .insert(usersTable)
     .values({
-      username: normalizedUsername,
-      passwordHash,
+      username,
+      mobile: normalizedMobile,
+      passwordHash: pinHash,
       fullName: fullName.trim(),
       role: role === "admin" ? "admin" : "staff",
       isActive: true,
@@ -61,6 +60,7 @@ router.post("/admin/users", requireAdmin, async (req, res): Promise<void> => {
       id: usersTable.id,
       username: usersTable.username,
       fullName: usersTable.fullName,
+      mobile: usersTable.mobile,
       role: usersTable.role,
       isActive: usersTable.isActive,
       createdAt: usersTable.createdAt,
@@ -71,18 +71,25 @@ router.post("/admin/users", requireAdmin, async (req, res): Promise<void> => {
 
 router.put("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
-  const { fullName, password, isActive, role } = req.body as {
+  const { fullName, mobile, pin, isActive, role } = req.body as {
     fullName?: string;
-    password?: string;
+    mobile?: string;
+    pin?: string;
     isActive?: boolean;
     role?: string;
   };
 
+  if (pin && !/^\d{4}$/.test(pin)) {
+    res.status(400).json({ error: "PIN must be exactly 4 digits" });
+    return;
+  }
+
   const updates: Record<string, unknown> = {};
   if (fullName !== undefined) updates.fullName = fullName.trim();
+  if (mobile !== undefined) updates.mobile = mobile.trim().replace(/\s+/g, "");
   if (isActive !== undefined) updates.isActive = isActive;
   if (role !== undefined) updates.role = role === "admin" ? "admin" : "staff";
-  if (password) updates.passwordHash = await bcrypt.hash(password, 10);
+  if (pin) updates.passwordHash = await bcrypt.hash(pin, 10);
 
   const [user] = await db
     .update(usersTable)
@@ -92,6 +99,7 @@ router.put("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => 
       id: usersTable.id,
       username: usersTable.username,
       fullName: usersTable.fullName,
+      mobile: usersTable.mobile,
       role: usersTable.role,
       isActive: usersTable.isActive,
       createdAt: usersTable.createdAt,

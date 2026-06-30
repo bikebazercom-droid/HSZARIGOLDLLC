@@ -7,12 +7,13 @@ export interface AuthUser {
   username: string;
   fullName: string;
   role: UserRole;
+  mobile?: string;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (mobile: string, pin: string, role: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -26,8 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/auth/me", { credentials: "include" });
       if (res.ok) {
-        const data = await res.json();
-        setUser(data);
+        setUser(await res.json());
       } else {
         setUser(null);
       }
@@ -38,23 +38,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMe();
-  }, [fetchMe]);
+  useEffect(() => { fetchMe(); }, [fetchMe]);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (mobile: string, pin: string, role: string) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ mobile, pin, role }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: "Login failed" }));
       throw new Error(err.error ?? "Login failed");
     }
-    const data = await res.json();
-    setUser(data);
+    setUser(await res.json());
   }, []);
 
   const logout = useCallback(async () => {
