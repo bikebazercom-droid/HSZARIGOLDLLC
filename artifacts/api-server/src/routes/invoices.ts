@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, gte, lte, and, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable } from "@workspace/db";
+import { requireAdmin } from "../middlewares/auth";
 import {
   ListInvoicesQueryParams,
   CreateInvoiceBody,
@@ -196,7 +197,7 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   res.json(GetInvoiceResponse.parse({ ...parseInvoice(invoice), items: items.map(parseItem) }));
 });
 
-router.delete("/invoices/:id", async (req, res): Promise<void> => {
+router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = DeleteInvoiceParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {

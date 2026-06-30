@@ -4,13 +4,16 @@ import { useListInvoices, getListInvoicesQueryKey, useDeleteInvoice } from "@wor
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Trash2, Printer, Eye } from "lucide-react";
+import { Plus, Search, Trash2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/context/auth";
 
 export default function Invoices() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [search, setSearch] = useState("");
   const { data: invoices, isLoading } = useListInvoices(
     { search: search || undefined },
@@ -108,14 +111,16 @@ export default function Invoices() {
                           <Eye className="h-4 w-4" />
                         </Button>
                       </Link>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(invoice.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {isAdmin && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(invoice.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
