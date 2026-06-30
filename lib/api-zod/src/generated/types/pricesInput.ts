@@ -5,6 +5,7 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomDescription } from './customDescription';
 
 export interface PricesInput {
   goldPricePerGram?: number;
@@ -13,5 +14,5 @@ export interface PricesInput {
   goldBullionRate?: number;
   ttBarRate?: number;
   kgBarRate?: number;
-  customDescriptions?: string[];
+  customDescriptions?: CustomDescription[];
 }

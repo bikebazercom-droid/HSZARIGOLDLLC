@@ -5,7 +5,7 @@ import { GetPricesResponse, UpdatePricesResponse } from "@workspace/api-zod";
 const router: IRouter = Router();
 
 function parsePrices(p: typeof pricesTable.$inferSelect) {
-  let customDescriptions: string[] = [];
+  let customDescriptions: { name: string; rate: number }[] = [];
   try { customDescriptions = JSON.parse(p.customDescriptions || "[]"); } catch {}
   return {
     ...p,

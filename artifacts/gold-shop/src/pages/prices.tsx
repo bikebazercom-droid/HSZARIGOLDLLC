@@ -17,6 +17,8 @@ const GOLD = "#c8a43a";
 
 type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
 
+interface CustomDesc { name: string; rate: number }
+
 interface RateCardProps {
   label: string;
   sublabel: string;
@@ -78,7 +80,6 @@ function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, o
             </div>
           )}
         </div>
-
         <Button
           className="w-full"
           style={{ background: changed ? NAVY : undefined }}
@@ -88,6 +89,62 @@ function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, o
         >
           {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface CustomRateCardProps {
+  item: CustomDesc;
+  onRateChange: (name: string, rate: number) => void;
+  onRemove: (name: string) => void;
+  saved: boolean;
+}
+
+function CustomRateCard({ item, onRateChange, onRemove, saved }: CustomRateCardProps) {
+  return (
+    <Card className="relative overflow-hidden">
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: NAVY }} />
+      <CardHeader className="pb-3 pt-5">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
+            style={{ background: `${NAVY}18`, border: `2px solid ${NAVY}40` }}
+          >
+            🏷️
+          </div>
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-base font-bold leading-tight truncate">{item.name}</CardTitle>
+            <div className="text-xs text-muted-foreground mt-0.5">Custom Item</div>
+          </div>
+          <button
+            onClick={() => onRemove(item.name)}
+            className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
+            title="Remove"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Rate per gram (AED)</div>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={item.rate}
+              onChange={e => onRateChange(item.name, parseFloat(e.target.value) || 0)}
+              className="pl-14 text-xl font-bold h-12"
+              style={{ fontFamily: "monospace" }}
+            />
+          </div>
+        </div>
+        <div className="text-xs text-center text-muted-foreground">
+          {saved ? "✓ Saved — appears in invoice dropdown" : "● Unsaved changes"}
+        </div>
       </CardContent>
     </Card>
   );
@@ -104,16 +161,12 @@ export default function Prices() {
   const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "kgBarRate", "silverPricePerGram"];
 
   const [localRates, setLocalRates] = useState<Record<RateKey, number>>({
-    goldJewelryRate: 0,
-    goldBullionRate: 0,
-    ttBarRate: 0,
-    kgBarRate: 0,
-    silverPricePerGram: 0,
+    goldJewelryRate: 0, goldBullionRate: 0, ttBarRate: 0, kgBarRate: 0, silverPricePerGram: 0,
   });
   const [syncingAll, setSyncingAll] = useState(false);
-  const [customDescriptions, setCustomDescriptions] = useState<string[]>([]);
-  const [newDesc, setNewDesc] = useState("");
-  const [savingDescs, setSavingDescs] = useState(false);
+  const [customDescs, setCustomDescs] = useState<CustomDesc[]>([]);
+  const [newName, setNewName] = useState("");
+  const [savingCustom, setSavingCustom] = useState(false);
 
   useEffect(() => {
     if (prices) {
@@ -124,7 +177,7 @@ export default function Prices() {
         kgBarRate: prices.kgBarRate,
         silverPricePerGram: prices.silverPricePerGram,
       });
-      setCustomDescriptions(prices.customDescriptions ?? []);
+      setCustomDescs((prices.customDescriptions ?? []) as CustomDesc[]);
     }
   }, [prices]);
 
@@ -139,7 +192,7 @@ export default function Prices() {
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-            toast({ title: "Rate updated", description: `${field} set to AED ${value.toFixed(2)}/g` });
+            toast({ title: "Rate updated", description: `Set to AED ${value.toFixed(2)}/g` });
             resolve();
           },
           onError: (err: any) => {
@@ -151,73 +204,74 @@ export default function Prices() {
     });
   };
 
-  const handleAddDesc = () => {
-    const trimmed = newDesc.trim();
-    if (!trimmed || customDescriptions.includes(trimmed)) return;
-    setCustomDescriptions(prev => [...prev, trimmed]);
-    setNewDesc("");
-  };
-
-  const handleRemoveDesc = (desc: string) => {
-    setCustomDescriptions(prev => prev.filter(d => d !== desc));
-  };
-
-  const handleSaveDescs = async () => {
-    setSavingDescs(true);
-    await new Promise<void>((resolve, reject) => {
-      updatePrices.mutate(
-        { data: { customDescriptions } as any },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-            toast({ title: "Custom descriptions saved", description: "They will appear in new invoice Stock Description dropdowns." });
-            resolve();
-          },
-          onError: (err: any) => {
-            toast({ title: "Failed to save", description: err.message, variant: "destructive" });
-            reject(err);
-          },
-        }
-      );
-    }).finally(() => setSavingDescs(false));
-  };
-
-  const descChanged = JSON.stringify(customDescriptions) !== JSON.stringify(prices?.customDescriptions ?? []);
-
   const hasAnyChange = prices && RATE_KEYS.some(k => localRates[k] !== (prices as any)[k]);
 
   const handleSyncAll = async () => {
     if (!prices) return;
     const changed = RATE_KEYS.filter(k => localRates[k] !== (prices as any)[k]);
     if (changed.length === 0) return;
-
     setSyncingAll(true);
     try {
       const patch: Record<string, number> = {};
       changed.forEach(k => { patch[k] = localRates[k]; });
       await new Promise<void>((resolve, reject) => {
-        updatePrices.mutate(
-          { data: patch as any },
-          {
-            onSuccess: () => {
-              queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-              toast({
-                title: `✓ ${changed.length} rate${changed.length > 1 ? "s" : ""} synced to invoices`,
-                description: "New invoices will now use these updated rates automatically.",
-              });
-              resolve();
-            },
-            onError: (err: any) => {
-              toast({ title: "Sync failed", description: err.message, variant: "destructive" });
-              reject(err);
-            },
-          }
-        );
+        updatePrices.mutate({ data: patch as any }, {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+            toast({ title: `✓ ${changed.length} rate${changed.length > 1 ? "s" : ""} synced to invoices` });
+            resolve();
+          },
+          onError: (err: any) => {
+            toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+            reject(err);
+          },
+        });
       });
     } finally {
       setSyncingAll(false);
     }
   };
+
+  const handleAddCustom = () => {
+    const name = newName.trim();
+    if (!name || customDescs.some(d => d.name === name)) return;
+    const next = [...customDescs, { name, rate: 0 }];
+    setCustomDescs(next);
+    setNewName("");
+    saveCustomDescs(next);
+  };
+
+  const handleCustomRateChange = (name: string, rate: number) => {
+    setCustomDescs(prev => prev.map(d => d.name === name ? { ...d, rate } : d));
+  };
+
+  const handleRemoveCustom = (name: string) => {
+    const next = customDescs.filter(d => d.name !== name);
+    setCustomDescs(next);
+    saveCustomDescs(next);
+  };
+
+  const saveCustomDescs = (descs: CustomDesc[]) => {
+    setSavingCustom(true);
+    updatePrices.mutate(
+      { data: { customDescriptions: descs } as any },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+          toast({ title: "Custom items updated", description: "Available in invoice Stock Description." });
+          setSavingCustom(false);
+        },
+        onError: (err: any) => {
+          toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+          setSavingCustom(false);
+        },
+      }
+    );
+  };
+
+  const handleSaveCustomRates = () => saveCustomDescs(customDescs);
+
+  const customChanged = JSON.stringify(customDescs) !== JSON.stringify(prices?.customDescriptions ?? []);
 
   if (isLoading || !prices) {
     return (
@@ -239,7 +293,8 @@ export default function Prices() {
   ];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-8 max-w-5xl mx-auto">
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <TrendingUp className="w-8 h-8 text-primary" />
@@ -248,7 +303,6 @@ export default function Prices() {
             <p className="text-sm text-muted-foreground mt-0.5">Daily Rates — update each metal independently</p>
           </div>
         </div>
-
         <Button
           onClick={handleSyncAll}
           disabled={syncingAll || !hasAnyChange}
@@ -256,14 +310,11 @@ export default function Prices() {
           style={{ background: hasAnyChange ? NAVY : undefined, minWidth: 200 }}
         >
           <RefreshCw className={`w-4 h-4 ${syncingAll ? "animate-spin" : ""}`} />
-          {syncingAll
-            ? "Syncing..."
-            : hasAnyChange
-            ? "Save All & Apply to Invoices"
-            : "All Rates Synced ✓"}
+          {syncingAll ? "Syncing..." : hasAnyChange ? "Save All & Apply to Invoices" : "All Rates Synced ✓"}
         </Button>
       </div>
 
+      {/* Built-in rate cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {metals.map(metal => (
           <RateCard
@@ -277,78 +328,67 @@ export default function Prices() {
         ))}
       </div>
 
-      {/* Custom Stock Descriptions */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-              style={{ background: `${NAVY}18`, border: `2px solid ${NAVY}40` }}
-            >
-              🏷️
-            </div>
-            <div>
-              <CardTitle className="text-base font-bold">Custom Stock Descriptions</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Add custom item names — they appear in the Stock Description dropdown on every new invoice
-              </p>
-            </div>
+      {/* Custom item cards section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-primary">Custom Stock Items</h2>
+            <p className="text-sm text-muted-foreground">Create your own item types — each gets its own rate card and appears in invoice Stock Description</p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="e.g. Rose Gold Ring, Platinum Chain…"
-              value={newDesc}
-              onChange={e => setNewDesc(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleAddDesc()}
-              className="flex-1"
-            />
+          {customChanged && (
             <Button
-              onClick={handleAddDesc}
-              disabled={!newDesc.trim() || customDescriptions.includes(newDesc.trim())}
+              onClick={handleSaveCustomRates}
+              disabled={savingCustom}
+              size="sm"
               style={{ background: NAVY }}
-              className="px-4"
+              className="flex items-center gap-2"
             >
-              <Plus className="w-4 h-4 mr-1" />
-              Add
-            </Button>
-          </div>
-
-          {customDescriptions.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {customDescriptions.map(desc => (
-                <div
-                  key={desc}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border"
-                  style={{ background: `${GOLD}15`, borderColor: `${GOLD}50`, color: "#7a5f1a" }}
-                >
-                  {desc}
-                  <button
-                    onClick={() => handleRemoveDesc(desc)}
-                    className="ml-0.5 hover:text-red-500 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">No custom descriptions yet — type one above and click Add.</p>
-          )}
-
-          {descChanged && (
-            <Button
-              onClick={handleSaveDescs}
-              disabled={savingDescs}
-              className="w-full"
-              style={{ background: NAVY }}
-            >
-              {savingDescs ? "Saving…" : "Save Custom Descriptions → Apply to Invoices"}
+              {savingCustom ? "Saving…" : "Save Rates"}
             </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Add new custom item */}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Type item name (e.g. Rose Gold Ring, Platinum Chain)…"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleAddCustom()}
+            className="flex-1 h-11"
+          />
+          <Button
+            onClick={handleAddCustom}
+            disabled={!newName.trim() || customDescs.some(d => d.name === newName.trim())}
+            style={{ background: NAVY }}
+            className="h-11 px-5 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add Item
+          </Button>
+        </div>
+
+        {/* Custom rate cards grid */}
+        {customDescs.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {customDescs.map(item => (
+              <CustomRateCard
+                key={item.name}
+                item={item}
+                onRateChange={handleCustomRateChange}
+                onRemove={handleRemoveCustom}
+                saved={!customChanged}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground">
+            <div className="text-3xl mb-2">🏷️</div>
+            <p className="font-medium">No custom items yet</p>
+            <p className="text-sm mt-1">Type a name above and click Add Item to create your first custom rate card</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

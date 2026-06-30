@@ -66,6 +66,10 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
   if (description === "TT BAR") return prices.ttBarRate;
   if (description === "KG BAR") return prices.kgBarRate;
   if (description === "Silver") return prices.silverPricePerGram;
+  // Check custom descriptions
+  const custom = (prices as any).customDescriptions as { name: string; rate: number }[] | undefined;
+  const found = custom?.find(d => d.name === description);
+  if (found) return found.rate;
   return prices.goldPricePerGram;
 }
 

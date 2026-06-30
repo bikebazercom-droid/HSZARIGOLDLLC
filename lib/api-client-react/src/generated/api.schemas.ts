@@ -106,6 +106,11 @@ export interface DashboardStats {
   recentInvoices: Invoice[];
 }
 
+export interface CustomDescription {
+  name: string;
+  rate: number;
+}
+
 export interface Prices {
   id: number;
   goldPricePerGram: number;
@@ -114,7 +119,7 @@ export interface Prices {
   goldBullionRate: number;
   ttBarRate: number;
   kgBarRate: number;
-  customDescriptions: string[];
+  customDescriptions: CustomDescription[];
   updatedAt: string;
 }
 
@@ -125,7 +130,7 @@ export interface PricesInput {
   goldBullionRate?: number;
   ttBarRate?: number;
   kgBarRate?: number;
-  customDescriptions?: string[];
+  customDescriptions?: CustomDescription[];
 }
 
 export interface Customer {

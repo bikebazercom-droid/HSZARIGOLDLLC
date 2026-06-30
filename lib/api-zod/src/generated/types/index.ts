@@ -8,6 +8,7 @@
 
 export * from './companySettings';
 export * from './companySettingsInput';
+export * from './customDescription';
 export * from './customer';
 export * from './customerInput';
 export * from './dashboardStats';

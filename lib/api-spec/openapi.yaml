@@ -464,9 +464,18 @@ components:
         customDescriptions:
           type: array
           items:
-            type: string
+            $ref: "#/components/schemas/CustomDescription"
         updatedAt:
           type: string
+
+    CustomDescription:
+      type: object
+      required: [name, rate]
+      properties:
+        name:
+          type: string
+        rate:
+          type: number
 
     PricesInput:
       type: object
@@ -486,7 +495,7 @@ components:
         customDescriptions:
           type: array
           items:
-            type: string
+            $ref: "#/components/schemas/CustomDescription"
 
     Customer:
       type: object
