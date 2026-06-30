@@ -41,7 +41,7 @@ router.put("/prices", async (req, res): Promise<void> => {
     goldBullionRate?: number;
     ttBarRate?: number;
     kgBarRate?: number;
-    customDescriptions?: string[];
+    customDescriptions?: { name: string; rate: number }[];
   };
 
   await getOrCreate();

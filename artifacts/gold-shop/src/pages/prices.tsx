@@ -16,7 +16,9 @@ const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
 
 type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
-interface CustomItem { name: string; rate: number; stockDesc?: boolean }
+interface CustomItem { name: string; rate: number }
+
+const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
 
 /* ── Built-in rate card ─────────────────────────────────────── */
 interface RateCardProps {
@@ -33,7 +35,7 @@ function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, o
   return (
     <Card className="relative overflow-hidden">
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: color }} />
-      <CardHeader className="pb-3 pt-5">
+      <CardHeader className="pb-2 pt-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
             style={{ background: `${color}18`, border: `2px solid ${color}40` }}>{icon}</div>
@@ -43,7 +45,11 @@ function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, o
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color }}>
+          <CalendarDays className="w-3.5 h-3.5" />
+          Daily Rate — {TODAY}
+        </div>
         <div>
           <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Rate per gram (AED)</div>
           <div className="relative">
@@ -72,10 +78,7 @@ interface CustomCardProps {
   onDelete: (name: string) => void;
 }
 
-const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
-
 function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardProps) {
-  const showStockDesc = item.stockDesc !== false;
   return (
     <Card className="relative overflow-hidden">
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: NAVY }} />
@@ -94,7 +97,6 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Daily Rate label with date */}
         <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: NAVY }}>
           <CalendarDays className="w-3.5 h-3.5" />
           Daily Rate — {TODAY}
@@ -108,19 +110,17 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
               className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
           </div>
         </div>
-        {/* Stock Description badge */}
-        {showStockDesc && (
-          <div className="flex items-center gap-1.5 text-xs rounded-md px-2.5 py-1.5 font-medium"
-            style={{ background: `${NAVY}10`, color: NAVY }}>
-            <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-            Auto-creates Invoice Stock Description
-          </div>
-        )}
+        {/* Always shown — custom items are always in invoice Stock Description */}
+        <div className="flex items-center gap-1.5 text-xs rounded-md px-2.5 py-1.5 font-medium"
+          style={{ background: `${NAVY}10`, color: NAVY }}>
+          <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+          ✓ Saved to Invoice Stock Description
+        </div>
         <Button className="w-full flex items-center gap-2" size="sm"
           style={{ background: saved ? undefined : NAVY }}
           onClick={() => onSave(item.name)} disabled={saved}>
           <Check className="w-4 h-4" />
-          {saved ? "Saved ✓" : "Save & Apply to Invoices"}
+          {saved ? "Rate Saved ✓" : "Save Daily Rate"}
         </Button>
       </CardContent>
     </Card>
@@ -138,7 +138,7 @@ function AddItemCard({ onClick }: { onClick: () => void }) {
       </div>
       <div className="text-center">
         <p className="font-semibold text-sm" style={{ color: NAVY }}>New Custom Item</p>
-        <p className="text-xs mt-0.5">Create your own rate card</p>
+        <p className="text-xs mt-0.5">Saves to Live Prices + Invoice Stock Description</p>
       </div>
     </button>
   );
@@ -162,7 +162,6 @@ export default function Prices() {
   const [showNewForm, setShowNewForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newRate, setNewRate] = useState<number>(0);
-  const [newStockDesc, setNewStockDesc] = useState(true);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -180,7 +179,7 @@ export default function Prices() {
     }
   }, [prices]);
 
-  // Built-in rate handlers
+  /* ── Built-in rate handlers ── */
   const handleChange = (field: RateKey, value: number) => setLocalRates(prev => ({ ...prev, [field]: value }));
 
   const handleSaveOne = async (field: RateKey, value: number): Promise<void> =>
@@ -210,7 +209,7 @@ export default function Prices() {
     } finally { setSyncingAll(false); }
   };
 
-  // Custom item handlers
+  /* ── Custom item handlers ── */
   const persistCustomItems = (items: CustomItem[]) => {
     updatePrices.mutate({ data: { customDescriptions: items } as any }, {
       onSuccess: () => {
@@ -224,14 +223,14 @@ export default function Prices() {
   const handleAddNewItem = () => {
     const name = newName.trim();
     if (!name || customItems.some(i => i.name === name)) return;
-    const next = [...customItems, { name, rate: newRate, stockDesc: newStockDesc }];
+    const next = [...customItems, { name, rate: newRate }];
     setCustomItems(next);
     setShowNewForm(false);
-    setNewName(""); setNewRate(0); setNewStockDesc(true);
+    setNewName(""); setNewRate(0);
     persistCustomItems(next);
     toast({
-      title: `"${name}" added`,
-      description: newStockDesc ? "Appears in invoice Stock Description dropdown." : "Rate card saved (not in invoice dropdown).",
+      title: `"${name}" added to Live Prices`,
+      description: "Now appears in Invoice Stock Description dropdown automatically.",
     });
   };
 
@@ -242,7 +241,7 @@ export default function Prices() {
 
   const handleSaveCustomItem = (name: string) => {
     persistCustomItems(customItems);
-    toast({ title: `"${name}" saved` });
+    toast({ title: `"${name}" rate saved` });
   };
 
   const handleDeleteCustomItem = (name: string) => {
@@ -307,7 +306,7 @@ export default function Prices() {
             onDelete={handleDeleteCustomItem} />
         ))}
 
-        {/* New item form card */}
+        {/* New item form or add button */}
         {showNewForm ? (
           <Card className="relative overflow-hidden">
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: NAVY }} />
@@ -315,7 +314,6 @@ export default function Prices() {
               <CardTitle className="text-base font-bold">New Custom Item</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Daily Rate badge */}
               <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: NAVY }}>
                 <CalendarDays className="w-3.5 h-3.5" />
                 Daily Rate — {TODAY}
@@ -338,28 +336,24 @@ export default function Prices() {
                 </div>
               </div>
 
-              {/* Create Invoice Stock Description toggle */}
-              <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-lg px-3 py-2.5 transition-colors"
-                style={{ background: newStockDesc ? `${NAVY}0e` : "transparent", border: `1px solid ${newStockDesc ? NAVY + "30" : "#e5e7eb"}` }}>
-                <input type="checkbox" checked={newStockDesc} onChange={e => setNewStockDesc(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 accent-[#1e3a5f] flex-shrink-0" />
-                <div>
-                  <div className="text-xs font-semibold leading-snug" style={{ color: NAVY }}>
-                    <FileText className="w-3 h-3 inline mr-1 -mt-0.5" />
-                    Create Invoice Stock Description Automatically
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    This item will appear in the Stock Description dropdown when creating invoices
+              {/* Always-on info box */}
+              <div className="flex items-start gap-2 text-xs rounded-md px-2.5 py-2 font-medium"
+                style={{ background: `${NAVY}0e`, border: `1px solid ${NAVY}25` }}>
+                <FileText className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: NAVY }} />
+                <div style={{ color: NAVY }}>
+                  <div className="font-semibold">Saves to Invoice Stock Description automatically</div>
+                  <div className="font-normal text-[11px] mt-0.5 opacity-70">
+                    Will appear in the Stock Description dropdown when creating invoices
                   </div>
                 </div>
-              </label>
+              </div>
 
               <div className="flex gap-2 pt-1">
                 <Button className="flex-1" style={{ background: NAVY }}
                   onClick={handleAddNewItem} disabled={!newName.trim()}>
                   <Plus className="w-4 h-4 mr-1" /> Add Item
                 </Button>
-                <Button variant="outline" onClick={() => { setShowNewForm(false); setNewName(""); setNewRate(0); setNewStockDesc(true); }}>
+                <Button variant="outline" onClick={() => { setShowNewForm(false); setNewName(""); setNewRate(0); }}>
                   Cancel
                 </Button>
               </div>
