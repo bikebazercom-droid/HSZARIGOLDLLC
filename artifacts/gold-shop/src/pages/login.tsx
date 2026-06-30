@@ -81,13 +81,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo + title */}
         <div className="text-center mb-8">
-          <div
-            className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl font-bold shadow-lg"
-            style={{ backgroundColor: "#c8a43a", color: "#1e3a5f" }}
-          >
-            H
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-wide">Hazari Gold L.L.C</h1>
+          <img
+            src="/hazari-gold-logo.jpg"
+            alt="Hazari Gold L.L.C"
+            className="w-48 mx-auto mb-4 rounded-2xl shadow-xl"
+          />
           <p className="text-blue-300 text-sm mt-1">Management Portal</p>
         </div>
 
