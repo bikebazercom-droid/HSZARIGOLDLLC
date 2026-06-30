@@ -26,11 +26,28 @@ interface LineItem {
   category: string;
   grossWeight: number;
   purity: string;
+  purityIsCustom: boolean;
   pureWeight: number;
   makingRate: number;
   makingAmt: number;
   totalPrice: number;
   rate: number;
+}
+
+const PURITY_PRESETS = [
+  { label: "24K (999.9)", value: "24K (999.9)", decimal: 0.9999 },
+  { label: "22K (916.0)", value: "22K (916.0)", decimal: 0.9160 },
+  { label: "21K (875.0)", value: "21K (875.0)", decimal: 0.8750 },
+  { label: "18K (750.0)", value: "18K (750.0)", decimal: 0.7500 },
+];
+
+function parsePurity(purity: string): number {
+  const match = purity.match(/\((\d+\.?\d*)\)/);
+  if (match) return parseFloat(match[1]) / 1000;
+  const decimal = parseFloat(purity);
+  if (!isNaN(decimal) && decimal <= 1) return decimal;
+  if (!isNaN(decimal) && decimal > 1) return decimal / 1000;
+  return 0;
 }
 
 interface PricesData {
@@ -53,8 +70,8 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
 }
 
 function calcItem(item: LineItem): LineItem {
-  const parsedPurity = parseFloat(item.purity);
-  const pureWeight = isNaN(parsedPurity) ? 0 : parseFloat((item.grossWeight * parsedPurity).toFixed(4));
+  const p = parsePurity(item.purity);
+  const pureWeight = p === 0 ? 0 : parseFloat((item.grossWeight * p).toFixed(4));
   const totalPrice = parseFloat((item.grossWeight * item.rate + item.makingAmt).toFixed(2));
   return { ...item, pureWeight, totalPrice };
 }
@@ -120,6 +137,7 @@ export default function NewInvoice() {
       category: "gold_jewelry",
       grossWeight: 0,
       purity: "",
+      purityIsCustom: false,
       pureWeight: 0,
       makingRate: 0,
       makingAmt: 0,
@@ -128,7 +146,7 @@ export default function NewInvoice() {
     }]);
   };
 
-  const updateItem = (index: number, field: keyof LineItem, value: string | number) => {
+  const updateItem = (index: number, field: keyof LineItem, value: string | number | boolean) => {
     setItems(prev => {
       const next = [...prev];
       let updated = { ...next[index], [field]: value };
@@ -305,13 +323,48 @@ export default function NewInvoice() {
                           className="h-8 text-sm text-center"
                         />
                       </td>
-                      <td className="py-2 px-3">
-                        <Input
-                          placeholder="e.g. 22K, 999"
-                          value={item.purity || ""}
-                          onChange={e => updateItem(index, "purity", e.target.value)}
-                          className="h-8 text-sm text-center"
-                        />
+                      <td className="py-2 px-3 min-w-[130px]">
+                        {!item.purityIsCustom ? (
+                          <Select
+                            value={PURITY_PRESETS.find(p => p.value === item.purity)?.value ?? ""}
+                            onValueChange={val => {
+                              if (val === "__custom__") {
+                                updateItem(index, "purityIsCustom" as keyof LineItem, true);
+                                updateItem(index, "purity", "");
+                              } else {
+                                updateItem(index, "purity", val);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue placeholder="Select karat" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PURITY_PRESETS.map(p => (
+                                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                              ))}
+                              <SelectItem value="__custom__">Custom…</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="flex gap-1 items-center">
+                            <Input
+                              autoFocus
+                              placeholder="e.g. 0.916"
+                              value={item.purity}
+                              onChange={e => updateItem(index, "purity", e.target.value)}
+                              className="h-8 text-sm text-center"
+                            />
+                            <button
+                              type="button"
+                              className="text-[10px] text-blue-500 hover:underline whitespace-nowrap"
+                              onClick={() => {
+                                updateItem(index, "purityIsCustom" as keyof LineItem, false);
+                                updateItem(index, "purity", "");
+                              }}
+                            >Presets</button>
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 px-3 text-center font-mono text-sm">
                         {item.pureWeight > 0 ? item.pureWeight.toFixed(4) : "—"}
