@@ -10,37 +10,34 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, RefreshCw } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
+
+type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
 
 interface RateCardProps {
   label: string;
   sublabel: string;
   icon: string;
   color: string;
-  fieldKey: "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
-  currentValue: number;
-  updatedAt: string;
-  onSave: (field: string, value: number) => Promise<void>;
+  fieldKey: RateKey;
+  savedValue: number;
+  value: number;
+  onChange: (field: RateKey, value: number) => void;
+  onSave: (field: RateKey, value: number) => Promise<void>;
 }
 
-function RateCard({ label, sublabel, icon, color, fieldKey, currentValue, updatedAt, onSave }: RateCardProps) {
-  const [value, setValue] = useState(currentValue);
+function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, onChange, onSave }: RateCardProps) {
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setValue(currentValue);
-  }, [currentValue]);
+  const changed = value !== savedValue;
 
   const handleSave = async () => {
     setSaving(true);
     await onSave(fieldKey, value);
     setSaving(false);
   };
-
-  const changed = value !== currentValue;
 
   return (
     <Card className="relative overflow-hidden">
@@ -69,7 +66,7 @@ function RateCard({ label, sublabel, icon, color, fieldKey, currentValue, update
               step="0.01"
               min="0"
               value={value}
-              onChange={e => setValue(parseFloat(e.target.value) || 0)}
+              onChange={e => onChange(fieldKey, parseFloat(e.target.value) || 0)}
               className="pl-14 text-xl font-bold h-12"
               style={{ fontFamily: "monospace" }}
             />
@@ -77,7 +74,7 @@ function RateCard({ label, sublabel, icon, color, fieldKey, currentValue, update
           {changed && (
             <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600">
               <span>●</span>
-              <span>Unsaved — was AED {currentValue.toFixed(2)}</span>
+              <span>Unsaved — was AED {savedValue.toFixed(2)}</span>
             </div>
           )}
         </div>
@@ -91,10 +88,6 @@ function RateCard({ label, sublabel, icon, color, fieldKey, currentValue, update
         >
           {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
         </Button>
-
-        <div className="text-xs text-muted-foreground text-center">
-          Last updated: {new Date(updatedAt).toLocaleString()}
-        </div>
       </CardContent>
     </Card>
   );
@@ -108,14 +101,41 @@ export default function Prices() {
   });
   const updatePrices = useUpdatePrices();
 
-  const handleSave = async (field: string, value: number) => {
+  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "kgBarRate", "silverPricePerGram"];
+
+  const [localRates, setLocalRates] = useState<Record<RateKey, number>>({
+    goldJewelryRate: 0,
+    goldBullionRate: 0,
+    ttBarRate: 0,
+    kgBarRate: 0,
+    silverPricePerGram: 0,
+  });
+  const [syncingAll, setSyncingAll] = useState(false);
+
+  useEffect(() => {
+    if (prices) {
+      setLocalRates({
+        goldJewelryRate: prices.goldJewelryRate,
+        goldBullionRate: prices.goldBullionRate,
+        ttBarRate: prices.ttBarRate,
+        kgBarRate: prices.kgBarRate,
+        silverPricePerGram: prices.silverPricePerGram,
+      });
+    }
+  }, [prices]);
+
+  const handleChange = (field: RateKey, value: number) => {
+    setLocalRates(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveOne = async (field: RateKey, value: number): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
       updatePrices.mutate(
         { data: { [field]: value } as any },
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-            toast({ title: "Rate updated successfully" });
+            toast({ title: "Rate updated", description: `${field} set to AED ${value.toFixed(2)}/g` });
             resolve();
           },
           onError: (err: any) => {
@@ -125,6 +145,41 @@ export default function Prices() {
         }
       );
     });
+  };
+
+  const hasAnyChange = prices && RATE_KEYS.some(k => localRates[k] !== (prices as any)[k]);
+
+  const handleSyncAll = async () => {
+    if (!prices) return;
+    const changed = RATE_KEYS.filter(k => localRates[k] !== (prices as any)[k]);
+    if (changed.length === 0) return;
+
+    setSyncingAll(true);
+    try {
+      const patch: Record<string, number> = {};
+      changed.forEach(k => { patch[k] = localRates[k]; });
+      await new Promise<void>((resolve, reject) => {
+        updatePrices.mutate(
+          { data: patch as any },
+          {
+            onSuccess: () => {
+              queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+              toast({
+                title: `✓ ${changed.length} rate${changed.length > 1 ? "s" : ""} synced to invoices`,
+                description: "New invoices will now use these updated rates automatically.",
+              });
+              resolve();
+            },
+            onError: (err: any) => {
+              toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+              reject(err);
+            },
+          }
+        );
+      });
+    } finally {
+      setSyncingAll(false);
+    }
   };
 
   if (isLoading || !prices) {
@@ -139,56 +194,37 @@ export default function Prices() {
   }
 
   const metals = [
-    {
-      label: "Gold Jewelry",
-      sublabel: "22K / 916",
-      icon: "💍",
-      color: GOLD,
-      fieldKey: "goldJewelryRate" as const,
-      currentValue: prices.goldJewelryRate,
-    },
-    {
-      label: "GOLD",
-      sublabel: "24K / 999.9",
-      icon: "🥇",
-      color: "#d4aa00",
-      fieldKey: "goldBullionRate" as const,
-      currentValue: prices.goldBullionRate,
-    },
-    {
-      label: "TT BAR",
-      sublabel: "24K / 999.9",
-      icon: "📊",
-      color: "#e67e22",
-      fieldKey: "ttBarRate" as const,
-      currentValue: prices.ttBarRate,
-    },
-    {
-      label: "KG BAR",
-      sublabel: "24K / 999.9",
-      icon: "🏅",
-      color: "#f39c12",
-      fieldKey: "kgBarRate" as const,
-      currentValue: prices.kgBarRate,
-    },
-    {
-      label: "Silver",
-      sublabel: "Pure Silver",
-      icon: "🪙",
-      color: "#95a5a6",
-      fieldKey: "silverPricePerGram" as const,
-      currentValue: prices.silverPricePerGram,
-    },
+    { label: "Gold Jewelry", sublabel: "22K / 916", icon: "💍", color: GOLD, fieldKey: "goldJewelryRate" as const },
+    { label: "GOLD", sublabel: "24K / 999.9", icon: "🥇", color: "#d4aa00", fieldKey: "goldBullionRate" as const },
+    { label: "TT BAR", sublabel: "24K / 999.9", icon: "📊", color: "#e67e22", fieldKey: "ttBarRate" as const },
+    { label: "KG BAR", sublabel: "24K / 999.9", icon: "🏅", color: "#f39c12", fieldKey: "kgBarRate" as const },
+    { label: "Silver", sublabel: "Pure Silver", icon: "🪙", color: "#95a5a6", fieldKey: "silverPricePerGram" as const },
   ];
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3">
-        <TrendingUp className="w-8 h-8 text-primary" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Live Prices</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Daily Rates — update each metal independently</p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-8 h-8 text-primary" />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">Live Prices</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Daily Rates — update each metal independently</p>
+          </div>
         </div>
+
+        <Button
+          onClick={handleSyncAll}
+          disabled={syncingAll || !hasAnyChange}
+          className="flex items-center gap-2 px-5 h-11 text-sm font-semibold shadow-md"
+          style={{ background: hasAnyChange ? NAVY : undefined, minWidth: 200 }}
+        >
+          <RefreshCw className={`w-4 h-4 ${syncingAll ? "animate-spin" : ""}`} />
+          {syncingAll
+            ? "Syncing..."
+            : hasAnyChange
+            ? "Save All & Apply to Invoices"
+            : "All Rates Synced ✓"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -196,8 +232,10 @@ export default function Prices() {
           <RateCard
             key={metal.fieldKey}
             {...metal}
-            updatedAt={prices.updatedAt}
-            onSave={handleSave}
+            savedValue={(prices as any)[metal.fieldKey]}
+            value={localRates[metal.fieldKey]}
+            onChange={handleChange}
+            onSave={handleSaveOne}
           />
         ))}
       </div>
