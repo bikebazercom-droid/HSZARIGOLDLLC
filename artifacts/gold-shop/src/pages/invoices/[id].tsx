@@ -237,34 +237,39 @@ export default function InvoiceDetail() {
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid ${NAVY}` }}>
             <tbody>
-              {[
-                [
-                  { label: "Name",     value: invoice.customerName ?? "" },
-                  { label: "Address",  value: (invoice as any).customerAddress ?? "" },
-                ],
-                [
-                  { label: "Phone",    value: invoice.customerMobile ?? "" },
-                  { label: "Nationality", value: (invoice as any).customerNationality ?? "" },
-                ],
-                [
-                  { label: "Email",    value: invoice.customerEmail ?? "" },
-                  { label: "Country",  value: (invoice as any).customerCountry ?? "" },
-                ],
-                [
-                  { label: "Passport", value: invoice.customerPassportNumber ?? "" },
-                  { label: "Emirates ID", value: invoice.customerEmiratesId ?? "" },
-                ],
-              ].map((row, ri) => (
-                <tr key={ri}>
-                  {row.map((cell, ci) => (
-                    <React.Fragment key={ci}>
-                      <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>{cell.label}</td>
-                      <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
-                      <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: "28%", borderRight: ci === 0 ? `1px solid ${NAVY}` : undefined }}>{cell.value}</td>
-                    </React.Fragment>
-                  ))}
-                </tr>
-              ))}
+              {/* Row 1: Name + Phone */}
+              <tr>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Name</td>
+                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: "28%", borderRight: `1px solid ${NAVY}` }}>{invoice.customerName ?? ""}</td>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Phone</td>
+                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{invoice.customerMobile ?? ""}</td>
+              </tr>
+              {/* Row 2: Address — full width */}
+              <tr>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Address</td>
+                <td style={{ padding: "4px 2px", borderRight: "1px solid #ddd" }}>:</td>
+                <td colSpan={4} style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{invoice.customerAddress ?? ""}</td>
+              </tr>
+              {/* Row 3: Email + Nationality */}
+              <tr>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Email</td>
+                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: "28%", borderRight: `1px solid ${NAVY}` }}>{invoice.customerEmail ?? ""}</td>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Nationality</td>
+                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{(invoice as any).customerNationality ?? ""}</td>
+              </tr>
+              {/* Row 4: Passport + Emirates ID */}
+              <tr>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Passport</td>
+                <td style={{ padding: "4px 2px", borderRight: "1px solid #ddd" }}>:</td>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", borderRight: `1px solid ${NAVY}` }}>{invoice.customerPassportNumber ?? ""}</td>
+                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Emirates ID</td>
+                <td style={{ padding: "4px 2px", borderRight: "1px solid #ddd" }}>:</td>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{invoice.customerEmiratesId ?? ""}</td>
+              </tr>
             </tbody>
           </table>
         </div>
