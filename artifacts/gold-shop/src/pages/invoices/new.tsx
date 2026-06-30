@@ -99,6 +99,8 @@ export default function NewInvoice() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPassportNumber, setCustomerPassportNumber] = useState("");
   const [customerEmiratesId, setCustomerEmiratesId] = useState("");
+  const [idType, setIdType] = useState<"passport" | "emirates">("passport");
+  const [idValue, setIdValue] = useState("");
   const [customerNationality, setCustomerNationality] = useState("");
   const [customerCountry, setCustomerCountry] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -129,6 +131,11 @@ export default function NewInvoice() {
       setCustomerEmail(customer.email || "");
       setCustomerPassportNumber(customer.passportNumber || "");
       setCustomerEmiratesId(customer.emiratesId || "");
+      if (customer.emiratesId) {
+        setIdType("emirates"); setIdValue(customer.emiratesId);
+      } else {
+        setIdType("passport"); setIdValue(customer.passportNumber || "");
+      }
       setCustomerNationality((customer as any).nationality || "");
       setCustomerCountry((customer as any).country || "");
       setCustomerAddress((customer as any).address || "");
@@ -184,8 +191,8 @@ export default function NewInvoice() {
         customerName,
         customerMobile,
         customerEmail,
-        customerPassportNumber,
-        customerEmiratesId,
+        customerPassportNumber: idType === "passport" ? idValue : "",
+        customerEmiratesId: idType === "emirates" ? idValue : "",
         customerNationality,
         customerCountry,
         paymentMethod,
@@ -238,8 +245,8 @@ export default function NewInvoice() {
           name: customerName,
           mobile: customerMobile || undefined,
           email: customerEmail || undefined,
-          passportNumber: customerPassportNumber || undefined,
-          emiratesId: customerEmiratesId || undefined,
+          passportNumber: idType === "passport" ? idValue || undefined : undefined,
+          emiratesId: idType === "emirates" ? idValue || undefined : undefined,
           nationality: customerNationality || undefined,
           country: customerCountry || undefined,
           address: customerAddress || undefined,
@@ -492,12 +499,24 @@ export default function NewInvoice() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Passport No.</Label>
-                  <Input value={customerPassportNumber} onChange={e => setCustomerPassportNumber(e.target.value)} placeholder="Passport" />
+                  <Label>ID Type</Label>
+                  <Select value={idType} onValueChange={v => { setIdType(v as "passport" | "emirates"); setIdValue(""); }}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="passport">Passport No.</SelectItem>
+                      <SelectItem value="emirates">Emirates ID</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Emirates ID</Label>
-                  <Input value={customerEmiratesId} onChange={e => setCustomerEmiratesId(e.target.value)} placeholder="EID" />
+                  <Label>{idType === "passport" ? "Passport Number" : "Emirates ID"}</Label>
+                  <Input
+                    value={idValue}
+                    onChange={e => setIdValue(e.target.value)}
+                    placeholder={idType === "passport" ? "e.g. A1234567" : "784-XXXX-XXXXXXX-X"}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
