@@ -8,6 +8,8 @@ import {
   getListCustomersQueryKey,
   useGetPrices,
   getGetPricesQueryKey,
+  useListProducts,
+  getListProductsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -88,6 +90,7 @@ export default function NewInvoice() {
 
   const { data: customers } = useListCustomers({}, { query: { queryKey: getListCustomersQueryKey({}) } });
   const { data: prices } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
+  const { data: products } = useListProducts({}, { query: { queryKey: getListProductsQueryKey({}) } });
 
   const goldRate = prices?.goldPricePerGram ?? 320;
 
@@ -351,6 +354,14 @@ export default function NewInvoice() {
                               {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
                                 <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
                               ))}
+                              {products && products.length > 0 && (
+                                <>
+                                  <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Products</div>
+                                  {products.map(p => (
+                                    <SelectItem key={`product-${p.id}`} value={p.name}>{p.name}</SelectItem>
+                                  ))}
+                                </>
+                              )}
                               <SelectItem value="__custom__">✏️ Custom…</SelectItem>
                             </SelectContent>
                           </Select>
