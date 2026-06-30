@@ -27,6 +27,8 @@ export interface Invoice {
   customerNationality?: string | null;
   /** @nullable */
   customerCountry?: string | null;
+  /** @nullable */
+  customerAddress?: string | null;
   paymentMethod: InvoicePaymentMethod;
   /** @nullable */
   metalRate?: number | null;

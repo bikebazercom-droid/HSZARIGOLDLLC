@@ -14,6 +14,7 @@ export const invoicesTable = pgTable("invoices", {
   customerEmiratesId: text("customer_emirates_id"),
   customerNationality: text("customer_nationality"),
   customerCountry: text("customer_country"),
+  customerAddress: text("customer_address"),
   paymentMethod: text("payment_method").notNull().default("cash"), // cash, card, bank_transfer
   metalRate: numeric("metal_rate", { precision: 12, scale: 4 }),
   placeOfSupply: text("place_of_supply"),

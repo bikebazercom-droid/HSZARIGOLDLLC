@@ -66,6 +66,8 @@ export interface Invoice {
   customerNationality?: string | null;
   /** @nullable */
   customerCountry?: string | null;
+  /** @nullable */
+  customerAddress?: string | null;
   paymentMethod: InvoicePaymentMethod;
   /** @nullable */
   metalRate?: number | null;
@@ -237,6 +239,7 @@ export interface InvoiceInput {
   customerEmiratesId?: string;
   customerNationality?: string;
   customerCountry?: string;
+  customerAddress?: string;
   paymentMethod: InvoiceInputPaymentMethod;
   metalRate?: number;
   placeOfSupply?: string;

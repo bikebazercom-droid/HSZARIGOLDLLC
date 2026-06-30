@@ -665,6 +665,8 @@ components:
           type: ["string", "null"]
         customerCountry:
           type: ["string", "null"]
+        customerAddress:
+          type: ["string", "null"]
         paymentMethod:
           type: string
           enum: [cash, card, bank_transfer]
@@ -718,6 +720,8 @@ components:
         customerNationality:
           type: string
         customerCountry:
+          type: string
+        customerAddress:
           type: string
         paymentMethod:
           type: string

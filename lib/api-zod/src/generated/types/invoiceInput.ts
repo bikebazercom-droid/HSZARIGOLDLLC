@@ -17,6 +17,7 @@ export interface InvoiceInput {
   customerEmiratesId?: string;
   customerNationality?: string;
   customerCountry?: string;
+  customerAddress?: string;
   paymentMethod: InvoiceInputPaymentMethod;
   metalRate?: number;
   placeOfSupply?: string;

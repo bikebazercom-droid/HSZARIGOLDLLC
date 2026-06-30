@@ -193,6 +193,7 @@ export default function NewInvoice() {
         customerEmiratesId: idType === "emirates" ? idValue : "",
         customerNationality,
         customerCountry,
+        customerAddress: customerAddress || undefined,
         paymentMethod,
         isPending,
         notes,
