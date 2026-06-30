@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,69 +35,33 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.status === 204 ? null : res.json();
 }
 
-function PinInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const ref0 = useRef<HTMLInputElement>(null);
-  const ref1 = useRef<HTMLInputElement>(null);
-  const ref2 = useRef<HTMLInputElement>(null);
-  const ref3 = useRef<HTMLInputElement>(null);
-  const refs = [ref0, ref1, ref2, ref3];
-
-  const digits = value.padEnd(4, "").split("").slice(0, 4);
-
-  const handleChange = (idx: number, val: string) => {
-    const digit = val.replace(/\D/g, "").slice(-1);
-    const next = [...digits];
-    next[idx] = digit;
-    onChange(next.join(""));
-    if (digit && idx < 3) refs[idx + 1].current?.focus();
-  };
-
-  const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
-      const prev = [...digits];
-      prev[idx - 1] = "";
-      onChange(prev.join(""));
-      refs[idx - 1].current?.focus();
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
-    if (text.length === 4) { onChange(text); refs[3].current?.focus(); }
-    e.preventDefault();
-  };
-
+function PinInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div className="flex gap-3">
-      {digits.map((d, idx) => (
-        <input
-          key={idx}
-          ref={refs[idx]}
+    <div className="space-y-1">
+      <div className="relative">
+        <Input
           type="password"
           inputMode="numeric"
-          maxLength={1}
-          value={d}
-          onChange={e => handleChange(idx, e.target.value)}
-          onKeyDown={e => handleKeyDown(idx, e)}
-          onPaste={handlePaste}
-          style={{
-            width: 52,
-            height: 52,
-            textAlign: "center",
-            fontSize: 22,
-            fontWeight: 700,
-            border: `2px solid ${d ? "#c8a43a" : "#d1d5db"}`,
-            borderRadius: 10,
-            outline: "none",
-            background: "#ffffff",
-            color: "#111827",
-            boxShadow: d ? "0 0 0 3px rgba(200,164,58,0.15)" : undefined,
-            transition: "border-color 0.15s, box-shadow 0.15s",
-          }}
-          onFocus={e => { e.currentTarget.style.borderColor = "#c8a43a"; }}
-          onBlur={e => { if (!e.currentTarget.value) e.currentTarget.style.borderColor = "#d1d5db"; }}
+          maxLength={4}
+          value={value}
+          onChange={e => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
+          placeholder={placeholder ?? "Enter 4-digit PIN"}
+          className="text-lg tracking-[0.5em] font-bold h-12"
         />
-      ))}
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1.5 pointer-events-none">
+          {[0, 1, 2, 3].map(i => (
+            <div
+              key={i}
+              className="w-2 h-2 rounded-full border-2 transition-colors"
+              style={{
+                backgroundColor: i < value.length ? "#c8a43a" : "transparent",
+                borderColor: i < value.length ? "#c8a43a" : "#d1d5db",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{value.length}/4 digits entered</p>
     </div>
   );
 }
