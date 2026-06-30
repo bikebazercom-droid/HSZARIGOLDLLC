@@ -239,34 +239,30 @@ export default function InvoiceDetail() {
             <tbody>
               {[
                 [
-                  { label: "Name", value: invoice.customerName ?? "" },
-                  { label: "Address", value: "" }
+                  { label: "Name",     value: invoice.customerName ?? "" },
+                  { label: "Address",  value: (invoice as any).customerAddress ?? "" },
                 ],
                 [
-                  { label: "Phone", value: invoice.customerMobile ?? "" },
-                  { label: "Nationality", value: (invoice as any).customerNationality ?? "" }
+                  { label: "Phone",    value: invoice.customerMobile ?? "" },
+                  { label: "Nationality", value: (invoice as any).customerNationality ?? "" },
                 ],
                 [
-                  { label: "Email", value: invoice.customerEmail ?? "" },
-                  { label: "Country", value: (invoice as any).customerCountry ?? "" }
+                  { label: "Email",    value: invoice.customerEmail ?? "" },
+                  { label: "Country",  value: (invoice as any).customerCountry ?? "" },
                 ],
                 [
                   { label: "Passport", value: invoice.customerPassportNumber ?? "" },
-                  null
+                  { label: "Emirates ID", value: invoice.customerEmiratesId ?? "" },
                 ],
               ].map((row, ri) => (
                 <tr key={ri}>
-                  {row.map((cell, ci) =>
-                    cell ? (
-                      <React.Fragment key={ci}>
-                        <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap" }}>{cell.label}</td>
-                        <td style={{ padding: "4px 8px", width: "2%" }}>:</td>
-                        <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: ri === 3 ? "38%" : "28%" }}>{cell.value}</td>
-                      </React.Fragment>
-                    ) : (
-                      <td key={ci} colSpan={3} />
-                    )
-                  )}
+                  {row.map((cell, ci) => (
+                    <React.Fragment key={ci}>
+                      <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>{cell.label}</td>
+                      <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
+                      <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: "28%", borderRight: ci === 0 ? `1px solid ${NAVY}` : undefined }}>{cell.value}</td>
+                    </React.Fragment>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -278,11 +274,11 @@ export default function InvoiceDetail() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
             <thead>
               <tr style={{ background: NAVY, color: "white" }}>
-                {["S.No.", "Stock Description", "Gross Wt.", "Purity", "Pure Wt.", "Making Rate", "Making Amt. (AED)", "Total (AED)", "Total VAT"].map((h, i) => (
+                {["S.No.", "Stock Description", "Gross Wt.", "Purity", "Pure Wt.", "Making Rate", "Making Amt. (AED)", "Total (AED)"].map((h, i) => (
                   <th key={i} style={{
                     padding: "6px 6px", textAlign: i <= 1 ? "left" : "center",
                     border: `1px solid ${NAVY}`,
-                    width: ["4%","21%","9%","9%","9%","9%","10%","10%","9%"][i]
+                    width: ["4%","26%","10%","10%","10%","10%","15%","15%"][i]
                   }}>{h}</th>
                 ))}
               </tr>
@@ -298,7 +294,6 @@ export default function InvoiceDetail() {
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.makingRate)}</td>
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{item.makingAmt ? fmt(item.makingAmt) : "-"}</td>
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmt(item.totalPrice * vatRate / 100)}</td>
                 </tr>
               ))}
               {/* Totals row */}
@@ -310,7 +305,6 @@ export default function InvoiceDetail() {
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>-</td>
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{totalMakingAmt ? fmt(totalMakingAmt) : "-"}</td>
                 <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{fmt(totalPrice)}</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc", fontWeight: "bold" }}>{fmt(vatAmount)}</td>
               </tr>
             </tbody>
           </table>
