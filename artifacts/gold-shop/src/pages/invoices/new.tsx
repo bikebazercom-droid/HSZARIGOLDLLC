@@ -52,9 +52,11 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
   return prices.goldPricePerGram;
 }
 
-function calcItem(item: LineItem): LineItem {
+function calcItem(item: LineItem, recalcPureWeight = false): LineItem {
   const parsedPurity = parseFloat(item.purity);
-  const pureWeight = isNaN(parsedPurity) ? 0 : parseFloat((item.grossWeight * parsedPurity).toFixed(4));
+  const pureWeight = recalcPureWeight
+    ? (isNaN(parsedPurity) ? 0 : parseFloat((item.grossWeight * parsedPurity).toFixed(4)))
+    : item.pureWeight;
   const totalPrice = parseFloat((item.grossWeight * item.rate + item.makingAmt).toFixed(2));
   return { ...item, pureWeight, totalPrice };
 }
@@ -136,7 +138,9 @@ export default function NewInvoice() {
       if (field === "description") {
         updated = { ...updated, rate: getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate) };
       }
-      next[index] = calcItem(updated as LineItem);
+      // Auto-recalc pure weight only when gross weight or purity changes (not when user types pure weight directly)
+      const recalc = field === "grossWeight" || field === "purity";
+      next[index] = calcItem(updated as LineItem, recalc);
       return next;
     });
   };
@@ -312,8 +316,16 @@ export default function NewInvoice() {
                           className="h-8 text-sm text-center"
                         />
                       </td>
-                      <td className="py-2 px-3 text-center font-mono text-sm">
-                        {item.pureWeight > 0 ? item.pureWeight.toFixed(4) : "—"}
+                      <td className="py-2 px-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          value={item.pureWeight || ""}
+                          onChange={e => updateItem(index, "pureWeight", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center"
+                          placeholder="auto"
+                        />
                       </td>
                       <td className="py-2 px-3">
                         <Input
