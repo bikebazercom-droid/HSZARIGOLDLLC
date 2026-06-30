@@ -552,22 +552,9 @@ export default function NewInvoice() {
               <CardTitle>Payment & Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Metal Rate (AED/g)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={metalRate || ""}
-                    onChange={e => setMetalRate(parseFloat(e.target.value) || 0)}
-                    placeholder={String(goldRate)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Place of Supply</Label>
-                  <Input value={placeOfSupply} onChange={e => setPlaceOfSupply(e.target.value)} placeholder="e.g. Dubai" />
-                </div>
+              <div className="space-y-2">
+                <Label>Place of Supply</Label>
+                <Input value={placeOfSupply} onChange={e => setPlaceOfSupply(e.target.value)} placeholder="e.g. Dubai" />
               </div>
 
               <div className="space-y-2">
