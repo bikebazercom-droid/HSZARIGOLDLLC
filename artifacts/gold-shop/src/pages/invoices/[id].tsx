@@ -237,38 +237,53 @@ export default function InvoiceDetail() {
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid ${NAVY}` }}>
             <tbody>
-              {/* Row 1: Name + Phone */}
+              {/* Row 1: Name | Address */}
               <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Name</td>
-                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: "28%", borderRight: `1px solid ${NAVY}` }}>{invoice.customerName ?? ""}</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Phone</td>
-                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{invoice.customerMobile ?? ""}</td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", width: "11%", color: NAVY, whiteSpace: "nowrap" }}>Name</td>
+                <td style={{ padding: "5px 2px", width: "1%", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px", width: "30%", borderRight: `2px solid ${NAVY}` }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerName ?? ""}</div>
+                </td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", width: "11%", color: NAVY, whiteSpace: "nowrap" }}>Address</td>
+                <td style={{ padding: "5px 2px", width: "1%", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px" }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerAddress ?? ""}</div>
+                </td>
               </tr>
-              {/* Row 2: Address — full width */}
+              {/* Row 2: Phone | (empty right) */}
               <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Address</td>
-                <td style={{ padding: "4px 2px", borderRight: "1px solid #ddd" }}>:</td>
-                <td colSpan={4} style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{invoice.customerAddress ?? ""}</td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Phone</td>
+                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px", borderRight: `2px solid ${NAVY}` }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerMobile ?? ""}</div>
+                </td>
+                <td colSpan={3} style={{ padding: "5px 8px" }}></td>
               </tr>
-              {/* Row 3: Email + Nationality */}
+              {/* Row 3: Email | Nationality */}
               <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Email</td>
-                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", width: "28%", borderRight: `1px solid ${NAVY}` }}>{invoice.customerEmail ?? ""}</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", width: "10%", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Nationality</td>
-                <td style={{ padding: "4px 2px", width: "2%", borderRight: "1px solid #ddd" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{(invoice as any).customerNationality ?? ""}</td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Email</td>
+                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px", borderRight: `2px solid ${NAVY}` }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerEmail ?? ""}</div>
+                </td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Nationality</td>
+                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px" }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{(invoice as any).customerNationality ?? ""}</div>
+                </td>
               </tr>
-              {/* Row 4: Passport + Emirates ID */}
+              {/* Row 4: Passport | Country */}
               <tr>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Passport</td>
-                <td style={{ padding: "4px 2px", borderRight: "1px solid #ddd" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd", borderRight: `1px solid ${NAVY}` }}>{invoice.customerPassportNumber ?? ""}</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap", borderRight: "1px solid #ddd" }}>Emirates ID</td>
-                <td style={{ padding: "4px 2px", borderRight: "1px solid #ddd" }}>:</td>
-                <td style={{ padding: "4px 8px", borderBottom: "1px solid #ddd" }}>{invoice.customerEmiratesId ?? ""}</td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Passport</td>
+                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px", borderRight: `2px solid ${NAVY}` }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerPassportNumber ?? invoice.customerEmiratesId ?? ""}</div>
+                </td>
+                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Country</td>
+                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
+                <td style={{ padding: "5px 8px" }}>
+                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{(invoice as any).customerCountry ?? ""}</div>
+                </td>
               </tr>
             </tbody>
           </table>
