@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useCreateInvoice,
@@ -30,34 +30,32 @@ interface LineItem {
   makingRate: number;
   makingAmt: number;
   totalPrice: number;
+  rate: number;
 }
 
-function makeItem(description: string, category: string, purity: string): LineItem {
-  return {
-    id: Math.random().toString(36).substring(7),
-    description,
-    category,
-    grossWeight: 0,
-    purity,
-    pureWeight: 0,
-    makingRate: 0,
-    makingAmt: 0,
-    totalPrice: 0,
-  };
+interface PricesData {
+  goldPricePerGram: number;
+  silverPricePerGram: number;
+  goldJewelryRate: number;
+  goldBullionRate: number;
+  ttBarRate: number;
+  kgBarRate: number;
 }
 
-const DEFAULT_ITEMS: LineItem[] = [
-  makeItem("22K Gold Jewelry", "gold_jewelry", "22K (916)"),
-  makeItem("24K GOLD", "gold_jewelry", "24K (999.9)"),
-  makeItem("TT BAR", "tt_bar", "24K (999.9)"),
-  makeItem("KG BAR", "kg_bar", "24K (999.9)"),
-  makeItem("Silver", "silver", ""),
-];
+function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
+  if (!prices) return fallback;
+  if (description === "Gold Jewelry") return prices.goldJewelryRate;
+  if (description === "GOLD") return prices.goldBullionRate;
+  if (description === "TT BAR") return prices.ttBarRate;
+  if (description === "KG BAR") return prices.kgBarRate;
+  if (description === "Silver") return prices.silverPricePerGram;
+  return prices.goldPricePerGram;
+}
 
-function calcItem(item: LineItem, goldRate: number): LineItem {
+function calcItem(item: LineItem): LineItem {
   const parsedPurity = parseFloat(item.purity);
   const pureWeight = isNaN(parsedPurity) ? 0 : parseFloat((item.grossWeight * parsedPurity).toFixed(4));
-  const totalPrice = parseFloat((item.grossWeight * goldRate + item.makingAmt).toFixed(2));
+  const totalPrice = parseFloat((item.grossWeight * item.rate + item.makingAmt).toFixed(2));
   return { ...item, pureWeight, totalPrice };
 }
 
@@ -85,12 +83,19 @@ export default function NewInvoice() {
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
-  const [metalRate, setMetalRate] = useState<number>(goldRate);
+  const [metalRate, setMetalRate] = useState<number>(0);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [vatRate, setVatRate] = useState<number>(5);
   const [roundOffDiscount, setRoundOffDiscount] = useState<number>(0);
 
   const [items, setItems] = useState<LineItem[]>([]);
+
+  // Sync metalRate from live prices when they first load
+  useEffect(() => {
+    if (prices?.goldPricePerGram && metalRate === 0) {
+      setMetalRate(prices.goldPricePerGram);
+    }
+  }, [prices?.goldPricePerGram]);
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -119,14 +124,19 @@ export default function NewInvoice() {
       makingRate: 0,
       makingAmt: 0,
       totalPrice: 0,
+      rate: metalRate || goldRate,
     }]);
   };
 
   const updateItem = (index: number, field: keyof LineItem, value: string | number) => {
     setItems(prev => {
       const next = [...prev];
-      const updated = { ...next[index], [field]: value };
-      next[index] = calcItem(updated as LineItem, metalRate || goldRate);
+      let updated = { ...next[index], [field]: value };
+      // When description changes, auto-set rate from live prices
+      if (field === "description") {
+        updated = { ...updated, rate: getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate) };
+      }
+      next[index] = calcItem(updated as LineItem);
       return next;
     });
   };
