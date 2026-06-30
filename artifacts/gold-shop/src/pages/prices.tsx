@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw, Plus, Trash2, Check, FileText, CalendarDays } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -110,12 +110,6 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
               className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
           </div>
         </div>
-        {/* Always shown — custom items are always in invoice Stock Description */}
-        <div className="flex items-center gap-1.5 text-xs rounded-md px-2.5 py-1.5 font-medium"
-          style={{ background: `${NAVY}10`, color: NAVY }}>
-          <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-          ✓ Saved to Invoice Stock Description
-        </div>
         <Button className="w-full flex items-center gap-2" size="sm"
           style={{ background: saved ? undefined : NAVY }}
           onClick={() => onSave(item.name)} disabled={saved}>
@@ -138,7 +132,7 @@ function AddItemCard({ onClick }: { onClick: () => void }) {
       </div>
       <div className="text-center">
         <p className="font-semibold text-sm" style={{ color: NAVY }}>New Custom Item</p>
-        <p className="text-xs mt-0.5">Saves to Live Prices + Invoice Stock Description</p>
+        <p className="text-xs mt-0.5">Create your own rate card</p>
       </div>
     </button>
   );
@@ -333,18 +327,6 @@ export default function Prices() {
                   <Input type="number" step="0.01" min="0" value={newRate || ""}
                     onChange={e => setNewRate(parseFloat(e.target.value) || 0)}
                     className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
-                </div>
-              </div>
-
-              {/* Always-on info box */}
-              <div className="flex items-start gap-2 text-xs rounded-md px-2.5 py-2 font-medium"
-                style={{ background: `${NAVY}0e`, border: `1px solid ${NAVY}25` }}>
-                <FileText className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: NAVY }} />
-                <div style={{ color: NAVY }}>
-                  <div className="font-semibold">Saves to Invoice Stock Description automatically</div>
-                  <div className="font-normal text-[11px] mt-0.5 opacity-70">
-                    Will appear in the Stock Description dropdown when creating invoices
-                  </div>
                 </div>
               </div>
 
