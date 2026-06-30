@@ -25,6 +25,7 @@ interface LineItem {
   description: string;
   category: string;
   grossWeight: number;
+  descriptionIsCustom: boolean;
   purity: string;
   purityIsCustom: boolean;
   pureWeight: number;
@@ -140,6 +141,7 @@ export default function NewInvoice() {
       description: "",
       category: "gold_jewelry",
       grossWeight: 0,
+      descriptionIsCustom: false,
       purity: "",
       purityIsCustom: false,
       pureWeight: 0,
@@ -301,29 +303,52 @@ export default function NewInvoice() {
                     <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
                       <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
                       <td className="py-2 px-3 min-w-[180px]">
-                        <Select
-                          value={item.description}
-                          onValueChange={val => updateItem(index, "description", val)}
-                        >
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
-                            <SelectItem value="GOLD">GOLD</SelectItem>
-                            <SelectItem value="TT BAR">TT BAR</SelectItem>
-                            <SelectItem value="KG BAR">KG BAR</SelectItem>
-                            <SelectItem value="Silver">Silver</SelectItem>
-                            {(prices?.customDescriptions ?? []).length > 0 && (
-                              <>
-                                <div className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground tracking-wide border-t mt-1 pt-2">Custom</div>
-                                {(prices?.customDescriptions ?? []).map((d: string) => (
-                                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                                ))}
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        {item.descriptionIsCustom ? (
+                          <div className="flex gap-1 items-center">
+                            <Input
+                              autoFocus
+                              placeholder="Type description…"
+                              value={item.description}
+                              onChange={e => updateItem(index, "description", e.target.value)}
+                              className="h-8 text-sm"
+                            />
+                            <button
+                              type="button"
+                              className="text-[10px] text-blue-500 hover:underline whitespace-nowrap"
+                              onClick={() => {
+                                updateItem(index, "descriptionIsCustom" as keyof LineItem, false);
+                                updateItem(index, "description", "");
+                              }}
+                            >List</button>
+                          </div>
+                        ) : (
+                          <Select
+                            value={item.description}
+                            onValueChange={val => {
+                              if (val === "__custom__") {
+                                updateItem(index, "descriptionIsCustom" as keyof LineItem, true);
+                                updateItem(index, "description", "");
+                              } else {
+                                updateItem(index, "description", val);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
+                              <SelectItem value="GOLD">GOLD</SelectItem>
+                              <SelectItem value="TT BAR">TT BAR</SelectItem>
+                              <SelectItem value="KG BAR">KG BAR</SelectItem>
+                              <SelectItem value="Silver">Silver</SelectItem>
+                              {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
+                                <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
+                              ))}
+                              <SelectItem value="__custom__">✏️ Custom…</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </td>
                       <td className="py-2 px-3">
                         <Input
