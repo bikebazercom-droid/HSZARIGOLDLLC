@@ -166,20 +166,10 @@ export interface CustomerInput {
   country?: string;
 }
 
-export type ProductCategory = typeof ProductCategory[keyof typeof ProductCategory];
-
-
-export const ProductCategory = {
-  gold_jewelry: 'gold_jewelry',
-  tt_bar: 'tt_bar',
-  kg_bar: 'kg_bar',
-  silver: 'silver',
-} as const;
-
 export interface Product {
   id: number;
   name: string;
-  category: ProductCategory;
+  category: string;
   unit: string;
   /** @nullable */
   pricePerUnit?: number | null;
@@ -188,19 +178,9 @@ export interface Product {
   createdAt: string;
 }
 
-export type ProductInputCategory = typeof ProductInputCategory[keyof typeof ProductInputCategory];
-
-
-export const ProductInputCategory = {
-  gold_jewelry: 'gold_jewelry',
-  tt_bar: 'tt_bar',
-  kg_bar: 'kg_bar',
-  silver: 'silver',
-} as const;
-
 export interface ProductInput {
   name: string;
-  category: ProductInputCategory;
+  category: string;
   unit: string;
   pricePerUnit?: number;
   stock?: number;

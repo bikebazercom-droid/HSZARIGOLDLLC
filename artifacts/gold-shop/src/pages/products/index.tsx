@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useListProducts, getListProductsQueryKey, useDeleteProduct, ProductCategory } from "@workspace/api-client-react";
+import { useListProducts, getListProductsQueryKey, useDeleteProduct } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,10 +38,10 @@ export default function Products() {
 
   const categories = [
     { id: "all", label: "All Products" },
-    { id: ProductCategory.gold_jewelry, label: "Gold Jewelry" },
-    { id: ProductCategory.tt_bar, label: "TT Bar" },
-    { id: ProductCategory.kg_bar, label: "KG Bar" },
-    { id: ProductCategory.silver, label: "Silver" },
+    { id: "gold_jewelry", label: "Gold Jewelry" },
+    { id: "tt_bar", label: "TT Bar" },
+    { id: "kg_bar", label: "KG Bar" },
+    { id: "silver", label: "Silver" },
   ];
 
   return (

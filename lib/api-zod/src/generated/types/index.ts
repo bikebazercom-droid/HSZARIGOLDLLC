@@ -27,6 +27,4 @@ export * from './monthlySale';
 export * from './prices';
 export * from './pricesInput';
 export * from './product';
-export * from './productCategory';
 export * from './productInput';
-export * from './productInputCategory';

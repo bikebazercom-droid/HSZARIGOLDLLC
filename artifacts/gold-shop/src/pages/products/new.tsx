@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useCreateProduct, ProductInputCategory } from "@workspace/api-client-react";
+import { useCreateProduct } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,9 +12,17 @@ import * as z from "zod";
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+const PRESET_CATEGORIES = ["gold_jewelry", "tt_bar", "kg_bar", "silver"];
+const CATEGORY_LABELS: Record<string, string> = {
+  gold_jewelry: "Gold Jewelry",
+  tt_bar: "TT Bar",
+  kg_bar: "KG Bar",
+  silver: "Silver",
+};
+
 const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  category: z.nativeEnum(ProductInputCategory),
+  category: z.string().min(1, "Category is required"),
   unit: z.string().min(1, "Unit is required"),
   pricePerUnit: z.coerce.number().optional(),
   stock: z.coerce.number().optional(),
@@ -26,12 +34,13 @@ export default function NewProduct() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createProduct = useCreateProduct();
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
-      category: ProductInputCategory.gold_jewelry,
+      category: "gold_jewelry",
       unit: "Gram",
       pricePerUnit: undefined,
       stock: undefined,
@@ -82,7 +91,7 @@ export default function NewProduct() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -90,24 +99,57 @@ export default function NewProduct() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={ProductInputCategory.gold_jewelry}>Gold Jewelry</SelectItem>
-                          <SelectItem value={ProductInputCategory.tt_bar}>TT Bar</SelectItem>
-                          <SelectItem value={ProductInputCategory.kg_bar}>KG Bar</SelectItem>
-                          <SelectItem value={ProductInputCategory.silver}>Silver</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {isCustomCategory ? (
+                        <div className="flex gap-2 items-center">
+                          <FormControl>
+                            <Input
+                              placeholder="Type custom category…"
+                              value={field.value}
+                              onChange={field.onChange}
+                              autoFocus
+                            />
+                          </FormControl>
+                          <button
+                            type="button"
+                            className="text-xs text-blue-500 hover:underline whitespace-nowrap"
+                            onClick={() => {
+                              setIsCustomCategory(false);
+                              field.onChange("gold_jewelry");
+                            }}
+                          >List</button>
+                        </div>
+                      ) : (
+                        <Select
+                          value={field.value}
+                          onValueChange={val => {
+                            if (val === "__custom__") {
+                              setIsCustomCategory(true);
+                              field.onChange("");
+                            } else {
+                              field.onChange(val);
+                            }
+                          }}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {PRESET_CATEGORIES.map(cat => (
+                              <SelectItem key={cat} value={cat}>
+                                {CATEGORY_LABELS[cat] ?? cat}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__custom__">✏️ Custom…</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="unit"

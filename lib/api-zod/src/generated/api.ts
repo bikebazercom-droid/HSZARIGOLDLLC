@@ -300,7 +300,7 @@ export const ListProductsQueryParams = zod.object({
 export const ListProductsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "category": zod.enum(['gold_jewelry', 'tt_bar', 'kg_bar', 'silver']),
+  "category": zod.string(),
   "unit": zod.string(),
   "pricePerUnit": zod.number().nullish(),
   "stock": zod.number().nullish(),
@@ -314,7 +314,7 @@ export const ListProductsResponse = zod.array(ListProductsResponseItem)
  */
 export const CreateProductBody = zod.object({
   "name": zod.string(),
-  "category": zod.enum(['gold_jewelry', 'tt_bar', 'kg_bar', 'silver']),
+  "category": zod.string(),
   "unit": zod.string(),
   "pricePerUnit": zod.number().optional(),
   "stock": zod.number().optional()
@@ -323,7 +323,7 @@ export const CreateProductBody = zod.object({
 export const CreateProductResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "category": zod.enum(['gold_jewelry', 'tt_bar', 'kg_bar', 'silver']),
+  "category": zod.string(),
   "unit": zod.string(),
   "pricePerUnit": zod.number().nullish(),
   "stock": zod.number().nullish(),
@@ -340,7 +340,7 @@ export const UpdateProductParams = zod.object({
 
 export const UpdateProductBody = zod.object({
   "name": zod.string(),
-  "category": zod.enum(['gold_jewelry', 'tt_bar', 'kg_bar', 'silver']),
+  "category": zod.string(),
   "unit": zod.string(),
   "pricePerUnit": zod.number().optional(),
   "stock": zod.number().optional()
@@ -349,7 +349,7 @@ export const UpdateProductBody = zod.object({
 export const UpdateProductResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "category": zod.enum(['gold_jewelry', 'tt_bar', 'kg_bar', 'silver']),
+  "category": zod.string(),
   "unit": zod.string(),
   "pricePerUnit": zod.number().nullish(),
   "stock": zod.number().nullish(),

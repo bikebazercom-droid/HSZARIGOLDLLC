@@ -5,11 +5,10 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ProductInputCategory } from './productInputCategory';
 
 export interface ProductInput {
   name: string;
-  category: ProductInputCategory;
+  category: string;
   unit: string;
   pricePerUnit?: number;
   stock?: number;

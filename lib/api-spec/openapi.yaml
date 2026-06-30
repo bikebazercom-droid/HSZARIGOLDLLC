@@ -553,7 +553,6 @@ components:
           type: string
         category:
           type: string
-          enum: [gold_jewelry, tt_bar, kg_bar, silver]
         unit:
           type: string
         pricePerUnit:
@@ -571,7 +570,6 @@ components:
           type: string
         category:
           type: string
-          enum: [gold_jewelry, tt_bar, kg_bar, silver]
         unit:
           type: string
         pricePerUnit:
