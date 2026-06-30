@@ -142,6 +142,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
       totalIncludingVat: String(invoiceData.totalIncludingVat ?? 0),
       roundOffDiscount: String(invoiceData.roundOffDiscount ?? 0),
       isPending: invoiceData.isPending ?? false,
+      createdByUserId: req.session.userId ?? null,
+      createdByUserName: req.session.fullName ?? null,
     })
     .returning();
 

@@ -12,12 +12,17 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users } from "lucide-react";
+import { useAuth } from "@/context/auth";
+import AdminUsersPanel from "@/pages/admin/users";
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("company");
   const { data: settings, isLoading } = useGetSettings({
     query: { queryKey: getGetSettingsQueryKey() }
   });
@@ -93,7 +98,25 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Company Info */}
+      {user?.role === "admin" && (
+        <Tabs defaultValue="company" onValueChange={setActiveTab}>
+          <TabsList className="mb-2">
+            <TabsTrigger value="company" className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" /> Company Settings
+            </TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <Users className="w-4 h-4" /> User Management
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="users">
+            <AdminUsersPanel />
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {(activeTab === "company") && (
+      <>{/* Company Info */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -359,6 +382,8 @@ export default function SettingsPage() {
           {updateSettings.isPending ? "Saving..." : "Save Settings"}
         </Button>
       </div>
+      </>
+      )}
     </div>
   );
 }

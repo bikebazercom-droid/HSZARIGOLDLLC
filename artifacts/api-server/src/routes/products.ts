@@ -46,7 +46,12 @@ router.post("/products", async (req, res): Promise<void> => {
     return;
   }
 
-  const [product] = await db.insert(productsTable).values(parsed.data).returning();
+  const { pricePerUnit, stock, ...rest } = parsed.data;
+  const [product] = await db.insert(productsTable).values({
+    ...rest,
+    pricePerUnit: pricePerUnit != null ? String(pricePerUnit) : null,
+    stock: stock != null ? String(stock) : null,
+  }).returning();
 
   res.status(201).json(CreateProductResponse.parse({
     ...product,
@@ -70,9 +75,14 @@ router.put("/products/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const { pricePerUnit: ppu, stock: stk, ...restUpdate } = parsed.data;
   const [product] = await db
     .update(productsTable)
-    .set(parsed.data)
+    .set({
+      ...restUpdate,
+      pricePerUnit: ppu != null ? String(ppu) : null,
+      stock: stk != null ? String(stk) : null,
+    })
     .where(eq(productsTable.id, params.data.id))
     .returning();
 

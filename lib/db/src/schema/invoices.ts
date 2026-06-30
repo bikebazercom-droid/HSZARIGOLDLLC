@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, numeric, integer, boolean } from "dri
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
+import { usersTable } from "./users";
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
@@ -29,6 +30,8 @@ export const invoicesTable = pgTable("invoices", {
   totalIncludingVat: numeric("total_including_vat", { precision: 12, scale: 2 }).notNull().default("0"),
   roundOffDiscount: numeric("round_off_discount", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: integer("created_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  createdByUserName: text("created_by_user_name"),
 });
 
 export const invoiceItemsTable = pgTable("invoice_items", {
