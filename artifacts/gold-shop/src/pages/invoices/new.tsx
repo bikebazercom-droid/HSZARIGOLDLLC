@@ -134,7 +134,8 @@ export default function NewInvoice() {
       let updated = { ...next[index], [field]: value };
       // When description changes, auto-set rate from live prices
       if (field === "description") {
-        updated = { ...updated, rate: getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate) };
+        const liveRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
+        updated = { ...updated, rate: liveRate, makingRate: liveRate };
       }
       next[index] = calcItem(updated as LineItem);
       return next;
@@ -324,6 +325,11 @@ export default function NewInvoice() {
                           onChange={e => updateItem(index, "makingRate", parseFloat(e.target.value) || 0)}
                           className="h-8 text-sm text-center"
                         />
+                        {item.description && (
+                          <div className="text-[10px] text-center text-amber-600 mt-0.5 whitespace-nowrap">
+                            Live: {getRateForDesc(item.description, prices as PricesData | undefined, metalRate || goldRate)} AED/g
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 px-3">
                         <Input
