@@ -39,10 +39,7 @@ function StaffRouter() {
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={NewInvoice} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
-        <Route path="/">
-          <Redirect to="/invoices" />
-        </Route>
-        <Route component={NotFound} />
+        <Route>{() => <Redirect to="/invoices" />}</Route>
       </Switch>
     </AppLayout>
   );
