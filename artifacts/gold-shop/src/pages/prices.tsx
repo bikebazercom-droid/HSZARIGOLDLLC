@@ -8,6 +8,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays } from "lucide-react";
@@ -121,7 +127,7 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
   );
 }
 
-/* ── "Add New Item" card (placeholder in grid) ──────────────── */
+/* ── "Add New Item" card (always visible in grid) ───────────── */
 function AddItemCard({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick}
@@ -153,7 +159,7 @@ export default function Prices() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
-  const [showNewForm, setShowNewForm] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newRate, setNewRate] = useState<number>(0);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -214,18 +220,22 @@ export default function Prices() {
     });
   };
 
+  const openDialog = () => {
+    setNewName("");
+    setNewRate(0);
+    setDialogOpen(true);
+    setTimeout(() => nameInputRef.current?.focus(), 80);
+  };
+
   const handleAddNewItem = () => {
     const name = newName.trim();
     if (!name || customItems.some(i => i.name === name)) return;
     const next = [...customItems, { name, rate: newRate }];
     setCustomItems(next);
-    setShowNewForm(false);
+    setDialogOpen(false);
     setNewName(""); setNewRate(0);
     persistCustomItems(next);
-    toast({
-      title: `"${name}" added to Live Prices`,
-      description: "Now appears in Invoice Stock Description dropdown automatically.",
-    });
+    toast({ title: `"${name}" added to Live Prices` });
   };
 
   const handleCustomRateChange = (name: string, rate: number) => {
@@ -283,7 +293,7 @@ export default function Prices() {
         </Button>
       </div>
 
-      {/* All cards in one grid: built-in + custom + add button */}
+      {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {metals.map(metal => (
           <RateCard key={metal.fieldKey} {...metal}
@@ -300,51 +310,56 @@ export default function Prices() {
             onDelete={handleDeleteCustomItem} />
         ))}
 
-        {/* New item form or add button */}
-        {showNewForm ? (
-          <Card className="relative overflow-hidden">
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: NAVY }} />
-            <CardHeader className="pb-2 pt-5">
-              <CardTitle className="text-base font-bold">New Custom Item</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: NAVY }}>
-                <CalendarDays className="w-3.5 h-3.5" />
-                Daily Rate — {TODAY}
-              </div>
-
-              <div>
-                <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Item Name</div>
-                <Input ref={nameInputRef} autoFocus placeholder="e.g. Rose Gold Ring"
-                  value={newName} onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleAddNewItem()} />
-              </div>
-
-              <div>
-                <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Daily Rate per gram (AED)</div>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-                  <Input type="number" step="0.01" min="0" value={newRate || ""}
-                    onChange={e => setNewRate(parseFloat(e.target.value) || 0)}
-                    className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-1">
-                <Button className="flex-1" style={{ background: NAVY }}
-                  onClick={handleAddNewItem} disabled={!newName.trim()}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Item
-                </Button>
-                <Button variant="outline" onClick={() => { setShowNewForm(false); setNewName(""); setNewRate(0); }}>
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <AddItemCard onClick={() => { setShowNewForm(true); setTimeout(() => nameInputRef.current?.focus(), 50); }} />
-        )}
+        {/* Always-visible add button */}
+        <AddItemCard onClick={openDialog} />
       </div>
+
+      {/* Add new item dialog */}
+      <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) { setNewName(""); setNewRate(0); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" style={{ color: NAVY }} />
+              New Custom Rate Card
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: NAVY }}>
+              <CalendarDays className="w-3.5 h-3.5" />
+              Daily Rate — {TODAY}
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Item Name</div>
+              <Input ref={nameInputRef} placeholder="e.g. Rose Gold Ring"
+                value={newName} onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleAddNewItem()} />
+              {customItems.some(i => i.name === newName.trim()) && newName.trim() && (
+                <p className="text-xs text-red-500 mt-1">Name already exists</p>
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Daily Rate per gram (AED)</div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
+                <Input type="number" step="0.01" min="0" value={newRate || ""}
+                  onChange={e => setNewRate(parseFloat(e.target.value) || 0)}
+                  onKeyDown={e => e.key === "Enter" && handleAddNewItem()}
+                  className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" style={{ background: NAVY }}
+                onClick={handleAddNewItem}
+                disabled={!newName.trim() || customItems.some(i => i.name === newName.trim())}>
+                <Plus className="w-4 h-4 mr-1" /> Add Item
+              </Button>
+              <Button variant="outline" onClick={() => { setDialogOpen(false); setNewName(""); setNewRate(0); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
