@@ -105,6 +105,18 @@ export interface DashboardStats {
   pendingPaymentsCount: number;
   goldPricePerGram: number;
   silverPricePerGram: number;
+  todayGoldJewelryCount: number;
+  todayGoldJewelryAmount: number;
+  todayKgBarCount: number;
+  todayKgBarAmount: number;
+  todayTtBarCount: number;
+  todayTtBarAmount: number;
+  monthlyGoldJewelryCount: number;
+  monthlyGoldJewelryAmount: number;
+  monthlyKgBarCount: number;
+  monthlyKgBarAmount: number;
+  monthlyTtBarCount: number;
+  monthlyTtBarAmount: number;
   recentInvoices: Invoice[];
 }
 
