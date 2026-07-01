@@ -117,6 +117,20 @@ export interface DashboardStats {
   monthlyKgBarAmount: number;
   monthlyTtBarCount: number;
   monthlyTtBarAmount: number;
+  todaySilverCount: number;
+  todaySilverAmount: number;
+  monthlySilverCount: number;
+  monthlySilverAmount: number;
+  todayGoldJewelryGrams?: number;
+  todayTotalGoldGrams?: number;
+  todayKgBarGrams?: number;
+  todayTtBarGrams?: number;
+  todaySilverGrams?: number;
+  monthlyGoldJewelryGrams?: number;
+  monthlyTotalGoldGrams?: number;
+  monthlyKgBarGrams?: number;
+  monthlyTtBarGrams?: number;
+  monthlySilverGrams?: number;
   recentInvoices: Invoice[];
 }
 

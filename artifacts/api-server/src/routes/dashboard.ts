@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, gte, desc } from "drizzle-orm";
+import { eq, gte, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
 import { GetDashboardResponse } from "@workspace/api-zod";
 import PDFDocument from "pdfkit";
@@ -24,6 +24,16 @@ function categoryStats(invoices: typeof invoicesTable.$inferSelect[], ids: numbe
   };
 }
 
+// Helper: sum grams from item rows for a given category
+function sumGrams(
+  rows: { category: string | null; total_weight: string | null }[],
+  ...categories: string[]
+): number {
+  return rows
+    .filter(r => r.category && categories.includes(r.category))
+    .reduce((sum, r) => sum + (r.total_weight ? parseFloat(r.total_weight) : 0), 0);
+}
+
 router.get("/dashboard", async (_req, res): Promise<void> => {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -33,19 +43,41 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
   const goldPricePerGram = prices ? Number(prices.goldPricePerGram) : 320;
   const silverPricePerGram = prices ? Number(prices.silverPricePerGram) : 4.5;
 
-  // Fetch all category invoice ID sets in parallel with main invoice queries
+  // Fetch all in parallel
   const [
     todayInvoices,
     monthlyInvoices,
     goldJewelryIds,
     kgBarIds,
     ttBarIds,
+    silverIds,
+    todayGramRows,
+    monthlyGramRows,
   ] = await Promise.all([
     db.select().from(invoicesTable).where(gte(invoicesTable.createdAt, startOfToday)),
     db.select().from(invoicesTable).where(gte(invoicesTable.createdAt, startOfMonth)),
     getInvoiceIdsByCategory("gold_jewelry"),
     getInvoiceIdsByCategory("kg_bar"),
     getInvoiceIdsByCategory("tt_bar"),
+    getInvoiceIdsByCategory("silver"),
+    // Gram totals per category — today
+    db.execute<{ category: string | null; total_weight: string | null }>(
+      sql`SELECT ii.category, SUM(ii.weight::numeric) AS total_weight
+          FROM invoice_items ii
+          JOIN invoices i ON ii.invoice_id = i.id
+          WHERE i.created_at >= ${startOfToday}
+            AND ii.weight IS NOT NULL
+          GROUP BY ii.category`
+    ).then(r => r.rows),
+    // Gram totals per category — monthly
+    db.execute<{ category: string | null; total_weight: string | null }>(
+      sql`SELECT ii.category, SUM(ii.weight::numeric) AS total_weight
+          FROM invoice_items ii
+          JOIN invoices i ON ii.invoice_id = i.id
+          WHERE i.created_at >= ${startOfMonth}
+            AND ii.weight IS NOT NULL
+          GROUP BY ii.category`
+    ).then(r => r.rows),
   ]);
 
   const todayTotalSale = todayInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
@@ -64,11 +96,27 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
   const todayGoldJewelry = categoryStats(todayInvoices, goldJewelryIds);
   const todayKgBar = categoryStats(todayInvoices, kgBarIds);
   const todayTtBar = categoryStats(todayInvoices, ttBarIds);
+  const todaySilver = categoryStats(todayInvoices, silverIds);
 
   // Category stats — monthly
   const monthlyGoldJewelry = categoryStats(monthlyInvoices, goldJewelryIds);
   const monthlyKgBar = categoryStats(monthlyInvoices, kgBarIds);
   const monthlyTtBar = categoryStats(monthlyInvoices, ttBarIds);
+  const monthlySilver = categoryStats(monthlyInvoices, silverIds);
+
+  // Gram totals — today
+  const todayGoldJewelryGrams = sumGrams(todayGramRows, "gold_jewelry");
+  const todayKgBarGrams = sumGrams(todayGramRows, "kg_bar");
+  const todayTtBarGrams = sumGrams(todayGramRows, "tt_bar");
+  const todaySilverGrams = sumGrams(todayGramRows, "silver");
+  const todayTotalGoldGrams = todayGoldJewelryGrams + todayKgBarGrams + todayTtBarGrams;
+
+  // Gram totals — monthly
+  const monthlyGoldJewelryGrams = sumGrams(monthlyGramRows, "gold_jewelry");
+  const monthlyKgBarGrams = sumGrams(monthlyGramRows, "kg_bar");
+  const monthlyTtBarGrams = sumGrams(monthlyGramRows, "tt_bar");
+  const monthlySilverGrams = sumGrams(monthlyGramRows, "silver");
+  const monthlyTotalGoldGrams = monthlyGoldJewelryGrams + monthlyKgBarGrams + monthlyTtBarGrams;
 
   const [totalCustomers, totalProducts, totalInvoices] = await Promise.all([
     db.$count(customersTable),
@@ -140,18 +188,32 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       todayKgBarAmount: todayKgBar.amount,
       todayTtBarCount: todayTtBar.count,
       todayTtBarAmount: todayTtBar.amount,
+      todaySilverCount: todaySilver.count,
+      todaySilverAmount: todaySilver.amount,
       monthlyGoldJewelryCount: monthlyGoldJewelry.count,
       monthlyGoldJewelryAmount: monthlyGoldJewelry.amount,
       monthlyKgBarCount: monthlyKgBar.count,
       monthlyKgBarAmount: monthlyKgBar.amount,
       monthlyTtBarCount: monthlyTtBar.count,
       monthlyTtBarAmount: monthlyTtBar.amount,
+      monthlySilverCount: monthlySilver.count,
+      monthlySilverAmount: monthlySilver.amount,
+      todayGoldJewelryGrams,
+      todayTotalGoldGrams,
+      todayKgBarGrams,
+      todayTtBarGrams,
+      todaySilverGrams,
+      monthlyGoldJewelryGrams,
+      monthlyTotalGoldGrams,
+      monthlyKgBarGrams,
+      monthlyTtBarGrams,
+      monthlySilverGrams,
       recentInvoices,
     })
   );
 });
 
-// CSV download endpoint: /api/dashboard/download?category=gold_jewelry|kg_bar|tt_bar|all&period=today|monthly
+// CSV download endpoint: /api/dashboard/download?category=gold_jewelry|kg_bar|tt_bar|silver|all&period=today|monthly
 router.get("/dashboard/download", async (req, res): Promise<void> => {
   const category = (req.query.category as string) || "all";
   const period = (req.query.period as string) || "today";
@@ -186,6 +248,7 @@ router.get("/dashboard/download", async (req, res): Promise<void> => {
     gold_jewelry: "Gold Jewelry",
     kg_bar: "KG Bar",
     tt_bar: "TT Bar",
+    silver: "Silver",
     all: "All",
   };
 
@@ -203,7 +266,7 @@ router.get("/dashboard/download", async (req, res): Promise<void> => {
       lines.push(`"${inv.invoiceNumber}","${date}","${customer}","${method}","","","","","","","${total}"`);
     } else {
       for (const item of items) {
-        const cat = categoryLabel[item.category] ?? item.category;
+        const cat = categoryLabel[item.category ?? ""] ?? item.category;
         const desc = (item.description ?? "").replace(/"/g, '""');
         lines.push(
           `"${inv.invoiceNumber}","${date}","${customer}","${method}","${cat}","${desc}","${Number(item.quantity)}","${item.weight ?? ""}","${Number(item.unitPrice).toFixed(2)}","${Number(item.totalPrice).toFixed(2)}","${total}"`
@@ -221,7 +284,7 @@ router.get("/dashboard/download", async (req, res): Promise<void> => {
   res.send(lines.join("\n"));
 });
 
-// PDF download: /api/dashboard/download-pdf?category=gold_jewelry|kg_bar|tt_bar|all&period=today|monthly
+// PDF download: /api/dashboard/download-pdf?category=gold_jewelry|kg_bar|tt_bar|silver|all&period=today|monthly
 router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   const category = (req.query.category as string) || "all";
   const period = (req.query.period as string) || "today";
@@ -256,6 +319,7 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
     gold_jewelry: "Gold Jewelry",
     kg_bar: "KG Bar",
     tt_bar: "TT Bar",
+    silver: "Silver",
     all: "All Categories",
   };
 
@@ -271,31 +335,31 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   doc.pipe(res);
 
-  // ── Header ──────────────────────────────────────────────────────────────
   const NAVY = "#1e3a5f";
   const GOLD = "#c8a43a";
   const LIGHT = "#f5f3ee";
 
-  // Background header bar
   doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
   doc.fillColor(GOLD).fontSize(22).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
   doc.fillColor("#aac4e8").fontSize(10).font("Helvetica").text("Management Portal — Sales Report", 40, 50);
   doc.fillColor("white").fontSize(9).text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 66);
 
-  // Period & category pill
-  doc.fillColor(NAVY).fontSize(12).font("Helvetica-Bold");
   doc.rect(40, 100, doc.page.width - 80, 36).fill(LIGHT);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(`${catLabel}  ·  ${periodLabel}`, 52, 112);
 
-  // ── Summary ──────────────────────────────────────────────────────────────
   const grandTotal = rows.reduce((s, { inv }) => s + Number(inv.total), 0);
+  const totalGrams = rows.reduce((s, { items }) =>
+    s + items.reduce((si, it) => si + (it.weight ? Number(it.weight) : 0), 0), 0);
+
   doc.moveDown(3.2);
-  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(`Total Invoices: ${rows.length}   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`, { align: "right" });
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(
+    `Invoices: ${rows.length}   |   Total Weight: ${totalGrams.toFixed(2)} g   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
+    { align: "right" }
+  );
   doc.moveDown(0.5);
 
-  // ── Table header ─────────────────────────────────────────────────────────
-  const cols = { no: 40, date: 110, customer: 190, method: 300, category: 360, total: 450 };
-  const colWidths = { no: 65, date: 75, customer: 105, method: 55, category: 85, total: 80 };
+  const cols = { no: 40, date: 110, customer: 190, method: 300, category: 360, weight: 435, total: 480 };
+  const colWidths = { no: 65, date: 75, customer: 105, method: 55, category: 70, weight: 42, total: 65 };
   const tableTop = doc.y;
 
   doc.rect(40, tableTop, doc.page.width - 80, 18).fill(NAVY);
@@ -305,9 +369,9 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   doc.text("Customer", cols.customer, tableTop + 5, { width: colWidths.customer });
   doc.text("Method", cols.method, tableTop + 5, { width: colWidths.method });
   doc.text("Category", cols.category, tableTop + 5, { width: colWidths.category });
+  doc.text("Weight(g)", cols.weight, tableTop + 5, { width: colWidths.weight, align: "right" });
   doc.text("Total (AED)", cols.total, tableTop + 5, { width: colWidths.total, align: "right" });
 
-  // ── Table rows ────────────────────────────────────────────────────────────
   let y = tableTop + 18;
   let rowIndex = 0;
 
@@ -323,7 +387,8 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
     const date = new Date(inv.createdAt).toLocaleDateString("en-AE");
     const customer = (inv.customerName ?? "Walk-in").substring(0, 18);
     const method = inv.paymentMethod.replace("_", " ");
-    const cats = [...new Set(items.map(i => categoryLabel[i.category] ?? i.category))].join(", ") || "—";
+    const cats = [...new Set(items.map(i => categoryLabel[i.category ?? ""] ?? i.category))].join(", ") || "—";
+    const invGrams = items.reduce((s, i) => s + (i.weight ? Number(i.weight) : 0), 0);
     const total = Number(inv.total).toLocaleString("en-AE", { minimumFractionDigits: 2 });
 
     doc.fillColor("#1a1a1a").font("Helvetica").fontSize(7.5);
@@ -331,7 +396,8 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
     doc.text(date, cols.date, y + 4, { width: colWidths.date });
     doc.text(customer, cols.customer, y + 4, { width: colWidths.customer });
     doc.text(method, cols.method, y + 4, { width: colWidths.method });
-    doc.text(cats.substring(0, 18), cols.category, y + 4, { width: colWidths.category });
+    doc.text(cats.substring(0, 16), cols.category, y + 4, { width: colWidths.category });
+    doc.text(invGrams > 0 ? invGrams.toFixed(2) : "—", cols.weight, y + 4, { width: colWidths.weight, align: "right" });
     doc.fillColor(NAVY).font("Helvetica-Bold");
     doc.text(total, cols.total, y + 4, { width: colWidths.total, align: "right" });
 
@@ -340,13 +406,20 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   }
 
   if (rows.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(10).text("No invoices found for this period.", 40, y + 10, { align: "center", width: doc.page.width - 80 });
+    doc.fillColor("#888").font("Helvetica").fontSize(10).text(
+      "No invoices found for this period.",
+      40, y + 10,
+      { align: "center", width: doc.page.width - 80 }
+    );
   }
 
-  // ── Footer ────────────────────────────────────────────────────────────────
   doc.rect(40, y + 8, doc.page.width - 80, 1).fill(GOLD);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9)
-    .text(`Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`, 40, y + 14, { align: "right", width: doc.page.width - 80 });
+    .text(
+      `Total Weight: ${totalGrams.toFixed(2)} g   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
+      40, y + 14,
+      { align: "right", width: doc.page.width - 80 }
+    );
 
   doc.end();
 });

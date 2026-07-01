@@ -27,16 +27,22 @@ function downloadPDF(category: string, period: "today" | "monthly") {
   triggerDownload(`/api/dashboard/download-pdf?category=${category}&period=${period}`);
 }
 
+function fmtGrams(g: number | undefined | null): string {
+  if (g == null || g === 0) return "0.00 g";
+  return `${g.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} g`;
+}
+
 interface StatBoxProps {
   title: string;
   count: number;
   amount: number;
+  grams?: number | null;
   color?: string;
   category: string;
   period: "today" | "monthly";
 }
 
-function StatBox({ title, count, amount, color = "#1e3a5f", category, period }: StatBoxProps) {
+function StatBox({ title, count, amount, grams, color = "#1e3a5f", category, period }: StatBoxProps) {
   return (
     <Card className="relative overflow-hidden">
       <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: color }} />
@@ -49,7 +55,7 @@ function StatBox({ title, count, amount, color = "#1e3a5f", category, period }: 
             variant="ghost"
             size="icon"
             className="h-6 w-6"
-            title={`Download CSV`}
+            title="Download CSV"
             onClick={() => downloadCSV(category, period)}
           >
             <Download className="w-3 h-3" />
@@ -58,7 +64,7 @@ function StatBox({ title, count, amount, color = "#1e3a5f", category, period }: 
             variant="ghost"
             size="icon"
             className="h-6 w-6"
-            title={`Download PDF`}
+            title="Download PDF"
             onClick={() => downloadPDF(category, period)}
           >
             <FileText className="w-3 h-3" />
@@ -67,10 +73,20 @@ function StatBox({ title, count, amount, color = "#1e3a5f", category, period }: 
       </CardHeader>
       <CardContent className="pl-5 pb-4 pt-1">
         <div className="text-xl font-bold" style={{ color }}>
-          AED {amount.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          AED {(amount ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
-          {count} {count === 1 ? "invoice" : "invoices"}
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <span className="text-xs text-muted-foreground">
+            {count} {count === 1 ? "invoice" : "invoices"}
+          </span>
+          {grams != null && (
+            <span
+              className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: color + "18", color }}
+            >
+              ⚖ {fmtGrams(grams)}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -85,11 +101,11 @@ export default function Dashboard() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28" />)}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28" />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Skeleton className="h-80" />
@@ -124,7 +140,7 @@ export default function Dashboard() {
             <CardTitle className="text-xs font-medium opacity-80">Today's Total</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-xl font-bold">AED {data.todayTotalSale?.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-xl font-bold">AED {(data.todayTotalSale ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
         <Card>
@@ -132,7 +148,7 @@ export default function Dashboard() {
             <CardTitle className="text-xs font-medium text-muted-foreground">Monthly Total</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-lg font-bold">AED {data.monthlySale?.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-lg font-bold">AED {(data.monthlySale ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
         <Card>
@@ -174,11 +190,12 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <StatBox
             title="Gold Jewelry"
             count={data.todayGoldJewelryCount}
             amount={data.todayGoldJewelryAmount}
+            grams={data.todayGoldJewelryGrams}
             color="#c8a43a"
             category="gold_jewelry"
             period="today"
@@ -187,6 +204,7 @@ export default function Dashboard() {
             title="Total Gold Sales"
             count={data.todayGoldJewelryCount + data.todayKgBarCount + data.todayTtBarCount}
             amount={data.todayGoldJewelryAmount + data.todayKgBarAmount + data.todayTtBarAmount}
+            grams={data.todayTotalGoldGrams}
             color="#1e3a5f"
             category="all"
             period="today"
@@ -195,6 +213,7 @@ export default function Dashboard() {
             title="KG Bar"
             count={data.todayKgBarCount}
             amount={data.todayKgBarAmount}
+            grams={data.todayKgBarGrams}
             color="#7c5f20"
             category="kg_bar"
             period="today"
@@ -203,8 +222,18 @@ export default function Dashboard() {
             title="TT Bar"
             count={data.todayTtBarCount}
             amount={data.todayTtBarAmount}
+            grams={data.todayTtBarGrams}
             color="#2d6a4f"
             category="tt_bar"
+            period="today"
+          />
+          <StatBox
+            title="Silver"
+            count={data.todaySilverCount}
+            amount={data.todaySilverAmount}
+            grams={data.todaySilverGrams}
+            color="#6b7280"
+            category="silver"
             period="today"
           />
         </div>
@@ -223,11 +252,12 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <StatBox
             title="Gold Jewelry"
             count={data.monthlyGoldJewelryCount}
             amount={data.monthlyGoldJewelryAmount}
+            grams={data.monthlyGoldJewelryGrams}
             color="#c8a43a"
             category="gold_jewelry"
             period="monthly"
@@ -236,6 +266,7 @@ export default function Dashboard() {
             title="Total Gold Sales"
             count={data.monthlyGoldJewelryCount + data.monthlyKgBarCount + data.monthlyTtBarCount}
             amount={data.monthlyGoldJewelryAmount + data.monthlyKgBarAmount + data.monthlyTtBarAmount}
+            grams={data.monthlyTotalGoldGrams}
             color="#1e3a5f"
             category="all"
             period="monthly"
@@ -244,6 +275,7 @@ export default function Dashboard() {
             title="KG Bar"
             count={data.monthlyKgBarCount}
             amount={data.monthlyKgBarAmount}
+            grams={data.monthlyKgBarGrams}
             color="#7c5f20"
             category="kg_bar"
             period="monthly"
@@ -252,8 +284,18 @@ export default function Dashboard() {
             title="TT Bar"
             count={data.monthlyTtBarCount}
             amount={data.monthlyTtBarAmount}
+            grams={data.monthlyTtBarGrams}
             color="#2d6a4f"
             category="tt_bar"
+            period="monthly"
+          />
+          <StatBox
+            title="Silver"
+            count={data.monthlySilverCount}
+            amount={data.monthlySilverAmount}
+            grams={data.monthlySilverGrams}
+            color="#6b7280"
+            category="silver"
             period="monthly"
           />
         </div>
@@ -271,7 +313,7 @@ export default function Dashboard() {
                 <BarChart data={monthlySales} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                   <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip
                     cursor={{ fill: "hsl(var(--muted))" }}
                     contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px" }}
@@ -365,7 +407,7 @@ export default function Dashboard() {
             <CardTitle className="text-xs font-medium text-muted-foreground">Cash Collection</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-xl font-semibold">AED {data.cashCollection?.toLocaleString("en-AE", { minimumFractionDigits: 2 })}</div>
+            <div className="text-xl font-semibold">AED {(data.cashCollection ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
       </div>

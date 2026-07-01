@@ -427,6 +427,10 @@ components:
         - monthlyKgBarAmount
         - monthlyTtBarCount
         - monthlyTtBarAmount
+        - todaySilverCount
+        - todaySilverAmount
+        - monthlySilverCount
+        - monthlySilverAmount
       properties:
         todayTotalSale:
           type: number
@@ -473,6 +477,34 @@ components:
         monthlyTtBarCount:
           type: integer
         monthlyTtBarAmount:
+          type: number
+        todaySilverCount:
+          type: integer
+        todaySilverAmount:
+          type: number
+        monthlySilverCount:
+          type: integer
+        monthlySilverAmount:
+          type: number
+        todayGoldJewelryGrams:
+          type: number
+        todayTotalGoldGrams:
+          type: number
+        todayKgBarGrams:
+          type: number
+        todayTtBarGrams:
+          type: number
+        todaySilverGrams:
+          type: number
+        monthlyGoldJewelryGrams:
+          type: number
+        monthlyTotalGoldGrams:
+          type: number
+        monthlyKgBarGrams:
+          type: number
+        monthlyTtBarGrams:
+          type: number
+        monthlySilverGrams:
           type: number
         recentInvoices:
           type: array
