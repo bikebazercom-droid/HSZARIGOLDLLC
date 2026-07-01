@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, gte, and, desc, inArray } from "drizzle-orm";
+import { eq, gte, desc } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
 import { GetDashboardResponse } from "@workspace/api-zod";
+import PDFDocument from "pdfkit";
 
 const router: IRouter = Router();
 
@@ -218,6 +219,136 @@ router.get("/dashboard/download", async (req, res): Promise<void> => {
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(lines.join("\n"));
+});
+
+// PDF download: /api/dashboard/download-pdf?category=gold_jewelry|kg_bar|tt_bar|all&period=today|monthly
+router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
+  const category = (req.query.category as string) || "all";
+  const period = (req.query.period as string) || "today";
+
+  const now = new Date();
+  const startDate = period === "today"
+    ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    : new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let invoices = await db
+    .select()
+    .from(invoicesTable)
+    .where(gte(invoicesTable.createdAt, startDate))
+    .orderBy(desc(invoicesTable.createdAt));
+
+  if (category !== "all") {
+    const catIds = await getInvoiceIdsByCategory(category);
+    invoices = invoices.filter(inv => catIds.includes(inv.id));
+  }
+
+  const rows = await Promise.all(
+    invoices.map(async (inv) => {
+      const items = await db
+        .select()
+        .from(invoiceItemsTable)
+        .where(eq(invoiceItemsTable.invoiceId, inv.id));
+      return { inv, items };
+    })
+  );
+
+  const categoryLabel: Record<string, string> = {
+    gold_jewelry: "Gold Jewelry",
+    kg_bar: "KG Bar",
+    tt_bar: "TT Bar",
+    all: "All Categories",
+  };
+
+  const periodLabel = period === "today"
+    ? `Today — ${now.toLocaleDateString("en-AE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`
+    : `Monthly — ${now.toLocaleDateString("en-AE", { year: "numeric", month: "long" })}`;
+
+  const catLabel = categoryLabel[category] ?? category;
+  const filename = `hazari-gold-${(categoryLabel[category] ?? category).toLowerCase().replace(/ /g, "-")}-${period}.pdf`;
+
+  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  doc.pipe(res);
+
+  // ── Header ──────────────────────────────────────────────────────────────
+  const NAVY = "#1e3a5f";
+  const GOLD = "#c8a43a";
+  const LIGHT = "#f5f3ee";
+
+  // Background header bar
+  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
+  doc.fillColor(GOLD).fontSize(22).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
+  doc.fillColor("#aac4e8").fontSize(10).font("Helvetica").text("Management Portal — Sales Report", 40, 50);
+  doc.fillColor("white").fontSize(9).text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 66);
+
+  // Period & category pill
+  doc.fillColor(NAVY).fontSize(12).font("Helvetica-Bold");
+  doc.rect(40, 100, doc.page.width - 80, 36).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(`${catLabel}  ·  ${periodLabel}`, 52, 112);
+
+  // ── Summary ──────────────────────────────────────────────────────────────
+  const grandTotal = rows.reduce((s, { inv }) => s + Number(inv.total), 0);
+  doc.moveDown(3.2);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(`Total Invoices: ${rows.length}   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`, { align: "right" });
+  doc.moveDown(0.5);
+
+  // ── Table header ─────────────────────────────────────────────────────────
+  const cols = { no: 40, date: 110, customer: 190, method: 300, category: 360, total: 450 };
+  const colWidths = { no: 65, date: 75, customer: 105, method: 55, category: 85, total: 80 };
+  const tableTop = doc.y;
+
+  doc.rect(40, tableTop, doc.page.width - 80, 18).fill(NAVY);
+  doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
+  doc.text("Invoice #", cols.no, tableTop + 5, { width: colWidths.no });
+  doc.text("Date", cols.date, tableTop + 5, { width: colWidths.date });
+  doc.text("Customer", cols.customer, tableTop + 5, { width: colWidths.customer });
+  doc.text("Method", cols.method, tableTop + 5, { width: colWidths.method });
+  doc.text("Category", cols.category, tableTop + 5, { width: colWidths.category });
+  doc.text("Total (AED)", cols.total, tableTop + 5, { width: colWidths.total, align: "right" });
+
+  // ── Table rows ────────────────────────────────────────────────────────────
+  let y = tableTop + 18;
+  let rowIndex = 0;
+
+  for (const { inv, items } of rows) {
+    const rowH = 16;
+    if (y + rowH > doc.page.height - 60) {
+      doc.addPage();
+      y = 40;
+    }
+    const bg = rowIndex % 2 === 0 ? "white" : LIGHT;
+    doc.rect(40, y, doc.page.width - 80, rowH).fill(bg);
+
+    const date = new Date(inv.createdAt).toLocaleDateString("en-AE");
+    const customer = (inv.customerName ?? "Walk-in").substring(0, 18);
+    const method = inv.paymentMethod.replace("_", " ");
+    const cats = [...new Set(items.map(i => categoryLabel[i.category] ?? i.category))].join(", ") || "—";
+    const total = Number(inv.total).toLocaleString("en-AE", { minimumFractionDigits: 2 });
+
+    doc.fillColor("#1a1a1a").font("Helvetica").fontSize(7.5);
+    doc.text(inv.invoiceNumber, cols.no, y + 4, { width: colWidths.no });
+    doc.text(date, cols.date, y + 4, { width: colWidths.date });
+    doc.text(customer, cols.customer, y + 4, { width: colWidths.customer });
+    doc.text(method, cols.method, y + 4, { width: colWidths.method });
+    doc.text(cats.substring(0, 18), cols.category, y + 4, { width: colWidths.category });
+    doc.fillColor(NAVY).font("Helvetica-Bold");
+    doc.text(total, cols.total, y + 4, { width: colWidths.total, align: "right" });
+
+    y += rowH;
+    rowIndex++;
+  }
+
+  if (rows.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(10).text("No invoices found for this period.", 40, y + 10, { align: "center", width: doc.page.width - 80 });
+  }
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  doc.rect(40, y + 8, doc.page.width - 80, 1).fill(GOLD);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9)
+    .text(`Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`, 40, y + 14, { align: "right", width: doc.page.width - 80 });
+
+  doc.end();
 });
 
 export default router;

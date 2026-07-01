@@ -8,16 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, FileText } from "lucide-react";
 
-function downloadCSV(category: string, period: "today" | "monthly") {
-  const url = `/api/dashboard/download?category=${category}&period=${period}`;
+function triggerDownload(url: string) {
   const a = document.createElement("a");
   a.href = url;
   a.download = "";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function downloadCSV(category: string, period: "today" | "monthly") {
+  triggerDownload(`/api/dashboard/download?category=${category}&period=${period}`);
+}
+
+function downloadPDF(category: string, period: "today" | "monthly") {
+  triggerDownload(`/api/dashboard/download-pdf?category=${category}&period=${period}`);
 }
 
 interface StatBoxProps {
@@ -27,35 +34,42 @@ interface StatBoxProps {
   color?: string;
   category: string;
   period: "today" | "monthly";
-  subtitle?: string;
 }
 
-function StatBox({ title, count, amount, color = "#1e3a5f", category, period, subtitle }: StatBoxProps) {
+function StatBox({ title, count, amount, color = "#1e3a5f", category, period }: StatBoxProps) {
   return (
     <Card className="relative overflow-hidden">
       <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: color }} />
-      <CardHeader className="pb-1 pt-4 pl-5 pr-4 flex flex-row items-start justify-between space-y-0">
-        <div>
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {title}
-          </CardTitle>
-          {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
+      <CardHeader className="pb-1 pt-3 pl-5 pr-3 flex flex-row items-start justify-between space-y-0">
+        <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground leading-tight pt-0.5">
+          {title}
+        </CardTitle>
+        <div className="flex gap-0.5 flex-shrink-0 -mt-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title={`Download CSV`}
+            onClick={() => downloadCSV(category, period)}
+          >
+            <Download className="w-3 h-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title={`Download PDF`}
+            onClick={() => downloadPDF(category, period)}
+          >
+            <FileText className="w-3 h-3" />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 flex-shrink-0 -mt-1 -mr-1"
-          title={`Download ${title} CSV`}
-          onClick={() => downloadCSV(category, period)}
-        >
-          <Download className="w-3.5 h-3.5" />
-        </Button>
       </CardHeader>
-      <CardContent className="pl-5 pb-4">
-        <div className="text-2xl font-bold" style={{ color }}>
+      <CardContent className="pl-5 pb-4 pt-1">
+        <div className="text-xl font-bold" style={{ color }}>
           AED {amount.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        <div className="text-sm text-muted-foreground mt-0.5">
+        <div className="text-xs text-muted-foreground mt-0.5">
           {count} {count === 1 ? "invoice" : "invoices"}
         </div>
       </CardContent>
@@ -151,9 +165,14 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-foreground">Today's Sales Breakdown</h2>
-          <Button variant="outline" size="sm" onClick={() => downloadCSV("all", "today")}>
-            <Download className="w-3.5 h-3.5 mr-1.5" /> Download All Today
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => downloadCSV("all", "today")}>
+              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => downloadPDF("all", "today")}>
+              <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatBox
@@ -195,9 +214,14 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-foreground">Monthly Sales Breakdown — {monthName}</h2>
-          <Button variant="outline" size="sm" onClick={() => downloadCSV("all", "monthly")}>
-            <Download className="w-3.5 h-3.5 mr-1.5" /> Download All Monthly
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => downloadCSV("all", "monthly")}>
+              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => downloadPDF("all", "monthly")}>
+              <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatBox
