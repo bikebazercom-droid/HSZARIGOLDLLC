@@ -150,6 +150,23 @@ export default function Dashboard() {
       },
     },
     {
+      title: "Gold (Total)",
+      icon: "🥇",
+      color: "#b5850a",
+      accentBg: "#fef9e7",
+      category: "all",
+      today: {
+        grams: data.todayTotalGoldGrams,
+        count: data.todayGoldJewelryCount + data.todayKgBarCount + data.todayTtBarCount,
+        amount: data.todayGoldJewelryAmount + data.todayKgBarAmount + data.todayTtBarAmount,
+      },
+      monthly: {
+        grams: data.monthlyTotalGoldGrams,
+        count: data.monthlyGoldJewelryCount + data.monthlyKgBarCount + data.monthlyTtBarCount,
+        amount: data.monthlyGoldJewelryAmount + data.monthlyKgBarAmount + data.monthlyTtBarAmount,
+      },
+    },
+    {
       title: "TT Bar",
       icon: "🟡",
       color: "#2d6a4f",
@@ -275,7 +292,7 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {categories.map((cat) => (
             <CategoryCard
               key={cat.category + "-today"}
@@ -309,7 +326,7 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {categories.map((cat) => (
             <CategoryCard
               key={cat.category + "-monthly"}
