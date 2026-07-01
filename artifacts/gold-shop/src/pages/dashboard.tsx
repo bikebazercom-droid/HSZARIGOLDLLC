@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus, Download, FileText } from "lucide-react";
+import { Plus, Download, FileText, Scale, Receipt } from "lucide-react";
 
 function triggerDownload(url: string) {
   const a = document.createElement("a");
@@ -32,61 +32,69 @@ function fmtGrams(g: number | undefined | null): string {
   return `${g.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} g`;
 }
 
-interface StatBoxProps {
+function fmtAED(n: number | undefined | null): string {
+  return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+interface CategoryCardProps {
   title: string;
+  icon: string;
+  grams: number | null | undefined;
   count: number;
   amount: number;
-  grams?: number | null;
-  color?: string;
+  color: string;
+  accentBg: string;
   category: string;
   period: "today" | "monthly";
 }
 
-function StatBox({ title, count, amount, grams, color = "#1e3a5f", category, period }: StatBoxProps) {
+function CategoryCard({ title, icon, grams, count, amount, color, accentBg, category, period }: CategoryCardProps) {
   return (
-    <Card className="relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: color }} />
-      <CardHeader className="pb-1 pt-3 pl-5 pr-3 flex flex-row items-start justify-between space-y-0">
-        <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground leading-tight pt-0.5">
-          {title}
-        </CardTitle>
-        <div className="flex gap-0.5 flex-shrink-0 -mt-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            title="Download CSV"
-            onClick={() => downloadCSV(category, period)}
-          >
-            <Download className="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            title="Download PDF"
-            onClick={() => downloadPDF(category, period)}
-          >
-            <FileText className="w-3 h-3" />
-          </Button>
+    <Card className="relative overflow-hidden border-0 shadow-md" style={{ borderTop: `3px solid ${color}` }}>
+      <CardContent className="p-0">
+        {/* Header strip */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2" style={{ backgroundColor: accentBg }}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{icon}</span>
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color }}>{title}</span>
+          </div>
+          <div className="flex gap-0.5">
+            <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-white/40" title="Download CSV" onClick={() => downloadCSV(category, period)}>
+              <Download className="w-3 h-3" style={{ color }} />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-white/40" title="Download PDF" onClick={() => downloadPDF(category, period)}>
+              <FileText className="w-3 h-3" style={{ color }} />
+            </Button>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent className="pl-5 pb-4 pt-1">
-        <div className="text-xl font-bold" style={{ color }}>
-          AED {(amount ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+        {/* Main stats */}
+        <div className="px-4 pt-3 pb-1 flex gap-3">
+          {/* Grams — primary stat */}
+          <div className="flex-1 text-center rounded-lg py-2" style={{ backgroundColor: accentBg }}>
+            <div className="flex items-center justify-center gap-1 mb-0.5">
+              <Scale className="w-3 h-3" style={{ color }} />
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Grams Sold</span>
+            </div>
+            <div className="text-lg font-extrabold leading-tight" style={{ color }}>
+              {fmtGrams(grams)}
+            </div>
+          </div>
+
+          {/* Invoices — secondary stat */}
+          <div className="flex-1 text-center rounded-lg py-2 bg-muted/40">
+            <div className="flex items-center justify-center gap-1 mb-0.5">
+              <Receipt className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Invoices</span>
+            </div>
+            <div className="text-lg font-extrabold text-foreground leading-tight">{count}</div>
+          </div>
         </div>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <span className="text-xs text-muted-foreground">
-            {count} {count === 1 ? "invoice" : "invoices"}
-          </span>
-          {grams != null && (
-            <span
-              className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ backgroundColor: color + "18", color }}
-            >
-              ⚖ {fmtGrams(grams)}
-            </span>
-          )}
+
+        {/* AED total */}
+        <div className="px-4 pb-3 pt-1 text-center">
+          <span className="text-xs text-muted-foreground font-medium">Total Sales: </span>
+          <span className="text-sm font-bold" style={{ color }}>AED {fmtAED(amount)}</span>
         </div>
       </CardContent>
     </Card>
@@ -102,10 +110,13 @@ export default function Dashboard() {
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-8" />)}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-36" />)}
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-36" />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Skeleton className="h-80" />
@@ -119,6 +130,77 @@ export default function Dashboard() {
 
   const todayDate = format(new Date(), "MMMM d, yyyy");
   const monthName = format(new Date(), "MMMM yyyy");
+
+  const categories = [
+    {
+      title: "Gold Jewelry",
+      icon: "💍",
+      color: "#c8a43a",
+      accentBg: "#fdf8ec",
+      category: "gold_jewelry",
+      today: {
+        grams: data.todayGoldJewelryGrams,
+        count: data.todayGoldJewelryCount,
+        amount: data.todayGoldJewelryAmount,
+      },
+      monthly: {
+        grams: data.monthlyGoldJewelryGrams,
+        count: data.monthlyGoldJewelryCount,
+        amount: data.monthlyGoldJewelryAmount,
+      },
+    },
+    {
+      title: "TT Bar",
+      icon: "🟡",
+      color: "#2d6a4f",
+      accentBg: "#edf7f2",
+      category: "tt_bar",
+      today: {
+        grams: data.todayTtBarGrams,
+        count: data.todayTtBarCount,
+        amount: data.todayTtBarAmount,
+      },
+      monthly: {
+        grams: data.monthlyTtBarGrams,
+        count: data.monthlyTtBarCount,
+        amount: data.monthlyTtBarAmount,
+      },
+    },
+    {
+      title: "KG Bar",
+      icon: "📦",
+      color: "#7c5f20",
+      accentBg: "#fdf4e3",
+      category: "kg_bar",
+      today: {
+        grams: data.todayKgBarGrams,
+        count: data.todayKgBarCount,
+        amount: data.todayKgBarAmount,
+      },
+      monthly: {
+        grams: data.monthlyKgBarGrams,
+        count: data.monthlyKgBarCount,
+        amount: data.monthlyKgBarAmount,
+      },
+    },
+    {
+      title: "Silver",
+      icon: "🥈",
+      color: "#4b5563",
+      accentBg: "#f3f4f6",
+      category: "silver",
+      today: {
+        grams: data.todaySilverGrams,
+        count: data.todaySilverCount,
+        amount: data.todaySilverAmount,
+      },
+      monthly: {
+        grams: data.monthlySilverGrams,
+        count: data.monthlySilverCount,
+        amount: data.monthlySilverAmount,
+      },
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -140,7 +222,7 @@ export default function Dashboard() {
             <CardTitle className="text-xs font-medium opacity-80">Today's Total</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-xl font-bold">AED {(data.todayTotalSale ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-xl font-bold">AED {fmtAED(data.todayTotalSale)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -148,7 +230,7 @@ export default function Dashboard() {
             <CardTitle className="text-xs font-medium text-muted-foreground">Monthly Total</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-lg font-bold">AED {(data.monthlySale ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-lg font-bold">AED {fmtAED(data.monthlySale)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -180,7 +262,10 @@ export default function Dashboard() {
       {/* TODAY category breakdown */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-foreground">Today's Sales Breakdown</h2>
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Today's Sales — by Category</h2>
+            <p className="text-xs text-muted-foreground">Grams sold & invoices generated today</p>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => downloadCSV("all", "today")}>
               <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
@@ -190,59 +275,31 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <StatBox
-            title="Gold Jewelry"
-            count={data.todayGoldJewelryCount}
-            amount={data.todayGoldJewelryAmount}
-            grams={data.todayGoldJewelryGrams}
-            color="#c8a43a"
-            category="gold_jewelry"
-            period="today"
-          />
-          <StatBox
-            title="Total Gold Sales"
-            count={data.todayGoldJewelryCount + data.todayKgBarCount + data.todayTtBarCount}
-            amount={data.todayGoldJewelryAmount + data.todayKgBarAmount + data.todayTtBarAmount}
-            grams={data.todayTotalGoldGrams}
-            color="#1e3a5f"
-            category="all"
-            period="today"
-          />
-          <StatBox
-            title="KG Bar"
-            count={data.todayKgBarCount}
-            amount={data.todayKgBarAmount}
-            grams={data.todayKgBarGrams}
-            color="#7c5f20"
-            category="kg_bar"
-            period="today"
-          />
-          <StatBox
-            title="TT Bar"
-            count={data.todayTtBarCount}
-            amount={data.todayTtBarAmount}
-            grams={data.todayTtBarGrams}
-            color="#2d6a4f"
-            category="tt_bar"
-            period="today"
-          />
-          <StatBox
-            title="Silver"
-            count={data.todaySilverCount}
-            amount={data.todaySilverAmount}
-            grams={data.todaySilverGrams}
-            color="#6b7280"
-            category="silver"
-            period="today"
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {categories.map((cat) => (
+            <CategoryCard
+              key={cat.category + "-today"}
+              title={cat.title}
+              icon={cat.icon}
+              grams={cat.today.grams}
+              count={cat.today.count}
+              amount={cat.today.amount}
+              color={cat.color}
+              accentBg={cat.accentBg}
+              category={cat.category}
+              period="today"
+            />
+          ))}
         </div>
       </div>
 
       {/* MONTHLY category breakdown */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-foreground">Monthly Sales Breakdown — {monthName}</h2>
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Monthly Sales — {monthName}</h2>
+            <p className="text-xs text-muted-foreground">Grams sold & invoices generated this month</p>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => downloadCSV("all", "monthly")}>
               <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
@@ -252,52 +309,21 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <StatBox
-            title="Gold Jewelry"
-            count={data.monthlyGoldJewelryCount}
-            amount={data.monthlyGoldJewelryAmount}
-            grams={data.monthlyGoldJewelryGrams}
-            color="#c8a43a"
-            category="gold_jewelry"
-            period="monthly"
-          />
-          <StatBox
-            title="Total Gold Sales"
-            count={data.monthlyGoldJewelryCount + data.monthlyKgBarCount + data.monthlyTtBarCount}
-            amount={data.monthlyGoldJewelryAmount + data.monthlyKgBarAmount + data.monthlyTtBarAmount}
-            grams={data.monthlyTotalGoldGrams}
-            color="#1e3a5f"
-            category="all"
-            period="monthly"
-          />
-          <StatBox
-            title="KG Bar"
-            count={data.monthlyKgBarCount}
-            amount={data.monthlyKgBarAmount}
-            grams={data.monthlyKgBarGrams}
-            color="#7c5f20"
-            category="kg_bar"
-            period="monthly"
-          />
-          <StatBox
-            title="TT Bar"
-            count={data.monthlyTtBarCount}
-            amount={data.monthlyTtBarAmount}
-            grams={data.monthlyTtBarGrams}
-            color="#2d6a4f"
-            category="tt_bar"
-            period="monthly"
-          />
-          <StatBox
-            title="Silver"
-            count={data.monthlySilverCount}
-            amount={data.monthlySilverAmount}
-            grams={data.monthlySilverGrams}
-            color="#6b7280"
-            category="silver"
-            period="monthly"
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {categories.map((cat) => (
+            <CategoryCard
+              key={cat.category + "-monthly"}
+              title={cat.title}
+              icon={cat.icon}
+              grams={cat.monthly.grams}
+              count={cat.monthly.count}
+              amount={cat.monthly.amount}
+              color={cat.color}
+              accentBg={cat.accentBg}
+              category={cat.category}
+              period="monthly"
+            />
+          ))}
         </div>
       </div>
 
@@ -407,7 +433,7 @@ export default function Dashboard() {
             <CardTitle className="text-xs font-medium text-muted-foreground">Cash Collection</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-xl font-semibold">AED {(data.cashCollection ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2 })}</div>
+            <div className="text-xl font-semibold">AED {fmtAED(data.cashCollection)}</div>
           </CardContent>
         </Card>
       </div>
