@@ -124,9 +124,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
 
   const { items, ...invoiceData } = parsed.data;
 
-  // Generate invoice number
-  const count = await db.$count(invoicesTable);
-  const invoiceNumber = `INV-${String(count + 1).padStart(5, "0")}`;
+  // Generate invoice number based on max existing number (not count, to handle deletions)
+  const [maxRow] = await db.execute<{ max_num: string | null }>(
+    sql`SELECT MAX(CAST(SUBSTRING(invoice_number FROM 5) AS INTEGER)) AS max_num FROM invoices WHERE invoice_number ~ '^INV-[0-9]+$'`
+  ).then((r) => r.rows);
+  const nextNum = (maxRow?.max_num != null ? parseInt(maxRow.max_num, 10) : 0) + 1;
+  const invoiceNumber = `INV-${String(nextNum).padStart(5, "0")}`;
 
   const [invoice] = await db
     .insert(invoicesTable)
