@@ -106,6 +106,12 @@ export const GetDashboardResponse = zod.object({
   "monthlyKgBarGrams": zod.number().optional(),
   "monthlyTtBarGrams": zod.number().optional(),
   "monthlySilverGrams": zod.number().optional(),
+  "todayGoldCount": zod.number(),
+  "todayGoldAmount": zod.number(),
+  "todayGoldGrams": zod.number().optional(),
+  "monthlyGoldCount": zod.number(),
+  "monthlyGoldAmount": zod.number(),
+  "monthlyGoldGrams": zod.number().optional(),
   "recentInvoices": zod.array(zod.object({
   "id": zod.number(),
   "invoiceNumber": zod.string(),

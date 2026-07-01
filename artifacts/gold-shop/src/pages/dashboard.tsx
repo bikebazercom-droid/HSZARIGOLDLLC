@@ -150,20 +150,37 @@ export default function Dashboard() {
       },
     },
     {
-      title: "Gold (Total)",
+      title: "Gold",
+      icon: "🪙",
+      color: "#d97706",
+      accentBg: "#fffbeb",
+      category: "gold",
+      today: {
+        grams: data.todayGoldGrams,
+        count: data.todayGoldCount,
+        amount: data.todayGoldAmount,
+      },
+      monthly: {
+        grams: data.monthlyGoldGrams,
+        count: data.monthlyGoldCount,
+        amount: data.monthlyGoldAmount,
+      },
+    },
+    {
+      title: "Gold (All)",
       icon: "🥇",
       color: "#b5850a",
       accentBg: "#fef9e7",
       category: "all",
       today: {
         grams: data.todayTotalGoldGrams,
-        count: data.todayGoldJewelryCount + data.todayKgBarCount + data.todayTtBarCount,
-        amount: data.todayGoldJewelryAmount + data.todayKgBarAmount + data.todayTtBarAmount,
+        count: data.todayGoldJewelryCount + data.todayGoldCount + data.todayKgBarCount + data.todayTtBarCount,
+        amount: data.todayGoldJewelryAmount + data.todayGoldAmount + data.todayKgBarAmount + data.todayTtBarAmount,
       },
       monthly: {
         grams: data.monthlyTotalGoldGrams,
-        count: data.monthlyGoldJewelryCount + data.monthlyKgBarCount + data.monthlyTtBarCount,
-        amount: data.monthlyGoldJewelryAmount + data.monthlyKgBarAmount + data.monthlyTtBarAmount,
+        count: data.monthlyGoldJewelryCount + data.monthlyGoldCount + data.monthlyKgBarCount + data.monthlyTtBarCount,
+        amount: data.monthlyGoldJewelryAmount + data.monthlyGoldAmount + data.monthlyKgBarAmount + data.monthlyTtBarAmount,
       },
     },
     {
@@ -292,7 +309,7 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           {categories.map((cat) => (
             <CategoryCard
               key={cat.category + "-today"}
@@ -326,7 +343,7 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           {categories.map((cat) => (
             <CategoryCard
               key={cat.category + "-monthly"}

@@ -62,6 +62,15 @@ interface PricesData {
   kgBarRate: number;
 }
 
+function descToCategory(desc: string): string {
+  if (desc === "Gold Jewelry") return "gold_jewelry";
+  if (desc === "GOLD") return "gold";
+  if (desc === "TT BAR") return "tt_bar";
+  if (desc === "KG BAR") return "kg_bar";
+  if (desc === "Silver") return "silver";
+  return "gold_jewelry";
+}
+
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
   if (!prices) return fallback;
   if (description === "Gold Jewelry") return prices.goldJewelryRate;
@@ -167,7 +176,8 @@ export default function NewInvoice() {
       // When description changes, auto-set rate from live prices
       if (field === "description") {
         const liveRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
-        updated = { ...updated, rate: liveRate, makingRate: liveRate };
+        const autoCategory = descToCategory(value as string);
+        updated = { ...updated, rate: liveRate, makingRate: liveRate, category: autoCategory };
       }
       next[index] = calcItem(updated as LineItem);
       return next;

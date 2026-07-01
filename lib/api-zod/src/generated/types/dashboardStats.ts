@@ -45,5 +45,11 @@ export interface DashboardStats {
   monthlyKgBarGrams?: number;
   monthlyTtBarGrams?: number;
   monthlySilverGrams?: number;
+  todayGoldCount: number;
+  todayGoldAmount: number;
+  todayGoldGrams?: number;
+  monthlyGoldCount: number;
+  monthlyGoldAmount: number;
+  monthlyGoldGrams?: number;
   recentInvoices: Invoice[];
 }

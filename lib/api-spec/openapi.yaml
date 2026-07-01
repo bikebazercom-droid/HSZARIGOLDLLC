@@ -431,6 +431,10 @@ components:
         - todaySilverAmount
         - monthlySilverCount
         - monthlySilverAmount
+        - todayGoldCount
+        - todayGoldAmount
+        - monthlyGoldCount
+        - monthlyGoldAmount
       properties:
         todayTotalSale:
           type: number
@@ -505,6 +509,18 @@ components:
         monthlyTtBarGrams:
           type: number
         monthlySilverGrams:
+          type: number
+        todayGoldCount:
+          type: integer
+        todayGoldAmount:
+          type: number
+        todayGoldGrams:
+          type: number
+        monthlyGoldCount:
+          type: integer
+        monthlyGoldAmount:
+          type: number
+        monthlyGoldGrams:
           type: number
         recentInvoices:
           type: array
