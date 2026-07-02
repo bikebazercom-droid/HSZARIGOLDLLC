@@ -93,12 +93,15 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
   return prices.goldPricePerGram;
 }
 
-function calcItem(item: LineItem): LineItem {
+function calcItem(item: LineItem, globalMetalRate: number): LineItem {
   const purityFactor = item.purity ? parsePurity(item.purity) : 0;
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
     ? parseFloat((item.grossWeight * purityFactor).toFixed(4))
     : item.pureWeight;
-  const totalPrice = parseFloat((item.grossWeight * item.rate + item.makingAmt).toFixed(2));
+  // Gold Value = Gross Weight × Live Metal Rate
+  const goldValue = parseFloat((item.grossWeight * globalMetalRate).toFixed(2));
+  // Item Total = Gold Value + Making Amount
+  const totalPrice = parseFloat((goldValue + item.makingAmt).toFixed(2));
   return { ...item, pureWeight, totalPrice };
 }
 
@@ -181,14 +184,21 @@ export default function NewInvoice() {
     setItems(prev => {
       const next = [...prev];
       let updated = { ...next[index], [field]: value };
-      // When description changes, auto-set rate from live prices
+      // When description changes: auto-set category, purity, reset making fields
       if (field === "description") {
-        const liveRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
-        updated = { ...updated, rate: liveRate, makingRate: liveRate, category: autoCategory, purity: autoPurity, purityIsCustom: false };
+        const suggestedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
+        updated = { ...updated, rate: suggestedRate, category: autoCategory, purity: autoPurity, purityIsCustom: false, makingRate: 0, makingAmt: 0 };
       }
-      next[index] = calcItem(updated as LineItem);
+      // Auto-compute Making Amount = Gross Weight × Making Rate
+      if (field === "makingRate") {
+        updated.makingAmt = parseFloat((updated.grossWeight * (value as number)).toFixed(2));
+      }
+      if (field === "grossWeight" && updated.makingRate > 0) {
+        updated.makingAmt = parseFloat(((value as number) * updated.makingRate).toFixed(2));
+      }
+      next[index] = calcItem(updated as LineItem, metalRate);
       return next;
     });
   };
@@ -197,7 +207,20 @@ export default function NewInvoice() {
     setItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
+  // Recalculate all items when metal rate changes
+  useEffect(() => {
+    if (items.length > 0) {
+      setItems(prev => prev.map(item => calcItem(item, metalRate)));
+    }
+  }, [metalRate]);
+
+  // Totals following the formula:
+  // Gold Value = Σ(Gross Weight × Metal Rate)
+  // Total Before VAT = Gold Value + Σ(Making Amount)
+  const totalGrossWeight = items.reduce((s, i) => s + (i.grossWeight || 0), 0);
+  const totalGoldValue = parseFloat((totalGrossWeight * metalRate).toFixed(2));
+  const totalMakingAmount = items.reduce((s, i) => s + (i.makingAmt || 0), 0);
+  const subtotal = parseFloat((totalGoldValue + totalMakingAmount).toFixed(2));
   const totalBeforeVat = Math.max(0, subtotal);
   const vatAmount = parseFloat((totalBeforeVat * vatRate / 100).toFixed(2));
   const totalIncludingVat = parseFloat((totalBeforeVat + vatAmount - roundOffDiscount).toFixed(2));
@@ -459,10 +482,14 @@ export default function NewInvoice() {
                           onChange={e => updateItem(index, "makingRate", parseFloat(e.target.value) || 0)}
                           className="h-8 text-sm text-center"
                         />
-                        {item.description && (
-                          <div className="text-[10px] text-center text-amber-600 mt-0.5 whitespace-nowrap">
-                            Live: {getRateForDesc(item.description, prices as PricesData | undefined, metalRate || goldRate)} AED/g
-                          </div>
+                        {item.description && getRateForDesc(item.description, prices as PricesData | undefined, metalRate || goldRate) > 0 && (
+                          <button
+                            type="button"
+                            className="text-[10px] text-center text-amber-600 mt-0.5 w-full hover:underline"
+                            onClick={() => updateItem(index, "makingRate", getRateForDesc(item.description, prices as PricesData | undefined, metalRate || goldRate))}
+                          >
+                            Suggested: {getRateForDesc(item.description, prices as PricesData | undefined, metalRate || goldRate)} AED/g
+                          </button>
                         )}
                       </td>
                       <td className="py-2 px-3">
@@ -645,9 +672,17 @@ export default function NewInvoice() {
               {/* VAT Breakdown */}
               <div className="border rounded-md overflow-hidden">
                 <div className="p-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Before VAT</span>
-                    <span className="font-medium">{fmt(totalBeforeVat)} AED</span>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Gold Value ({fmt(totalGrossWeight)}g × {fmt(metalRate)})</span>
+                    <span>{fmt(totalGoldValue)} AED</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Making Amount</span>
+                    <span>+ {fmt(totalMakingAmount)} AED</span>
+                  </div>
+                  <div className="flex justify-between font-medium border-t pt-2">
+                    <span>Total Before VAT</span>
+                    <span>{fmt(totalBeforeVat)} AED</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
