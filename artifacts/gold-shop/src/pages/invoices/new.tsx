@@ -129,19 +129,15 @@ export default function NewInvoice() {
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
-  const [metalRate, setMetalRate] = useState<number>(0);
+  const [metalRateOverride, setMetalRateOverride] = useState<number | null>(null);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [vatRate, setVatRate] = useState<number>(5);
   const [roundOffDiscount, setRoundOffDiscount] = useState<number>(0);
 
   const [items, setItems] = useState<LineItem[]>([]);
 
-  // Sync metalRate from live prices when they first load
-  useEffect(() => {
-    if (prices?.goldPricePerGram && metalRate === 0) {
-      setMetalRate(prices.goldPricePerGram);
-    }
-  }, [prices?.goldPricePerGram]);
+  // metalRate always follows live price unless manually overridden
+  const metalRate = metalRateOverride ?? prices?.goldPricePerGram ?? 0;
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -589,16 +585,30 @@ export default function NewInvoice() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Metal Rate (AED/g)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={metalRate || ""}
-                  onChange={e => setMetalRate(parseFloat(e.target.value) || 0)}
-                  placeholder="e.g. 320.000"
-                />
-                {prices?.goldPricePerGram && (
-                  <p className="text-xs text-muted-foreground">Live: AED {prices.goldPricePerGram}/g</p>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={metalRateOverride ?? metalRate}
+                    onChange={e => setMetalRateOverride(parseFloat(e.target.value) || 0)}
+                    placeholder="e.g. 320.000"
+                  />
+                  {metalRateOverride !== null && (
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-blue-500 hover:underline"
+                      onClick={() => setMetalRateOverride(null)}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                {prices?.goldPricePerGram && metalRateOverride === null && (
+                  <p className="text-xs text-emerald-600 font-medium">✓ Live: AED {prices.goldPricePerGram}/g</p>
+                )}
+                {metalRateOverride !== null && prices?.goldPricePerGram && (
+                  <p className="text-xs text-amber-600">Live rate: AED {prices.goldPricePerGram}/g (overridden)</p>
                 )}
               </div>
 
