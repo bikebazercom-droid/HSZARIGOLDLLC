@@ -62,21 +62,29 @@ interface PricesData {
   kgBarRate: number;
 }
 
+const DESC_TO_PURITY: Record<string, string> = {
+  "22K Gold Jewelry": "22K (916.0)",
+  "24K GOLD": "24K (999.9)",
+  "TT. BAR": "24K (999.9)",
+  "KG. BAR": "24K (999.9)",
+  "Silver": "",
+};
+
 function descToCategory(desc: string): string {
-  if (desc === "Gold Jewelry") return "gold_jewelry";
-  if (desc === "GOLD") return "gold";
-  if (desc === "TT BAR") return "tt_bar";
-  if (desc === "KG BAR") return "kg_bar";
+  if (desc === "22K Gold Jewelry") return "gold_jewelry";
+  if (desc === "24K GOLD") return "gold";
+  if (desc === "TT. BAR") return "tt_bar";
+  if (desc === "KG. BAR") return "kg_bar";
   if (desc === "Silver") return "silver";
   return "gold_jewelry";
 }
 
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
   if (!prices) return fallback;
-  if (description === "Gold Jewelry") return prices.goldJewelryRate;
-  if (description === "GOLD") return prices.goldBullionRate;
-  if (description === "TT BAR") return prices.ttBarRate;
-  if (description === "KG BAR") return prices.kgBarRate;
+  if (description === "22K Gold Jewelry") return prices.goldJewelryRate;
+  if (description === "24K GOLD") return prices.goldBullionRate;
+  if (description === "TT. BAR") return prices.ttBarRate;
+  if (description === "KG. BAR") return prices.kgBarRate;
   if (description === "Silver") return prices.silverPricePerGram;
   // Check custom descriptions
   const custom = (prices as any).customDescriptions as { name: string; rate: number }[] | undefined;
@@ -86,8 +94,12 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
 }
 
 function calcItem(item: LineItem): LineItem {
+  const purityFactor = item.purity ? parsePurity(item.purity) : 0;
+  const pureWeight = purityFactor > 0 && item.grossWeight > 0
+    ? parseFloat((item.grossWeight * purityFactor).toFixed(4))
+    : item.pureWeight;
   const totalPrice = parseFloat((item.grossWeight * item.rate + item.makingAmt).toFixed(2));
-  return { ...item, totalPrice };
+  return { ...item, pureWeight, totalPrice };
 }
 
 export default function NewInvoice() {
@@ -177,7 +189,8 @@ export default function NewInvoice() {
       if (field === "description") {
         const liveRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
         const autoCategory = descToCategory(value as string);
-        updated = { ...updated, rate: liveRate, makingRate: liveRate, category: autoCategory };
+        const autoPurity = DESC_TO_PURITY[value as string] ?? "";
+        updated = { ...updated, rate: liveRate, makingRate: liveRate, category: autoCategory, purity: autoPurity, purityIsCustom: false };
       }
       next[index] = calcItem(updated as LineItem);
       return next;
@@ -356,10 +369,10 @@ export default function NewInvoice() {
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Gold Jewelry">Gold Jewelry</SelectItem>
-                              <SelectItem value="GOLD">GOLD</SelectItem>
-                              <SelectItem value="TT BAR">TT BAR</SelectItem>
-                              <SelectItem value="KG BAR">KG BAR</SelectItem>
+                              <SelectItem value="22K Gold Jewelry">22K Gold Jewelry</SelectItem>
+                              <SelectItem value="24K GOLD">24K GOLD</SelectItem>
+                              <SelectItem value="TT. BAR">TT. BAR</SelectItem>
+                              <SelectItem value="KG. BAR">KG. BAR</SelectItem>
                               <SelectItem value="Silver">Silver</SelectItem>
                               {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
                                 <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
