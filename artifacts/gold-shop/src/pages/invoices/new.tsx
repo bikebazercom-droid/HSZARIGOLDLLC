@@ -39,6 +39,7 @@ interface LineItem {
 
 const PURITY_PRESETS = [
   { label: "24K (999.9)", value: "24K (999.9)", decimal: 0.9999 },
+  { label: "24K (0.999) - Bullion", value: "24K_999", decimal: 0.9990 },
   { label: "24K (995.0)", value: "24K (995.0)", decimal: 0.9950 },
   { label: "22K (916.0)", value: "22K (916.0)", decimal: 0.9167 },
   { label: "21K (875.0)", value: "21K (875.0)", decimal: 0.8750 },
