@@ -373,16 +373,23 @@ export default function InvoiceDetail() {
             <div key={label} style={{ textAlign: "center", width: "30%" }}>
               {/* Fixed-height slot keeps the row height stable no matter the
                   uploaded stamp's natural resolution — prevents the column
-                  from stretching and pushing the line/label far down. */}
-              <div style={{ height: "56px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                  from stretching and pushing the line/label far down.
+                  IMPORTANT: the <img> itself must only constrain width (with
+                  height: auto) — html2canvas (used for PDF export) does not
+                  reliably honor `object-fit`, so capping the image's own
+                  height squashes it flat in the exported PDF even though it
+                  looks fine in the live browser preview. The wrapper below
+                  uses overflow: hidden purely as a safety clip, never to
+                  force a smaller aspect ratio onto the image. */}
+              <div style={{ height: "150px", overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
                 {label === "Authorised Signature" && settings?.stampSignatureUrl && (
                   <img
                     src={settings.stampSignatureUrl}
                     alt="Authorized stamp and signature"
                     style={{
-                      width: "170px",
+                      width: "160px",
                       maxWidth: "100%",
-                      maxHeight: "56px",
+                      height: "auto",
                       objectFit: "contain",
                       marginBottom: "-10px",
                     }}
