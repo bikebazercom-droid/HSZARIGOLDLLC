@@ -26,6 +26,7 @@ import type {
   CustomerInput,
   DashboardStats,
   ErrorResponse,
+  GetSalesAnalyticsParams,
   HealthStatus,
   Invoice,
   InvoiceInput,
@@ -36,7 +37,8 @@ import type {
   Prices,
   PricesInput,
   Product,
-  ProductInput
+  ProductInput,
+  SalesAnalytics
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -355,6 +357,90 @@ export function useGetDashboard<TData = Awaited<ReturnType<typeof getDashboard>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSalesAnalyticsUrl = (params: GetSalesAnalyticsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/sales-analytics?${stringifiedParams}` : `/api/dashboard/sales-analytics`
+}
+
+/**
+ * @summary Get date-range filtered sales analytics by category
+ */
+export const getSalesAnalytics = async (params: GetSalesAnalyticsParams, options?: RequestInit): Promise<SalesAnalytics> => {
+
+  return customFetch<SalesAnalytics>(getGetSalesAnalyticsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSalesAnalyticsQueryKey = (params?: GetSalesAnalyticsParams,) => {
+    return [
+    `/api/dashboard/sales-analytics`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSalesAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getSalesAnalytics>>, TError = ErrorType<unknown>>(params: GetSalesAnalyticsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSalesAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSalesAnalyticsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSalesAnalytics>>> = ({ signal }) => getSalesAnalytics(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSalesAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSalesAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getSalesAnalytics>>>
+export type GetSalesAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get date-range filtered sales analytics by category
+ */
+
+export function useGetSalesAnalytics<TData = Awaited<ReturnType<typeof getSalesAnalytics>>, TError = ErrorType<unknown>>(
+ params: GetSalesAnalyticsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSalesAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSalesAnalyticsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

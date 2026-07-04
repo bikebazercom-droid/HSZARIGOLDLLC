@@ -162,6 +162,31 @@ export const GetDashboardResponse = zod.object({
 
 
 /**
+ * @summary Get date-range filtered sales analytics by category
+ */
+export const GetSalesAnalyticsQueryParams = zod.object({
+  "startDate": zod.coerce.string(),
+  "endDate": zod.coerce.string()
+})
+
+export const GetSalesAnalyticsResponse = zod.object({
+  "startDate": zod.string(),
+  "endDate": zod.string(),
+  "totalRevenue": zod.number(),
+  "totalGrams": zod.number(),
+  "goldJewelryCount": zod.number(),
+  "goldJewelryGrams": zod.number(),
+  "goldJewelryAmount": zod.number(),
+  "ttBarCount": zod.number(),
+  "ttBarGrams": zod.number(),
+  "ttBarAmount": zod.number(),
+  "kgBarCount": zod.number(),
+  "kgBarGrams": zod.number(),
+  "kgBarAmount": zod.number()
+})
+
+
+/**
  * @summary Get current gold and silver prices
  */
 export const GetPricesResponse = zod.object({

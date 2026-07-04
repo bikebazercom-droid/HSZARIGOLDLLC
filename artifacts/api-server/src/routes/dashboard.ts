@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, gte, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
-import { GetDashboardResponse } from "@workspace/api-zod";
+import { GetDashboardResponse, GetSalesAnalyticsResponse } from "@workspace/api-zod";
 import PDFDocument from "pdfkit";
 
 const router: IRouter = Router();
@@ -180,6 +180,70 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       todayTotalGoldGrams,
       monthlyTotalGoldGrams,
       recentInvoices,
+    })
+  );
+});
+
+// Date-range filtered sales analytics: /api/dashboard/sales-analytics?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+router.get("/dashboard/sales-analytics", async (req, res): Promise<void> => {
+  const startDateParam = req.query.startDate as string;
+  const endDateParam = req.query.endDate as string;
+
+  if (!startDateParam || !endDateParam) {
+    res.status(400).json({ error: "startDate and endDate are required" });
+    return;
+  }
+
+  const startDate = new Date(startDateParam);
+  const endDate = new Date(endDateParam);
+  endDate.setDate(endDate.getDate() + 1); // include the full end day
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    res.status(400).json({ error: "Invalid startDate or endDate" });
+    return;
+  }
+
+  const [rangeInvoices, rangeCatRows] = await Promise.all([
+    db.select().from(invoicesTable).where(gte(invoicesTable.createdAt, startDate)),
+    db.execute<CatRow>(sql`
+      SELECT
+        ii.category,
+        COUNT(DISTINCT ii.invoice_id)::text AS invoice_count,
+        COALESCE(SUM(ii.total_price::numeric), 0)::text AS total_amount,
+        COALESCE(SUM(CASE WHEN ii.weight IS NOT NULL THEN ii.weight::numeric ELSE 0 END), 0)::text AS total_weight
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE i.created_at >= ${startDate}
+        AND i.created_at < ${endDate}
+        AND ii.category IS NOT NULL
+      GROUP BY ii.category
+    `).then(r => r.rows as CatRow[]),
+  ]);
+
+  const totalRevenue = rangeInvoices
+    .filter(inv => inv.createdAt < endDate)
+    .reduce((s, inv) => s + Number(inv.total), 0);
+
+  const goldJewelry = getCatStats(rangeCatRows, "gold_jewelry");
+  const ttBar = getCatStats(rangeCatRows, "tt_bar");
+  const kgBar = getCatStats(rangeCatRows, "kg_bar");
+  const totalGrams = goldJewelry.grams + ttBar.grams + kgBar.grams;
+
+  res.json(
+    GetSalesAnalyticsResponse.parse({
+      startDate: startDateParam,
+      endDate: endDateParam,
+      totalRevenue,
+      totalGrams,
+      goldJewelryCount: goldJewelry.count,
+      goldJewelryGrams: goldJewelry.grams,
+      goldJewelryAmount: goldJewelry.amount,
+      ttBarCount: ttBar.count,
+      ttBarGrams: ttBar.grams,
+      ttBarAmount: ttBar.amount,
+      kgBarCount: kgBar.count,
+      kgBarGrams: kgBar.grams,
+      kgBarAmount: kgBar.amount,
     })
   );
 });
