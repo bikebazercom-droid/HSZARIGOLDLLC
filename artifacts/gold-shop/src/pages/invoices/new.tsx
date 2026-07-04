@@ -45,28 +45,22 @@ const PURITY_PRESETS = [
   { label: "18K (750.0)", value: "18K (750.0)", decimal: 0.7500 },
 ];
 
-// Standard gold-market purity factors. Presets are matched exactly first;
-// custom/typed values fall back to numeric parsing.
+// Dropdown presets carry the exact standard gold-market factor (e.g. 22K 916 → 0.9167).
+// Any purity typed by hand (e.g. "0.999", "995") is used LITERALLY, exactly as
+// entered — it must never be silently snapped to a different "standard" factor.
+// This matters: 24K "999.9" fine gold is 0.9999, but a purity of "0.999" is a
+// distinct, valid decimal (0.999) and must multiply by exactly 0.999, not 0.9999.
 function parsePurity(purity: string): number {
   const preset = PURITY_PRESETS.find(p => p.value === purity);
   if (preset) return preset.decimal;
   const match = purity.match(/\((\d+\.?\d*)\)/);
   if (match) {
     const karatValue = parseFloat(match[1]);
-    if (karatValue === 999.9 || karatValue === 999) return 0.9999;
-    if (karatValue === 995 || karatValue === 995.0) return 0.9950;
-    if (karatValue === 916 || karatValue === 916.0) return 0.9167;
-    return karatValue / 1000;
+    return karatValue > 1 ? karatValue / 1000 : karatValue;
   }
   const decimal = parseFloat(purity);
-  if (!isNaN(decimal) && decimal <= 1) {
-    if (decimal === 0.999) return 0.9999;
-    if (decimal === 0.995) return 0.995;
-    if (decimal === 0.916) return 0.9167;
-    return decimal;
-  }
-  if (!isNaN(decimal) && decimal > 1) return decimal / 1000;
-  return 0;
+  if (isNaN(decimal)) return 0;
+  return decimal > 1 ? decimal / 1000 : decimal;
 }
 
 interface PricesData {
@@ -109,16 +103,26 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
   return prices.goldPricePerGram;
 }
 
+// Decimal-safe rounding. Plain `toFixed()` can misround values like 92.5 * 0.995
+// (92.0375) because of binary floating-point representation (e.g. it can come out
+// as 92.03749999999999 and round DOWN to 92.037 instead of 92.038). Routing the
+// value through exponential notation before rounding avoids that class of bug.
+function roundTo(num: number, decimals: number): number {
+  const sign = num < 0 ? -1 : 1;
+  const rounded = Number(`${Math.round(Number(`${Math.abs(num)}e${decimals}`))}e-${decimals}`);
+  return sign * rounded;
+}
+
 function calcItem(item: LineItem, globalMetalRate: number): LineItem {
   const purityFactor = item.purity ? parsePurity(item.purity) : 0;
   // Pure Wt. = Gross Wt. × Purity Factor, rounded to 3 decimal places (standard gold-market convention)
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
-    ? parseFloat((item.grossWeight * purityFactor).toFixed(3))
+    ? roundTo(item.grossWeight * purityFactor, 3)
     : item.pureWeight;
-  // Gold Value = Gross Weight × Live Metal Rate
-  const goldValue = parseFloat((item.grossWeight * globalMetalRate).toFixed(2));
+  // Gold Value = Gross Weight × live Metal Rate (never a mock/fallback constant)
+  const goldValue = roundTo(item.grossWeight * globalMetalRate, 2);
   // Item Total = Gold Value + Making Amount
-  const totalPrice = parseFloat((goldValue + item.makingAmt).toFixed(2));
+  const totalPrice = roundTo(goldValue + item.makingAmt, 2);
   return { ...item, pureWeight, totalPrice };
 }
 
@@ -235,12 +239,13 @@ export default function NewInvoice() {
   // Gold Value = Σ(Gross Weight × Metal Rate)
   // Total Before VAT = Gold Value + Σ(Making Amount)
   const totalGrossWeight = items.reduce((s, i) => s + (i.grossWeight || 0), 0);
-  const totalGoldValue = parseFloat((totalGrossWeight * metalRate).toFixed(2));
+  // Gold Value always ties to the live/override Metal Rate — never a mock constant.
+  const totalGoldValue = roundTo(totalGrossWeight * metalRate, 2);
   const totalMakingAmount = items.reduce((s, i) => s + (i.makingAmt || 0), 0);
-  const subtotal = parseFloat((totalGoldValue + totalMakingAmount).toFixed(2));
+  const subtotal = roundTo(totalGoldValue + totalMakingAmount, 2);
   const totalBeforeVat = Math.max(0, subtotal);
-  const vatAmount = parseFloat((totalBeforeVat * vatRate / 100).toFixed(2));
-  const totalIncludingVat = parseFloat((totalBeforeVat + vatAmount - roundOffDiscount).toFixed(2));
+  const vatAmount = roundTo(totalBeforeVat * vatRate / 100, 2);
+  const totalIncludingVat = roundTo(totalBeforeVat + vatAmount - roundOffDiscount, 2);
 
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

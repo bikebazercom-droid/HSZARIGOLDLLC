@@ -182,13 +182,27 @@ export default function Prices() {
   /* ── Built-in rate handlers ── */
   const handleChange = (field: RateKey, value: number) => setLocalRates(prev => ({ ...prev, [field]: value }));
 
-  const handleSaveOne = async (field: RateKey, value: number): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
+  // Guards against accidentally saving a mock/placeholder rate (e.g. a leftover
+  // "10" from testing) that would silently undervalue every invoice using it.
+  const MIN_REALISTIC_GOLD_RATE = 50;
+  const isGoldField = (field: RateKey) => field !== "silverPricePerGram";
+
+  const handleSaveOne = async (field: RateKey, value: number): Promise<void> => {
+    if (isGoldField(field) && value > 0 && value < MIN_REALISTIC_GOLD_RATE) {
+      toast({
+        title: "Rate looks too low",
+        description: `AED ${value}/g is far below realistic gold market rates. Please double-check before saving.`,
+        variant: "destructive",
+      });
+      return Promise.reject(new Error("Rate below realistic threshold"));
+    }
+    return new Promise<void>((resolve, reject) => {
       updatePrices.mutate({ data: { [field]: value } as any }, {
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() }); toast({ title: "Rate updated" }); resolve(); },
         onError: (err: any) => { toast({ title: "Failed", description: err.message, variant: "destructive" }); reject(err); },
       });
     });
+  };
 
   const hasAnyChange = prices && RATE_KEYS.some(k => localRates[k] !== (prices as any)[k]);
 
@@ -196,6 +210,15 @@ export default function Prices() {
     if (!prices) return;
     const changed = RATE_KEYS.filter(k => localRates[k] !== (prices as any)[k]);
     if (!changed.length) return;
+    const tooLow = changed.filter(k => isGoldField(k) && localRates[k] > 0 && localRates[k] < MIN_REALISTIC_GOLD_RATE);
+    if (tooLow.length) {
+      toast({
+        title: "Rate looks too low",
+        description: `One or more gold rates are below AED ${MIN_REALISTIC_GOLD_RATE}/g, which is far below realistic market value. Please double-check before saving.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setSyncingAll(true);
     try {
       const patch: Record<string, number> = {};
