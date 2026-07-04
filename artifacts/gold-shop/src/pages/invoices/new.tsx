@@ -230,6 +230,15 @@ export default function NewInvoice() {
   };
 
   const updateItem = (index: number, field: keyof LineItem, value: string | number | boolean) => {
+    // When the item's description/category is (re)selected from the dropdown, the
+    // dashboard rate for that exact category (Gold Jewelry, TT. BAR, KG. BAR, etc.)
+    // must instantly become the Payment & Summary "Metal Rate" — selecting an item
+    // is itself an explicit user action, same as typing an override manually.
+    let nextGlobalRate: number | null = null;
+    if (field === "description" && value) {
+      nextGlobalRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
+    }
+
     setItems(prev => {
       const next = [...prev];
       let updated = { ...next[index], [field]: value };
@@ -237,7 +246,7 @@ export default function NewInvoice() {
       if (field === "description") {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
-        const suggestedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
+        const suggestedRate = nextGlobalRate ?? (metalRate || goldRate);
         updated = { ...updated, rate: suggestedRate, category: autoCategory, purity: autoPurity, purityIsCustom: false, makingRate: 0, makingAmt: 0 };
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
@@ -247,9 +256,16 @@ export default function NewInvoice() {
       if (field === "grossWeight" && updated.makingRate > 0) {
         updated.makingAmt = parseFloat(((value as number) * updated.makingRate).toFixed(2));
       }
-      next[index] = calcItem(updated as LineItem, metalRate);
+      next[index] = calcItem(updated as LineItem, nextGlobalRate ?? metalRate);
       return next;
     });
+
+    // Sync the Payment & Summary "Metal Rate" field to this item's category rate.
+    // Uses the same override slot as manual typing, so the user can still edit it
+    // afterward — the input isn't locked just because it was set via selection.
+    if (nextGlobalRate !== null) {
+      setMetalRateOverride(nextGlobalRate);
+    }
   };
 
   const removeItem = (index: number) => {
