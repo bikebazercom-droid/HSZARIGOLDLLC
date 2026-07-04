@@ -863,6 +863,8 @@ components:
           type: string
         logoImageUrl:
           type: ["string", "null"]
+        stampSignatureUrl:
+          type: ["string", "null"]
 
     CompanySettingsInput:
       type: object
@@ -886,6 +888,8 @@ components:
         logoInitial:
           type: string
         logoImageUrl:
+          type: string
+        stampSignatureUrl:
           type: string
 
     MonthlySale:

@@ -283,6 +283,8 @@ export interface CompanySettings {
   logoInitial: string;
   /** @nullable */
   logoImageUrl?: string | null;
+  /** @nullable */
+  stampSignatureUrl?: string | null;
 }
 
 export interface CompanySettingsInput {
@@ -296,6 +298,7 @@ export interface CompanySettingsInput {
   logoType?: string;
   logoInitial?: string;
   logoImageUrl?: string;
+  stampSignatureUrl?: string;
 }
 
 export interface MonthlySale {

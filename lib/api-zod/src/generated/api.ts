@@ -22,7 +22,8 @@ export const GetSettingsResponse = zod.object({
   "locationUrl": zod.string().nullish(),
   "logoType": zod.string(),
   "logoInitial": zod.string(),
-  "logoImageUrl": zod.string().nullish()
+  "logoImageUrl": zod.string().nullish(),
+  "stampSignatureUrl": zod.string().nullish()
 })
 
 
@@ -39,7 +40,8 @@ export const UpdateSettingsBody = zod.object({
   "locationUrl": zod.string().optional(),
   "logoType": zod.string().optional(),
   "logoInitial": zod.string().optional(),
-  "logoImageUrl": zod.string().optional()
+  "logoImageUrl": zod.string().optional(),
+  "stampSignatureUrl": zod.string().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -53,7 +55,8 @@ export const UpdateSettingsResponse = zod.object({
   "locationUrl": zod.string().nullish(),
   "logoType": zod.string(),
   "logoInitial": zod.string(),
-  "logoImageUrl": zod.string().nullish()
+  "logoImageUrl": zod.string().nullish(),
+  "stampSignatureUrl": zod.string().nullish()
 })
 
 

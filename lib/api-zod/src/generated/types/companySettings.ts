@@ -21,4 +21,6 @@ export interface CompanySettings {
   logoInitial: string;
   /** @nullable */
   logoImageUrl?: string | null;
+  /** @nullable */
+  stampSignatureUrl?: string | null;
 }

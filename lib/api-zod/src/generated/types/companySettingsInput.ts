@@ -17,4 +17,5 @@ export interface CompanySettingsInput {
   logoType?: string;
   logoInitial?: string;
   logoImageUrl?: string;
+  stampSignatureUrl?: string;
 }

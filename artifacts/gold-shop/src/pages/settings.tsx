@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp } from "lucide-react";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
 
@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [logoType, setLogoType] = useState("monogram");
   const [logoInitial, setLogoInitial] = useState("H");
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
+  const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
 
   useEffect(() => {
     if (settings) {
@@ -51,6 +52,7 @@ export default function SettingsPage() {
       setLogoType(settings.logoType ?? "monogram");
       setLogoInitial(settings.logoInitial ?? "H");
       setLogoImageUrl(settings.logoImageUrl ?? "");
+      setStampSignatureUrl(settings.stampSignatureUrl ?? "");
     }
   }, [settings]);
 
@@ -67,6 +69,7 @@ export default function SettingsPage() {
         logoType,
         logoInitial,
         logoImageUrl,
+        stampSignatureUrl,
       }
     }, {
       onSuccess: () => {
@@ -321,6 +324,73 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Authorized Stamp & Signature */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Stamp className="w-5 h-5 text-primary" />
+            <CardTitle>Authorized Stamp & Signature</CardTitle>
+          </div>
+          <CardDescription>
+            Upload your company stamp/signature image — it appears automatically under "Authorised Signature" on every invoice
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {stampSignatureUrl ? (
+            <div className="flex items-center gap-4">
+              <div className="w-28 h-20 rounded-lg border overflow-hidden bg-white flex items-center justify-center p-1">
+                <img src={stampSignatureUrl} alt="Authorized stamp and signature" className="max-w-full max-h-full object-contain" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-green-700 font-medium">✓ Stamp & signature uploaded</p>
+                <label className="cursor-pointer">
+                  <span className="text-xs text-primary underline">Replace image</span>
+                  <input
+                    type="file"
+                    accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setStampSignatureUrl(ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setStampSignatureUrl("")}
+                  className="block text-xs text-destructive underline"
+                >
+                  Remove image
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all">
+              <Stamp className="w-8 h-8 text-muted-foreground" />
+              <div className="text-center">
+                <div className="text-sm font-medium">Click to upload your stamp & signature</div>
+                <div className="text-xs text-muted-foreground mt-0.5">PNG, JPG · Merged stamp+signature image recommended</div>
+              </div>
+              <input
+                type="file"
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setStampSignatureUrl(ev.target?.result as string);
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+          )}
         </CardContent>
       </Card>
 

@@ -12,4 +12,5 @@ export const companySettingsTable = pgTable("company_settings", {
   logoType: text("logo_type").notNull().default("monogram"),
   logoInitial: text("logo_initial").notNull().default("H"),
   logoImageUrl: text("logo_image_url"),
+  stampSignatureUrl: text("stamp_signature_url"),
 });
