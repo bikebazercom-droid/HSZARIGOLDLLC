@@ -1,20 +1,108 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboard, getGetDashboardQueryKey,
   useGetMonthlySales, getGetMonthlySalesQueryKey,
+  useGetCategorySummary, getGetCategorySummaryQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus } from "lucide-react";
+import { Plus, Filter } from "lucide-react";
 
 function fmtAED(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtGrams(n: number | undefined | null): string {
+  return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+
+function CategorySalesSummary() {
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
+  const [appliedRange, setAppliedRange] = useState({ startDate: todayStr, endDate: todayStr });
+
+  const { data, isLoading, isFetching } = useGetCategorySummary(appliedRange, {
+    query: { queryKey: getGetCategorySummaryQueryKey(appliedRange) },
+  });
+
+  const handleGenerate = () => {
+    setAppliedRange({ startDate, endDate });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Category-wise Sales Summary</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">From Date</Label>
+            <Input
+              type="date"
+              value={startDate}
+              max={endDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-40"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">To Date</Label>
+            <Input
+              type="date"
+              value={endDate}
+              min={startDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-40"
+            />
+          </div>
+          <Button size="sm" onClick={handleGenerate} disabled={isFetching}>
+            <Filter className="w-4 h-4 mr-1.5" />
+            {isFetching ? "Generating..." : "Generate Report"}
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-56" />
+        ) : (
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Category</TableHead>
+                  <TableHead className="text-right">Total Grams Sold (g)</TableHead>
+                  <TableHead className="text-right pr-4">Total Sales Revenue (AED)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data?.rows.map((row) => (
+                  <TableRow key={row.category}>
+                    <TableCell className="font-medium pl-4">{row.label}</TableCell>
+                    <TableCell className="text-right">{fmtGrams(row.grams)} g</TableCell>
+                    <TableCell className="text-right pr-4">AED {fmtAED(row.amount)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-muted/40 font-bold border-t-2">
+                  <TableCell className="pl-4">Grand Total</TableCell>
+                  <TableCell className="text-right">{fmtGrams(data?.grandTotalGrams)} g</TableCell>
+                  <TableCell className="text-right pr-4">AED {fmtAED(data?.grandTotalAmount)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Dashboard() {
@@ -207,6 +295,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Category-wise Sales Summary */}
+      <CategorySalesSummary />
     </div>
   );
 }

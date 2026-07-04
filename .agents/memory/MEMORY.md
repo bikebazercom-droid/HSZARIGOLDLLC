@@ -1,1 +1,2 @@
 - [Raw PDF/file download routes](raw-download-routes.md) — Express routes for binary file downloads intentionally live outside the OpenAPI spec; frontend hits them directly via `window.open`.
+- [Gold-shop seeded admin login](gold-shop-admin-login.md) — seed script's default admin (0000000000/1234) only applies on empty DB; check `users` table for real credentials before e2e testing.

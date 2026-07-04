@@ -140,6 +140,22 @@ export interface DashboardStats {
   recentInvoices: Invoice[];
 }
 
+export interface CategorySummaryRow {
+  category: string;
+  label: string;
+  grams: number;
+  amount: number;
+  invoiceCount: number;
+}
+
+export interface CategorySummary {
+  startDate: string;
+  endDate: string;
+  rows: CategorySummaryRow[];
+  grandTotalGrams: number;
+  grandTotalAmount: number;
+}
+
 export interface CustomDescription {
   name: string;
   rate: number;
@@ -308,6 +324,11 @@ export interface MonthlySale {
   card: number;
   bankTransfer: number;
 }
+
+export type GetCategorySummaryParams = {
+startDate: string;
+endDate: string;
+};
 
 export type ListCustomersParams = {
 search?: string;

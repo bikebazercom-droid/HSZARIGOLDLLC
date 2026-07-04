@@ -20,12 +20,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CategorySummary,
   CompanySettings,
   CompanySettingsInput,
   Customer,
   CustomerInput,
   DashboardStats,
   ErrorResponse,
+  GetCategorySummaryParams,
   HealthStatus,
   Invoice,
   InvoiceInput,
@@ -355,6 +357,90 @@ export function useGetDashboard<TData = Awaited<ReturnType<typeof getDashboard>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCategorySummaryUrl = (params: GetCategorySummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/category-summary?${stringifiedParams}` : `/api/dashboard/category-summary`
+}
+
+/**
+ * @summary Get category-wise sales summary for a date range
+ */
+export const getCategorySummary = async (params: GetCategorySummaryParams, options?: RequestInit): Promise<CategorySummary> => {
+
+  return customFetch<CategorySummary>(getGetCategorySummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCategorySummaryQueryKey = (params?: GetCategorySummaryParams,) => {
+    return [
+    `/api/dashboard/category-summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCategorySummaryQueryOptions = <TData = Awaited<ReturnType<typeof getCategorySummary>>, TError = ErrorType<unknown>>(params: GetCategorySummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCategorySummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCategorySummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCategorySummary>>> = ({ signal }) => getCategorySummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCategorySummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCategorySummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getCategorySummary>>>
+export type GetCategorySummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get category-wise sales summary for a date range
+ */
+
+export function useGetCategorySummary<TData = Awaited<ReturnType<typeof getCategorySummary>>, TError = ErrorType<unknown>>(
+ params: GetCategorySummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCategorySummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCategorySummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './categorySummary';
+export * from './categorySummaryRow';
 export * from './companySettings';
 export * from './companySettingsInput';
 export * from './customDescription';
@@ -13,6 +15,7 @@ export * from './customer';
 export * from './customerInput';
 export * from './dashboardStats';
 export * from './errorResponse';
+export * from './getCategorySummaryParams';
 export * from './healthStatus';
 export * from './invoice';
 export * from './invoiceInput';

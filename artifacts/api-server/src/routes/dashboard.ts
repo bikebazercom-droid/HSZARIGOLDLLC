@@ -1,10 +1,20 @@
 import { Router, type IRouter } from "express";
 import { eq, gte, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
-import { GetDashboardResponse } from "@workspace/api-zod";
+import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummaryResponse } from "@workspace/api-zod";
 import PDFDocument from "pdfkit";
 
 const router: IRouter = Router();
+
+const CATEGORY_ORDER = ["gold_jewelry", "gold", "tt_bar", "kg_bar", "silver", "custom"] as const;
+const CATEGORY_SUMMARY_LABEL: Record<string, string> = {
+  gold_jewelry: "22K Gold Jewelry",
+  gold: "24K GOLD",
+  tt_bar: "TT. BAR",
+  kg_bar: "KG. BAR",
+  silver: "Silver",
+  custom: "Custom",
+};
 
 interface CatRow extends Record<string, unknown> {
   category: string;
@@ -180,6 +190,76 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       todayTotalGoldGrams,
       monthlyTotalGoldGrams,
       recentInvoices,
+    })
+  );
+});
+
+// Category-wise sales summary for a given date range (inclusive)
+// GET /api/dashboard/category-summary?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
+  const parsedQuery = GetCategorySummaryQueryParams.safeParse(req.query);
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: parsedQuery.error.message });
+    return;
+  }
+  const { startDate, endDate } = parsedQuery.data;
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  end.setDate(end.getDate() + 1); // inclusive of the end date's full day
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    res.status(400).json({ error: "Invalid startDate or endDate" });
+    return;
+  }
+
+  const catRows = await db.execute<CatRow>(sql`
+    SELECT
+      COALESCE(ii.category, 'custom') AS category,
+      COUNT(DISTINCT ii.invoice_id)::text AS invoice_count,
+      COALESCE(SUM(ii.total_price::numeric), 0)::text AS total_amount,
+      COALESCE(SUM(COALESCE(ii.pure_weight::numeric, ii.gross_weight::numeric, 0)), 0)::text AS total_weight
+    FROM invoice_items ii
+    JOIN invoices i ON ii.invoice_id = i.id
+    WHERE i.created_at >= ${start} AND i.created_at < ${end}
+    GROUP BY COALESCE(ii.category, 'custom')
+  `).then(r => r.rows as CatRow[]);
+
+  // Anything with a category not in our known set is folded into "Custom"
+  const knownCategories = new Set(CATEGORY_ORDER);
+  const normalizedRows = catRows.map(r => ({
+    ...r,
+    category: knownCategories.has(r.category as (typeof CATEGORY_ORDER)[number]) ? r.category : "custom",
+  }));
+
+  const rows = CATEGORY_ORDER.map((category) => {
+    const matching = normalizedRows.filter(r => r.category === category);
+    let amount = 0;
+    let grams = 0;
+    for (const r of matching) {
+      amount += parseFloat(r.total_amount);
+      grams += parseFloat(r.total_weight);
+    }
+    const invoiceCount = matching.reduce((s, r) => s + parseInt(r.invoice_count, 10), 0);
+    return {
+      category,
+      label: CATEGORY_SUMMARY_LABEL[category],
+      grams: Math.round(grams * 1000) / 1000,
+      amount: Math.round(amount * 100) / 100,
+      invoiceCount,
+    };
+  });
+
+  const grandTotalGrams = Math.round(rows.reduce((s, r) => s + r.grams, 0) * 1000) / 1000;
+  const grandTotalAmount = Math.round(rows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+
+  res.json(
+    GetCategorySummaryResponse.parse({
+      startDate,
+      endDate,
+      rows,
+      grandTotalGrams,
+      grandTotalAmount,
     })
   );
 });

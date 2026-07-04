@@ -87,7 +87,8 @@ function descToCategory(desc: string): string {
   if (desc === "TT. BAR") return "tt_bar";
   if (desc === "KG. BAR") return "kg_bar";
   if (desc === "Silver") return "silver";
-  return "gold_jewelry";
+  // Anything else (custom-typed description, saved custom price, or a Product) is Custom
+  return "custom";
 }
 
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
