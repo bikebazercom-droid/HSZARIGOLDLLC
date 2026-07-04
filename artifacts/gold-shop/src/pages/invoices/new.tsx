@@ -729,10 +729,12 @@ export default function NewInvoice() {
                     <span>Making Amount</span>
                     <span>+ {fmt(totalMakingAmount)} AED</span>
                   </div>
-                  <div className="flex justify-between font-medium border-t pt-2">
-                    <span>Total Before VAT</span>
-                    <span>{fmt(totalBeforeVat)} AED</span>
-                  </div>
+                  {vatAmount > 0 && (
+                    <div className="flex justify-between font-medium border-t pt-2">
+                      <span>Total Before VAT</span>
+                      <span>{fmt(totalBeforeVat)} AED</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span>VAT</span>
@@ -747,7 +749,7 @@ export default function NewInvoice() {
                       />
                       <span>%</span>
                     </div>
-                    <span className="font-medium">+ {fmt(vatAmount)} AED</span>
+                    {vatAmount > 0 && <span className="font-medium">+ {fmt(vatAmount)} AED</span>}
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Round Off Discount</span>

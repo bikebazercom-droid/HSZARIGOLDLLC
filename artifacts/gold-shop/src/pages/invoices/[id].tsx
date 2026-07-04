@@ -365,11 +365,11 @@ export default function InvoiceDetail() {
           <table style={{ width: "58%", borderCollapse: "collapse", fontSize: "10px" }}>
             <tbody>
               {[
-                { label: `GOLD VALUE @ ${metalRate > 0 ? metalRate.toFixed(3) : "0.000"} / gram (AED)`, value: fmt(totalBeforeVat), bold: false },
-                { label: "Total Amount Before VAT (AED)", value: fmt(totalBeforeVat), bold: false },
-                { label: `Total VAT Amount (${vatRate}%) (AED)`, value: fmt(vatAmount), bold: false },
-                { label: "Round Off Discount (AED)", value: fmt(roundOffDiscount), bold: false },
-              ].map(({ label, value }) => (
+                { label: `GOLD VALUE @ ${metalRate > 0 ? metalRate.toFixed(3) : "0.000"} / gram (AED)`, value: fmt(totalBeforeVat), bold: false, show: true },
+                { label: "Total Amount Before VAT (AED)", value: fmt(totalBeforeVat), bold: false, show: vatAmount > 0 },
+                { label: `Total VAT Amount (${vatRate}%) (AED)`, value: fmt(vatAmount), bold: false, show: vatAmount > 0 },
+                { label: "Round Off Discount (AED)", value: fmt(roundOffDiscount), bold: false, show: true },
+              ].filter(row => row.show).map(({ label, value }) => (
                 <tr key={label}>
                   <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>{label}</td>
                   <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold", minWidth: "80px" }}>{value}</td>
