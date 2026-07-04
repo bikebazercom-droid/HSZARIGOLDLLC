@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboard, getGetDashboardQueryKey,
   useGetMonthlySales, getGetMonthlySalesQueryKey,
   useGetCategorySummary, getGetCategorySummaryQueryKey,
+  useGetSettings, getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus, Filter } from "lucide-react";
+import { Plus, Filter, FileDown } from "lucide-react";
+import { useAuth } from "@/context/auth";
+
+const NAVY = "#1e3a5f";
+const GOLD = "#c8a43a";
 
 function fmtAED(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -24,11 +29,24 @@ function fmtGrams(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
+function fmtDisplayDate(isoDate: string): string {
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return format(d, "dd/MM/yyyy");
+}
+
 function CategorySalesSummary() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
   const [appliedRange, setAppliedRange] = useState({ startDate: todayStr, endDate: todayStr });
+  const [isDownloading, setIsDownloading] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const { user } = useAuth();
+  const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
+  const companyName = settings?.companyName ?? "HAZARI GOLD L.L.C";
+  const companyTrn = settings?.trn ?? "105301944200003";
 
   const { data, isLoading, isFetching } = useGetCategorySummary(appliedRange, {
     query: { queryKey: getGetCategorySummaryQueryKey(appliedRange) },
@@ -36,6 +54,26 @@ function CategorySalesSummary() {
 
   const handleGenerate = () => {
     setAppliedRange({ startDate, endDate });
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!reportRef.current || !data) return;
+    setIsDownloading(true);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: `Category-Sales-Summary_${appliedRange.startDate}_to_${appliedRange.endDate}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(reportRef.current)
+        .save();
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -69,6 +107,10 @@ function CategorySalesSummary() {
             <Filter className="w-4 h-4 mr-1.5" />
             {isFetching ? "Generating..." : "Generate Report"}
           </Button>
+          <Button size="sm" variant="outline" onClick={handleDownloadPdf} disabled={!data || isDownloading}>
+            <FileDown className="w-4 h-4 mr-1.5" />
+            {isDownloading ? "Preparing PDF..." : "Download PDF Report"}
+          </Button>
         </div>
 
         {isLoading ? (
@@ -101,6 +143,87 @@ function CategorySalesSummary() {
           </div>
         )}
       </CardContent>
+
+      {/* Hidden printable A4 template used for PDF generation via html2pdf.js */}
+      <div style={{ position: "fixed", top: 0, left: "-9999px", width: "190mm" }}>
+        <div
+          ref={reportRef}
+          style={{
+            width: "190mm",
+            fontFamily: "Arial, sans-serif",
+            color: "#222",
+            background: "#fff",
+            padding: "6mm 8mm",
+            boxSizing: "border-box",
+          }}
+        >
+          {/* Gold top border */}
+          <div style={{ height: "4px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, marginBottom: "10px" }} />
+
+          {/* Header: shop branding */}
+          <div style={{ textAlign: "center", marginBottom: "10px", borderBottom: `2px solid ${NAVY}`, paddingBottom: "8px" }}>
+            <div style={{ fontSize: "18px", fontWeight: "bold", color: NAVY, letterSpacing: "0.5px" }}>{companyName}</div>
+            <div style={{ fontSize: "10px", color: "#555", marginTop: "2px" }}>TRN: {companyTrn}</div>
+            <div style={{ fontSize: "9px", color: "#777", marginTop: "2px" }}>
+              Date of Report Generation: {format(new Date(), "dd/MM/yyyy hh:mm a")}
+            </div>
+          </div>
+
+          {/* Report title + selected period */}
+          <div style={{ textAlign: "center", marginBottom: "14px" }}>
+            <div style={{ fontSize: "14px", fontWeight: "bold", color: NAVY, letterSpacing: "1px", marginBottom: "4px" }}>
+              CATEGORY-WISE SALES SUMMARY REPORT
+            </div>
+            <div style={{ fontSize: "11px", color: "#333" }}>
+              Sales Report Period: {fmtDisplayDate(appliedRange.startDate)} to {fmtDisplayDate(appliedRange.endDate)}
+            </div>
+          </div>
+
+          {/* Summary table */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+            <thead>
+              <tr>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "left", padding: "8px 10px", border: `1px solid ${NAVY}` }}>
+                  Category
+                </th>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 10px", border: `1px solid ${NAVY}` }}>
+                  Total Grams Sold (g)
+                </th>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 10px", border: `1px solid ${NAVY}` }}>
+                  Total Revenue (AED)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.rows.map((row, idx) => (
+                <tr key={row.category} style={{ background: idx % 2 === 0 ? "#fff" : "#f7f7f7" }}>
+                  <td style={{ padding: "7px 10px", border: "1px solid #ddd" }}>{row.label}</td>
+                  <td style={{ padding: "7px 10px", border: "1px solid #ddd", textAlign: "right" }}>{fmtGrams(row.grams)} g</td>
+                  <td style={{ padding: "7px 10px", border: "1px solid #ddd", textAlign: "right" }}>AED {fmtAED(row.amount)}</td>
+                </tr>
+              ))}
+              <tr style={{ background: "#eee6cf" }}>
+                <td style={{ padding: "9px 10px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>Grand Total</td>
+                <td style={{ padding: "9px 10px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right" }}>
+                  {fmtGrams(data?.grandTotalGrams)} g
+                </td>
+                <td style={{ padding: "9px 10px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right" }}>
+                  AED {fmtAED(data?.grandTotalAmount)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Footer */}
+          <div style={{
+            marginTop: "20px", paddingTop: "8px", borderTop: "1px solid #ccc",
+            display: "flex", justifyContent: "space-between", fontSize: "9px", color: "#777",
+          }}>
+            <div>Generated by {user?.fullName ?? "Admin"} on {format(new Date(), "dd/MM/yyyy hh:mm a")}</div>
+            <div>{companyName} — Category-wise Sales Summary</div>
+          </div>
+        </div>
+      </div>
     </Card>
   );
 }
