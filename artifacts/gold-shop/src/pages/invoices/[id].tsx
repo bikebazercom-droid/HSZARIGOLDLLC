@@ -368,28 +368,29 @@ export default function InvoiceDetail() {
         </div>
 
         {/* Signatures */}
-        <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between" }}>
+        <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
-            <div key={label} style={{ textAlign: "center", width: "30%", position: "relative" }}>
-              <div style={{ fontWeight: "bold", fontSize: "10px", color: NAVY, marginBottom: "4px" }}>{label}</div>
-              {label === "Authorised Signature" && settings?.stampSignatureUrl && (
-                <img
-                  src={settings.stampSignatureUrl}
-                  alt="Authorized stamp and signature"
-                  style={{
-                    display: "block",
-                    width: "170px",
-                    maxWidth: "100%",
-                    height: "auto",
-                    objectFit: "contain",
-                    margin: "0 auto -15px",
-                    position: "relative",
-                    zIndex: 1,
-                  }}
-                />
-              )}
-              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "9px", color: "#888" }}>
-                ____________________
+            <div key={label} style={{ textAlign: "center", width: "30%" }}>
+              {/* Fixed-height slot keeps the row height stable no matter the
+                  uploaded stamp's natural resolution — prevents the column
+                  from stretching and pushing the line/label far down. */}
+              <div style={{ height: "56px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                {label === "Authorised Signature" && settings?.stampSignatureUrl && (
+                  <img
+                    src={settings.stampSignatureUrl}
+                    alt="Authorized stamp and signature"
+                    style={{
+                      width: "170px",
+                      maxWidth: "100%",
+                      maxHeight: "56px",
+                      objectFit: "contain",
+                      marginBottom: "-10px",
+                    }}
+                  />
+                )}
+              </div>
+              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY }}>
+                {label}
               </div>
             </div>
           ))}
