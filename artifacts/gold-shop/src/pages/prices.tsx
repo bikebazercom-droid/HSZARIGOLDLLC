@@ -268,9 +268,9 @@ export default function Prices() {
 
   const metals = [
     { label: "Gold Jewelry", sublabel: "22K / 916", icon: "💍", color: GOLD, fieldKey: "goldJewelryRate" as const },
-    { label: "GOLD", sublabel: "24K / 999.9", icon: "🥇", color: "#d4aa00", fieldKey: "goldBullionRate" as const },
-    { label: "TT BAR", sublabel: "24K / 999.9", icon: "📊", color: "#e67e22", fieldKey: "ttBarRate" as const },
-    { label: "KG BAR", sublabel: "24K / 999.9", icon: "🏅", color: "#f39c12", fieldKey: "kgBarRate" as const },
+    { label: "GOLD", sublabel: "24K / 995.0", icon: "🥇", color: "#d4aa00", fieldKey: "goldBullionRate" as const },
+    { label: "TT BAR", sublabel: "24K / 995.0", icon: "📊", color: "#e67e22", fieldKey: "ttBarRate" as const },
+    { label: "KG BAR", sublabel: "24K / 995.0", icon: "🏅", color: "#f39c12", fieldKey: "kgBarRate" as const },
     { label: "Silver", sublabel: "Pure Silver", icon: "🪙", color: "#95a5a6", fieldKey: "silverPricePerGram" as const },
   ];
 
