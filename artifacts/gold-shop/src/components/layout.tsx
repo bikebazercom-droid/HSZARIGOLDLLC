@@ -146,7 +146,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                className="w-full justify-start gap-2 text-[#DFB15B] hover:text-[#f0cc7a] hover:bg-sidebar-accent transition-colors"
                 onClick={() => { setDrawerOpen(false); logout(); }}
               >
                 <LogOut className="w-4 h-4" />
@@ -207,7 +207,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+            className="w-full justify-start gap-2 text-[#DFB15B] hover:text-[#f0cc7a] hover:bg-sidebar-accent transition-colors"
             onClick={logout}
           >
             <LogOut className="w-4 h-4" />
