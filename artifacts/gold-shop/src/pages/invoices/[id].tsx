@@ -371,18 +371,20 @@ export default function InvoiceDetail() {
         <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between" }}>
           {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
             <div key={label} style={{ textAlign: "center", width: "30%", position: "relative" }}>
-              <div style={{ fontWeight: "bold", fontSize: "10px", color: NAVY, marginBottom: "28px" }}>{label}</div>
+              <div style={{ fontWeight: "bold", fontSize: "10px", color: NAVY, marginBottom: "4px" }}>{label}</div>
               {label === "Authorised Signature" && settings?.stampSignatureUrl && (
                 <img
                   src={settings.stampSignatureUrl}
                   alt="Authorized stamp and signature"
                   style={{
-                    position: "absolute",
-                    bottom: "18px",
-                    right: 0,
-                    maxHeight: "48px",
+                    display: "block",
+                    width: "170px",
                     maxWidth: "100%",
+                    height: "auto",
                     objectFit: "contain",
+                    margin: "0 auto -15px",
+                    position: "relative",
+                    zIndex: 1,
                   }}
                 />
               )}
