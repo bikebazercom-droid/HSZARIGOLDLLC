@@ -1,0 +1,1 @@
+- [Raw PDF/file download routes](raw-download-routes.md) — Express routes for binary file downloads intentionally live outside the OpenAPI spec; frontend hits them directly via `window.open`.

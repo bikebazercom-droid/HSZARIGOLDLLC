@@ -12,9 +12,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus, CalendarRange, Gem, CircleDollarSign, Boxes, Wallet, Scale } from "lucide-react";
+import { Plus, CalendarRange, Gem, CircleDollarSign, Boxes, Wallet, Scale, FileDown } from "lucide-react";
+
+type AnalyticsCategory = "all" | "gold_jewelry" | "tt_bar" | "kg_bar";
+
+const CATEGORY_LABELS: Record<AnalyticsCategory, string> = {
+  all: "All Items",
+  gold_jewelry: "Gold Jewelry",
+  tt_bar: "TT Bar",
+  kg_bar: "Kilo Bar / 9950",
+};
 
 function fmtAED(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -79,11 +89,37 @@ export default function Dashboard() {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const [fromDate, setFromDate] = useState(toDateInputValue(startOfMonth));
   const [toDate, setToDate] = useState(toDateInputValue(now));
+  const [itemCategory, setItemCategory] = useState<AnalyticsCategory>("all");
 
   const analyticsParams = { startDate: fromDate, endDate: toDate };
   const { data: analytics, isLoading: isAnalyticsLoading, isError: isAnalyticsError } = useGetSalesAnalytics(analyticsParams, {
     query: { queryKey: getGetSalesAnalyticsQueryKey(analyticsParams) },
   });
+
+  const selectedGrams = analytics
+    ? itemCategory === "all"
+      ? analytics.totalGrams
+      : itemCategory === "gold_jewelry"
+        ? analytics.goldJewelryGrams
+        : itemCategory === "tt_bar"
+          ? analytics.ttBarGrams
+          : analytics.kgBarGrams
+    : undefined;
+
+  const selectedRevenue = analytics
+    ? itemCategory === "all"
+      ? analytics.goldJewelryAmount + analytics.ttBarAmount + analytics.kgBarAmount
+      : itemCategory === "gold_jewelry"
+        ? analytics.goldJewelryAmount
+        : itemCategory === "tt_bar"
+          ? analytics.ttBarAmount
+          : analytics.kgBarAmount
+    : undefined;
+
+  function handleDownloadPdf() {
+    const params = new URLSearchParams({ category: itemCategory, startDate: fromDate, endDate: toDate });
+    window.open(`/api/dashboard/sales-analytics/pdf?${params.toString()}`, "_blank");
+  }
 
   if (isLoading || isMonthlySalesLoading) {
     return (
@@ -133,6 +169,20 @@ export default function Dashboard() {
             </CardTitle>
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1">
+                <Label htmlFor="item-category" className="text-[11px] text-muted-foreground">Item</Label>
+                <Select value={itemCategory} onValueChange={(v) => setItemCategory(v as AnalyticsCategory)}>
+                  <SelectTrigger id="item-category" className="h-8 w-[170px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Items</SelectItem>
+                    <SelectItem value="gold_jewelry">Gold Jewelry</SelectItem>
+                    <SelectItem value="tt_bar">TT Bar</SelectItem>
+                    <SelectItem value="kg_bar">Kilo Bar / 9950</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
                 <Label htmlFor="from-date" className="text-[11px] text-muted-foreground">From Date</Label>
                 <Input
                   id="from-date"
@@ -155,6 +205,16 @@ export default function Dashboard() {
                   className="h-8 w-[150px]"
                 />
               </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={handleDownloadPdf}
+                disabled={isAnalyticsLoading || isAnalyticsError || !analytics}
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                Download PDF Report
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -167,6 +227,35 @@ export default function Dashboard() {
             <div className="py-6 text-center text-sm text-muted-foreground">Failed to load sales analytics for this range.</div>
           ) : (
             <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-[#1e3a5f] to-[#2a4d75] text-white">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                      <Scale className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                        Total Grams Sold ({CATEGORY_LABELS[itemCategory]})
+                      </div>
+                      <div className="text-2xl font-extrabold leading-tight">{fmtGrams(selectedGrams)}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-[#c8a43a] to-[#a9862a] text-white">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                        Total Revenue Generated ({CATEGORY_LABELS[itemCategory]})
+                      </div>
+                      <div className="text-2xl font-extrabold leading-tight">AED {fmtAED(selectedRevenue)}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <AnalyticsCard
                   title="Gold Jewelry"

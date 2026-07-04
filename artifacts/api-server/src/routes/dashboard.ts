@@ -248,6 +248,153 @@ router.get("/dashboard/sales-analytics", async (req, res): Promise<void> => {
   );
 });
 
+// Shared helper for date-range + category filtered invoice lookups (Sales Analytics filter box)
+async function getInvoicesForDateRangeAndCategory(category: string, startDate: Date, endDateExclusive: Date) {
+  const mainCategories = ["gold_jewelry", "tt_bar", "kg_bar"];
+
+  const allInvoices = await db
+    .select()
+    .from(invoicesTable)
+    .where(gte(invoicesTable.createdAt, startDate))
+    .orderBy(desc(invoicesTable.createdAt));
+
+  const inRange = allInvoices.filter(inv => inv.createdAt < endDateExclusive);
+
+  const rows = await Promise.all(
+    inRange.map(async (inv) => {
+      const allItems = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
+      const matchingItems = category === "all"
+        ? allItems.filter(i => mainCategories.includes(i.category ?? ""))
+        : allItems.filter(i => i.category === category);
+      return { inv, items: matchingItems };
+    })
+  );
+
+  return rows.filter(({ items }) => items.length > 0);
+}
+
+// Sales Analytics PDF export: /api/dashboard/sales-analytics/pdf?category=all|gold_jewelry|tt_bar|kg_bar&startDate=&endDate=
+router.get("/dashboard/sales-analytics/pdf", async (req, res): Promise<void> => {
+  const category = (req.query.category as string) || "all";
+  const startDateParam = req.query.startDate as string;
+  const endDateParam = req.query.endDate as string;
+
+  if (!startDateParam || !endDateParam) {
+    res.status(400).json({ error: "startDate and endDate are required" });
+    return;
+  }
+
+  const startDate = new Date(startDateParam);
+  const endDateExclusive = new Date(endDateParam);
+  endDateExclusive.setDate(endDateExclusive.getDate() + 1);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDateExclusive.getTime())) {
+    res.status(400).json({ error: "Invalid startDate or endDate" });
+    return;
+  }
+
+  const rows = await getInvoicesForDateRangeAndCategory(category, startDate, endDateExclusive);
+  const now = new Date();
+
+  const catLabel = categoryLabel[category] ?? category;
+  const filename = `hazari-gold-sales-analytics-${catLabel.toLowerCase().replace(/ /g, "-")}-${startDateParam}-to-${endDateParam}.pdf`;
+
+  const totalGrams = rows.reduce((s, { items }) =>
+    s + items.reduce((si, it) => si + (it.weight ? Number(it.weight) : 0), 0), 0);
+  const totalAmount = rows.reduce((s, { items }) =>
+    s + items.reduce((si, it) => si + Number(it.totalPrice), 0), 0);
+
+  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  doc.pipe(res);
+
+  const NAVY = "#1e3a5f";
+  const GOLD = "#c8a43a";
+  const LIGHT = "#f5f3ee";
+
+  // Company header
+  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
+  doc.fillColor(GOLD).fontSize(22).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
+  doc.fillColor("#aac4e8").fontSize(10).font("Helvetica").text("Management Portal — Sales Analytics Report", 40, 50);
+  doc.fillColor("white").fontSize(9).text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 66);
+
+  // Selected filter parameters
+  doc.rect(40, 100, doc.page.width - 80, 36).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(
+    `Item: ${catLabel}   |   From: ${startDateParam}   To: ${endDateParam}`,
+    52, 112
+  );
+
+  // Summary
+  doc.moveDown(3.2);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(
+    `Invoices: ${rows.length}   |   Total Grams Sold: ${totalGrams.toFixed(2)} g   |   Total Revenue Generated: AED ${totalAmount.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
+    { align: "right" }
+  );
+  doc.moveDown(0.5);
+
+  const cols = { no: 40, date: 110, customer: 195, method: 300, category: 360, weight: 435, total: 480 };
+  const colWidths = { no: 65, date: 80, customer: 100, method: 55, category: 70, weight: 42, total: 65 };
+  const tableTop = doc.y;
+
+  doc.rect(40, tableTop, doc.page.width - 80, 18).fill(NAVY);
+  doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
+  doc.text("Invoice #", cols.no, tableTop + 5, { width: colWidths.no });
+  doc.text("Date", cols.date, tableTop + 5, { width: colWidths.date });
+  doc.text("Customer", cols.customer, tableTop + 5, { width: colWidths.customer });
+  doc.text("Method", cols.method, tableTop + 5, { width: colWidths.method });
+  doc.text("Category", cols.category, tableTop + 5, { width: colWidths.category });
+  doc.text("Wt.(g)", cols.weight, tableTop + 5, { width: colWidths.weight, align: "right" });
+  doc.text("Total AED", cols.total, tableTop + 5, { width: colWidths.total, align: "right" });
+
+  let y = tableTop + 18;
+  let rowIndex = 0;
+
+  for (const { inv, items } of rows) {
+    const rowH = 16;
+    if (y + rowH > doc.page.height - 60) { doc.addPage(); y = 40; }
+    const bg = rowIndex % 2 === 0 ? "white" : LIGHT;
+    doc.rect(40, y, doc.page.width - 80, rowH).fill(bg);
+
+    const date = new Date(inv.createdAt).toLocaleDateString("en-AE");
+    const customer = (inv.customerName ?? "Walk-in").substring(0, 16);
+    const method = inv.paymentMethod.replace("_", " ");
+    const cats = [...new Set(items.map(i => categoryLabel[i.category ?? ""] ?? i.category))].join(", ") || "—";
+    const invGrams = items.reduce((s, i) => s + (i.weight ? Number(i.weight) : 0), 0);
+    const invAmount = items.reduce((s, i) => s + Number(i.totalPrice), 0);
+
+    doc.fillColor("#1a1a1a").font("Helvetica").fontSize(7.5);
+    doc.text(inv.invoiceNumber, cols.no, y + 4, { width: colWidths.no });
+    doc.text(date, cols.date, y + 4, { width: colWidths.date });
+    doc.text(customer, cols.customer, y + 4, { width: colWidths.customer });
+    doc.text(method, cols.method, y + 4, { width: colWidths.method });
+    doc.text(cats.substring(0, 16), cols.category, y + 4, { width: colWidths.category });
+    doc.text(invGrams > 0 ? invGrams.toFixed(2) : "—", cols.weight, y + 4, { width: colWidths.weight, align: "right" });
+    doc.fillColor(NAVY).font("Helvetica-Bold");
+    doc.text(invAmount.toLocaleString("en-AE", { minimumFractionDigits: 2 }), cols.total, y + 4, { width: colWidths.total, align: "right" });
+
+    y += rowH;
+    rowIndex++;
+  }
+
+  if (rows.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(10).text(
+      "No invoices found for this filter.",
+      40, y + 10, { align: "center", width: doc.page.width - 80 }
+    );
+  }
+
+  doc.rect(40, y + 8, doc.page.width - 80, 1).fill(GOLD);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9)
+    .text(
+      `Total Grams Sold: ${totalGrams.toFixed(2)} g   |   Total Revenue Generated: AED ${totalAmount.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
+      40, y + 14, { align: "right", width: doc.page.width - 80 }
+    );
+
+  doc.end();
+});
+
 // Shared helper for download endpoints
 async function getInvoicesForDownload(category: string, period: string) {
   const now = new Date();
