@@ -167,8 +167,8 @@ export default function NewInvoice() {
   // Frozen snapshot of the dashboard rate for this draft. Captured ONCE when
   // prices first load, then never auto-updates — even if someone edits the
   // Prices page in another tab while this draft is open. This is the "lock-in"
-  // the billing screen relies on: only a manual override or an explicit
-  // "Re-sync" click can change what an in-progress invoice uses.
+  // the billing screen relies on: only a manual override (typing, or selecting
+  // an item's category) can change what an in-progress invoice uses.
   const [lockedDashboardRate, setLockedDashboardRate] = useState<number | null>(null);
   useEffect(() => {
     if (lockedDashboardRate === null && prices?.goldPricePerGram != null) {
@@ -176,20 +176,8 @@ export default function NewInvoice() {
     }
   }, [prices, lockedDashboardRate]);
 
-  const dashboardRateChanged =
-    lockedDashboardRate !== null &&
-    prices?.goldPricePerGram != null &&
-    prices.goldPricePerGram !== lockedDashboardRate;
-
   // metalRate follows the LOCKED dashboard snapshot unless manually overridden.
   const metalRate = metalRateOverride ?? lockedDashboardRate ?? prices?.goldPricePerGram ?? 0;
-
-  const resyncFromDashboard = () => {
-    if (prices?.goldPricePerGram != null) {
-      setLockedDashboardRate(prices.goldPricePerGram);
-      setMetalRateOverride(null);
-    }
-  };
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -697,26 +685,6 @@ export default function NewInvoice() {
                     </button>
                   )}
                 </div>
-                {lockedDashboardRate != null && metalRateOverride === null && (
-                  <p className="text-xs text-emerald-600 font-medium">✓ Dashboard Rate: AED {lockedDashboardRate}/g</p>
-                )}
-                {lockedDashboardRate != null && metalRateOverride !== null && (
-                  <p className="text-xs text-amber-600">Dashboard Rate: AED {lockedDashboardRate}/g (overridden)</p>
-                )}
-                {dashboardRateChanged && (
-                  <div className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5">
-                    <p className="text-[11px] text-amber-700 leading-tight">
-                      Dashboard now shows AED {prices?.goldPricePerGram}/g. This draft is still locked to AED {lockedDashboardRate}/g.
-                    </p>
-                    <button
-                      type="button"
-                      className="text-[11px] font-medium text-amber-700 hover:underline whitespace-nowrap"
-                      onClick={resyncFromDashboard}
-                    >
-                      Re-sync
-                    </button>
-                  </div>
-                )}
               </div>
 
               <div className="space-y-2">
