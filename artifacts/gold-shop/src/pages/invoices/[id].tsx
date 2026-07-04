@@ -365,7 +365,7 @@ export default function InvoiceDetail() {
           <table style={{ width: "58%", borderCollapse: "collapse", fontSize: "10px" }}>
             <tbody>
               {[
-                { label: `GOLD VALUE @ ${metalRate > 0 ? metalRate.toFixed(3) : "0.000"} / GOZ (AED)`, value: fmt(totalBeforeVat), bold: false },
+                { label: `GOLD VALUE @ ${metalRate > 0 ? metalRate.toFixed(3) : "0.000"} / gram (AED)`, value: fmt(totalBeforeVat), bold: false },
                 { label: "Total Amount Before VAT (AED)", value: fmt(totalBeforeVat), bold: false },
                 { label: `Total VAT Amount (${vatRate}%) (AED)`, value: fmt(vatAmount), bold: false },
                 { label: "Round Off Discount (AED)", value: fmt(roundOffDiscount), bold: false },

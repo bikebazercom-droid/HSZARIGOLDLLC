@@ -120,8 +120,8 @@ function calcItem(item: LineItem, globalMetalRate: number): LineItem {
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
     ? roundTo(item.grossWeight * purityFactor, 3)
     : item.pureWeight;
-  // Gold Value = Gross Weight × live Metal Rate (never a mock/fallback constant)
-  const goldValue = roundTo(item.grossWeight * globalMetalRate, 2);
+  // Gold Value = Pure Weight × live Metal Rate, priced per gram (never a mock/fallback constant)
+  const goldValue = roundTo(pureWeight * globalMetalRate, 2);
   // Item Total = Gold Value + Making Amount
   const totalPrice = roundTo(goldValue + item.makingAmt, 2);
   return { ...item, pureWeight, totalPrice };
@@ -268,11 +268,12 @@ export default function NewInvoice() {
   }, [metalRate]);
 
   // Totals following the formula:
-  // Gold Value = Σ(Gross Weight × Metal Rate)
+  // Gold Value = Σ(Pure Weight × Metal Rate per gram)
   // Total Before VAT = Gold Value + Σ(Making Amount)
   const totalGrossWeight = items.reduce((s, i) => s + (i.grossWeight || 0), 0);
+  const totalPureWeight = items.reduce((s, i) => s + (i.pureWeight || 0), 0);
   // Gold Value always ties to the live/override Metal Rate — never a mock constant.
-  const totalGoldValue = roundTo(totalGrossWeight * metalRate, 2);
+  const totalGoldValue = roundTo(totalPureWeight * metalRate, 2);
   const totalMakingAmount = items.reduce((s, i) => s + (i.makingAmt || 0), 0);
   const subtotal = roundTo(totalGoldValue + totalMakingAmount, 2);
   const totalBeforeVat = Math.max(0, subtotal);
@@ -721,7 +722,7 @@ export default function NewInvoice() {
               <div className="border rounded-md overflow-hidden">
                 <div className="p-3 space-y-2 text-sm">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Gold Value ({fmt(totalGrossWeight)}g × {fmt(metalRate)})</span>
+                    <span>Gold Value ({fmt(totalPureWeight)}g pure × {fmt(metalRate)}/g)</span>
                     <span>{fmt(totalGoldValue)} AED</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
