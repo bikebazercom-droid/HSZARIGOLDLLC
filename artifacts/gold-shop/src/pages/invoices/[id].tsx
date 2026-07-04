@@ -129,10 +129,10 @@ export default function InvoiceDetail() {
     const html2pdf = (await import("html2pdf.js")).default;
     html2pdf()
       .set({
-        margin: 0,
+        margin: [12, 10, 12, 10],
         filename: `Invoice-${invoice.invoiceNumber}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       })
       .from(invoiceRef.current)
@@ -140,7 +140,7 @@ export default function InvoiceDetail() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 print:p-0 print:m-0 print:max-w-none">
+    <div className="max-w-4xl mx-auto pb-20 print:p-0 print:m-0" style={{ maxWidth: "210mm" }}>
       <div className="flex justify-between items-center mb-6 no-print">
         <div className="flex items-center gap-4">
           <Link href="/invoices">
@@ -443,9 +443,18 @@ export default function InvoiceDetail() {
 
       <style>{`
         @media print {
+          @page {
+            size: A4;
+            margin: 12mm 10mm 12mm 10mm;
+          }
           .no-print { display: none !important; }
-          body { background: white !important; margin: 0; padding: 0; }
-          @page { margin: 10mm; }
+          body {
+            background: white !important;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
       `}</style>
     </div>
