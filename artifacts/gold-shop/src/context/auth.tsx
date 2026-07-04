@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { onSessionExpired } from "@/lib/session-events";
 
 export type UserRole = "admin" | "staff";
 
@@ -39,6 +40,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => { fetchMe(); }, [fetchMe]);
+
+  // A 401 from any API call means the server-side session is gone (expired,
+  // or the dev server restarted and lost its in-memory session store). There
+  // is no token to refresh — just drop back to the login screen immediately
+  // instead of leaving the user staring at a stale, now-broken form.
+  useEffect(() => onSessionExpired(() => setUser(null)), []);
 
   const login = useCallback(async (mobile: string, pin: string, role: string) => {
     const res = await fetch("/api/auth/login", {

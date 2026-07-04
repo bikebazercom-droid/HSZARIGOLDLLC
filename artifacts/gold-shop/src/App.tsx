@@ -1,10 +1,11 @@
 import React from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/context/auth";
 import { AppLayout } from "@/components/layout";
+import { emitSessionExpired } from "@/lib/session-events";
 
 import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -21,6 +22,16 @@ import Prices from "@/pages/prices";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
+// A 401 from any query or mutation means the server-side session is gone
+// (expired, or the API server restarted and dropped its in-memory session
+// store). There's no token to re-attach — bounce straight back to the login
+// screen instead of leaving a form showing a raw "Unauthorized" error.
+function handleQueryError(error: unknown) {
+  if ((error as { status?: number } | null)?.status === 401) {
+    emitSessionExpired();
+  }
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -30,6 +41,8 @@ const queryClient = new QueryClient({
       },
     },
   },
+  queryCache: new QueryCache({ onError: handleQueryError }),
+  mutationCache: new MutationCache({ onError: handleQueryError }),
 });
 
 function StaffRouter() {
