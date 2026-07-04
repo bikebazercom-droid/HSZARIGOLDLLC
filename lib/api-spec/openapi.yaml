@@ -79,30 +79,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardStats"
 
-  /dashboard/sales-analytics:
-    get:
-      operationId: getSalesAnalytics
-      tags: [dashboard]
-      summary: Get date-range filtered sales analytics by category
-      parameters:
-        - name: startDate
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: endDate
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Sales analytics for the given date range
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SalesAnalytics"
-
   /prices:
     get:
       operationId: getPrices
@@ -550,50 +526,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Invoice"
-
-    SalesAnalytics:
-      type: object
-      required:
-        - startDate
-        - endDate
-        - totalRevenue
-        - totalGrams
-        - goldJewelryCount
-        - goldJewelryGrams
-        - goldJewelryAmount
-        - ttBarCount
-        - ttBarGrams
-        - ttBarAmount
-        - kgBarCount
-        - kgBarGrams
-        - kgBarAmount
-      properties:
-        startDate:
-          type: string
-        endDate:
-          type: string
-        totalRevenue:
-          type: number
-        totalGrams:
-          type: number
-        goldJewelryCount:
-          type: integer
-        goldJewelryGrams:
-          type: number
-        goldJewelryAmount:
-          type: number
-        ttBarCount:
-          type: integer
-        ttBarGrams:
-          type: number
-        ttBarAmount:
-          type: number
-        kgBarCount:
-          type: integer
-        kgBarGrams:
-          type: number
-        kgBarAmount:
-          type: number
 
     Prices:
       type: object

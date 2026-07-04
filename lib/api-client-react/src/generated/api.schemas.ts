@@ -140,22 +140,6 @@ export interface DashboardStats {
   recentInvoices: Invoice[];
 }
 
-export interface SalesAnalytics {
-  startDate: string;
-  endDate: string;
-  totalRevenue: number;
-  totalGrams: number;
-  goldJewelryCount: number;
-  goldJewelryGrams: number;
-  goldJewelryAmount: number;
-  ttBarCount: number;
-  ttBarGrams: number;
-  ttBarAmount: number;
-  kgBarCount: number;
-  kgBarGrams: number;
-  kgBarAmount: number;
-}
-
 export interface CustomDescription {
   name: string;
   rate: number;
@@ -324,11 +308,6 @@ export interface MonthlySale {
   card: number;
   bankTransfer: number;
 }
-
-export type GetSalesAnalyticsParams = {
-startDate: string;
-endDate: string;
-};
 
 export type ListCustomersParams = {
 search?: string;
