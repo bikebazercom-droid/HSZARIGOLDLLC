@@ -38,17 +38,33 @@ interface LineItem {
 }
 
 const PURITY_PRESETS = [
+  { label: "24K (999.9)", value: "24K (999.9)", decimal: 0.9999 },
   { label: "24K (995.0)", value: "24K (995.0)", decimal: 0.9950 },
-  { label: "22K (916.0)", value: "22K (916.0)", decimal: 0.9160 },
+  { label: "22K (916.0)", value: "22K (916.0)", decimal: 0.9167 },
   { label: "21K (875.0)", value: "21K (875.0)", decimal: 0.8750 },
   { label: "18K (750.0)", value: "18K (750.0)", decimal: 0.7500 },
 ];
 
+// Standard gold-market purity factors. Presets are matched exactly first;
+// custom/typed values fall back to numeric parsing.
 function parsePurity(purity: string): number {
+  const preset = PURITY_PRESETS.find(p => p.value === purity);
+  if (preset) return preset.decimal;
   const match = purity.match(/\((\d+\.?\d*)\)/);
-  if (match) return parseFloat(match[1]) / 1000;
+  if (match) {
+    const karatValue = parseFloat(match[1]);
+    if (karatValue === 999.9 || karatValue === 999) return 0.9999;
+    if (karatValue === 995 || karatValue === 995.0) return 0.9950;
+    if (karatValue === 916 || karatValue === 916.0) return 0.9167;
+    return karatValue / 1000;
+  }
   const decimal = parseFloat(purity);
-  if (!isNaN(decimal) && decimal <= 1) return decimal;
+  if (!isNaN(decimal) && decimal <= 1) {
+    if (decimal === 0.999) return 0.9999;
+    if (decimal === 0.995) return 0.995;
+    if (decimal === 0.916) return 0.9167;
+    return decimal;
+  }
   if (!isNaN(decimal) && decimal > 1) return decimal / 1000;
   return 0;
 }
@@ -95,8 +111,9 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
 
 function calcItem(item: LineItem, globalMetalRate: number): LineItem {
   const purityFactor = item.purity ? parsePurity(item.purity) : 0;
+  // Pure Wt. = Gross Wt. × Purity Factor, rounded to 3 decimal places (standard gold-market convention)
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
-    ? parseFloat((item.grossWeight * purityFactor).toFixed(4))
+    ? parseFloat((item.grossWeight * purityFactor).toFixed(3))
     : item.pureWeight;
   // Gold Value = Gross Weight × Live Metal Rate
   const goldValue = parseFloat((item.grossWeight * globalMetalRate).toFixed(2));
