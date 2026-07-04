@@ -370,34 +370,33 @@ export default function InvoiceDetail() {
         {/* Signatures */}
         <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
-            <div key={label} style={{ textAlign: "center", width: "30%" }}>
-              {/* Fixed-height slot keeps the row height stable no matter the
-                  uploaded stamp's natural resolution — prevents the column
-                  from stretching and pushing the line/label far down.
-                  IMPORTANT: the <img> itself must only constrain width (with
-                  height: auto) — html2canvas (used for PDF export) does not
-                  reliably honor `object-fit`, so capping the image's own
-                  height squashes it flat in the exported PDF even though it
-                  looks fine in the live browser preview. The wrapper below
-                  uses overflow: hidden purely as a safety clip, never to
-                  force a smaller aspect ratio onto the image. */}
-              <div style={{ height: "150px", overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div key={label} style={{ width: "30%" }}>
+              {/* Relative context: the stamp is absolutely positioned within
+                  this block so it can be perfectly centered (left: 50% +
+                  translateX(-50%)) and overlap the line/label from above,
+                  regardless of the column's text-align/flex settings.
+                  padding-top reserves the vertical space the stamp needs so
+                  it doesn't overlap content in the row above. */}
+              <div style={{ position: "relative", paddingTop: label === "Authorised Signature" ? "150px" : 0 }}>
                 {label === "Authorised Signature" && settings?.stampSignatureUrl && (
                   <img
                     src={settings.stampSignatureUrl}
                     alt="Authorized stamp and signature"
                     style={{
-                      width: "160px",
+                      position: "absolute",
+                      bottom: "5px",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: "170px",
                       maxWidth: "100%",
                       height: "auto",
-                      objectFit: "contain",
-                      marginBottom: "-10px",
+                      zIndex: 10,
                     }}
                   />
                 )}
-              </div>
-              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY }}>
-                {label}
+                <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY, textAlign: "center" }}>
+                  {label}
+                </div>
               </div>
             </div>
           ))}
