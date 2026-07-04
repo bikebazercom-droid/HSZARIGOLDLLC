@@ -371,32 +371,26 @@ export default function InvoiceDetail() {
         <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
             <div key={label} style={{ width: "30%" }}>
-              {/* Relative context: the stamp is absolutely positioned within
-                  this block so it can be perfectly centered (left: 50% +
-                  translateX(-50%)) and overlap the line/label from above,
-                  regardless of the column's text-align/flex settings.
-                  padding-top reserves the vertical space the stamp needs so
-                  it doesn't overlap content in the row above. */}
-              <div style={{ position: "relative", paddingTop: label === "Authorised Signature" ? "150px" : 0 }}>
-                {label === "Authorised Signature" && settings?.stampSignatureUrl && (
-                  <img
-                    src={settings.stampSignatureUrl}
-                    alt="Authorized stamp and signature"
-                    style={{
-                      position: "absolute",
-                      bottom: "5px",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: "170px",
-                      maxWidth: "100%",
-                      height: "auto",
-                      zIndex: 10,
-                    }}
-                  />
-                )}
-                <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY, textAlign: "center" }}>
-                  {label}
-                </div>
+              {/* Standard normal-flow block centering — no position: absolute.
+                  The stamp is rendered before the line/label as a normal
+                  block element with margin: 0 auto, so it can never overflow
+                  or shove sibling content out of the container. A small
+                  negative margin-bottom pulls it down to overlap the line. */}
+              {label === "Authorised Signature" && settings?.stampSignatureUrl && (
+                <img
+                  src={settings.stampSignatureUrl}
+                  alt="Authorized stamp and signature"
+                  style={{
+                    display: "block",
+                    width: "130px",
+                    maxWidth: "100%",
+                    height: "auto",
+                    margin: "0 auto -10px",
+                  }}
+                />
+              )}
+              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY, textAlign: "center" }}>
+                {label}
               </div>
             </div>
           ))}
