@@ -15,6 +15,36 @@ import { Skeleton } from "@/components/ui/skeleton";
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
 
+// Shared style for underlined "label : value" fields (e.g. Customer Details) —
+// keeps a clean gap between text and the underline, and comfortable line spacing
+// for wrapped multi-line values (e.g. long addresses).
+const underlineFieldStyle: React.CSSProperties = {
+  borderBottom: "1px solid #aaa",
+  minWidth: 120,
+  minHeight: 16,
+  paddingBottom: "6px",
+  lineHeight: 1.5,
+};
+
+const fieldLabelCellStyle: React.CSSProperties = {
+  padding: "5px 8px",
+  fontWeight: "bold",
+  color: NAVY,
+  whiteSpace: "nowrap",
+  verticalAlign: "bottom",
+};
+
+const fieldColonCellStyle: React.CSSProperties = {
+  padding: "5px 2px",
+  color: NAVY,
+  verticalAlign: "bottom",
+};
+
+const fieldValueCellStyle: React.CSSProperties = {
+  padding: "5px 8px",
+  verticalAlign: "bottom",
+};
+
 function numberToWords(n: number): string {
   if (n === 0) return "Zero Dirhams Only";
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven",
@@ -239,50 +269,50 @@ export default function InvoiceDetail() {
             <tbody>
               {/* Row 1: Name | Address */}
               <tr>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", width: "11%", color: NAVY, whiteSpace: "nowrap" }}>Name</td>
-                <td style={{ padding: "5px 2px", width: "1%", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px", width: "30%", borderRight: `2px solid ${NAVY}` }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerName ?? ""}</div>
+                <td style={{ ...fieldLabelCellStyle, width: "11%" }}>Name</td>
+                <td style={{ ...fieldColonCellStyle, width: "1%" }}>:</td>
+                <td style={{ ...fieldValueCellStyle, width: "30%", borderRight: `2px solid ${NAVY}` }}>
+                  <div style={underlineFieldStyle}>{invoice.customerName ?? ""}</div>
                 </td>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", width: "11%", color: NAVY, whiteSpace: "nowrap" }}>Address</td>
-                <td style={{ padding: "5px 2px", width: "1%", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px" }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerAddress ?? ""}</div>
+                <td style={{ ...fieldLabelCellStyle, width: "11%" }}>Address</td>
+                <td style={{ ...fieldColonCellStyle, width: "1%" }}>:</td>
+                <td style={fieldValueCellStyle}>
+                  <div style={underlineFieldStyle}>{invoice.customerAddress ?? ""}</div>
                 </td>
               </tr>
               {/* Row 2: Phone | (empty right) */}
               <tr>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Phone</td>
-                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px", borderRight: `2px solid ${NAVY}` }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerMobile ?? ""}</div>
+                <td style={fieldLabelCellStyle}>Phone</td>
+                <td style={fieldColonCellStyle}>:</td>
+                <td style={{ ...fieldValueCellStyle, borderRight: `2px solid ${NAVY}` }}>
+                  <div style={underlineFieldStyle}>{invoice.customerMobile ?? ""}</div>
                 </td>
                 <td colSpan={3} style={{ padding: "5px 8px" }}></td>
               </tr>
               {/* Row 3: Email | Nationality */}
               <tr>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Email</td>
-                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px", borderRight: `2px solid ${NAVY}` }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerEmail ?? ""}</div>
+                <td style={fieldLabelCellStyle}>Email</td>
+                <td style={fieldColonCellStyle}>:</td>
+                <td style={{ ...fieldValueCellStyle, borderRight: `2px solid ${NAVY}` }}>
+                  <div style={underlineFieldStyle}>{invoice.customerEmail ?? ""}</div>
                 </td>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Nationality</td>
-                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px" }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{(invoice as any).customerNationality ?? ""}</div>
+                <td style={fieldLabelCellStyle}>Nationality</td>
+                <td style={fieldColonCellStyle}>:</td>
+                <td style={fieldValueCellStyle}>
+                  <div style={underlineFieldStyle}>{(invoice as any).customerNationality ?? ""}</div>
                 </td>
               </tr>
               {/* Row 4: Passport | Country */}
               <tr>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Passport</td>
-                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px", borderRight: `2px solid ${NAVY}` }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{invoice.customerPassportNumber ?? invoice.customerEmiratesId ?? ""}</div>
+                <td style={fieldLabelCellStyle}>Passport</td>
+                <td style={fieldColonCellStyle}>:</td>
+                <td style={{ ...fieldValueCellStyle, borderRight: `2px solid ${NAVY}` }}>
+                  <div style={underlineFieldStyle}>{invoice.customerPassportNumber ?? invoice.customerEmiratesId ?? ""}</div>
                 </td>
-                <td style={{ padding: "5px 8px", fontWeight: "bold", color: NAVY, whiteSpace: "nowrap" }}>Country</td>
-                <td style={{ padding: "5px 2px", color: NAVY }}>:</td>
-                <td style={{ padding: "5px 8px" }}>
-                  <div style={{ borderBottom: "1px solid #aaa", minWidth: 120, minHeight: 16 }}>{(invoice as any).customerCountry ?? ""}</div>
+                <td style={fieldLabelCellStyle}>Country</td>
+                <td style={fieldColonCellStyle}>:</td>
+                <td style={fieldValueCellStyle}>
+                  <div style={underlineFieldStyle}>{(invoice as any).customerCountry ?? ""}</div>
                 </td>
               </tr>
             </tbody>
