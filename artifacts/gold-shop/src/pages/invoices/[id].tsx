@@ -252,9 +252,9 @@ export default function InvoiceDetail() {
               { label: "Metal Rate:", value: metalRate ? `AED ${metalRate}/g` : "" },
               { label: "Place of Supply:", value: (invoice as any).placeOfSupply ?? "" },
             ].map(({ label, value }) => (
-              <div key={label} style={{ display: "flex", marginBottom: "5px", alignItems: "baseline" }}>
-                <span style={{ fontWeight: "bold", minWidth: "105px", color: NAVY }}>{label}</span>
-                <span style={{ borderBottom: "1px solid #aaa", flex: 1, minWidth: "70px", paddingLeft: "4px" }}>{value}</span>
+              <div key={label} style={{ display: "flex", marginBottom: "5px", alignItems: "baseline", lineHeight: "1.5" }}>
+                <span style={{ fontWeight: "bold", minWidth: "105px", color: NAVY, lineHeight: "1.5" }}>{label}</span>
+                <span style={{ borderBottom: "1px solid #aaa", flex: 1, minWidth: "70px", paddingLeft: "4px", paddingBottom: "4px", lineHeight: "1.5" }}>{value}</span>
               </div>
             ))}
           </div>
