@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -153,7 +153,18 @@ function LiveRateCard({
   onConnect, onDisconnect, connecting, disconnecting,
 }: LiveRateCardProps) {
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
   const busy = connecting || disconnecting;
+
+  const handleConnectClick = () => {
+    if (!apiKeyConfigured && !apiKeyInput.trim()) {
+      setWarning("Please enter a valid API Key first.");
+      return;
+    }
+    setWarning(null);
+    onConnect(apiKeyInput.trim() || undefined);
+  };
 
   return (
     <Card className="relative overflow-hidden border-2" style={{ borderColor: connected ? "#10b98155" : "#e5e7eb" }}>
@@ -177,16 +188,39 @@ function LiveRateCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!apiKeyConfigured && !connected && (
+        {connected ? (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-sm text-emerald-700">
+            <KeyRound className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium">GoldAPI.io Key: •••••••••••••••• (connected & secured)</span>
+          </div>
+        ) : (
           <div className="space-y-1.5">
-            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">GoldAPI.io API Key</div>
-            <Input
-              type="password"
-              placeholder="Paste your GoldAPI.io API key"
-              value={apiKeyInput}
-              onChange={e => setApiKeyInput(e.target.value)}
-            />
-            <p className="text-[11px] text-muted-foreground">No server-side key found — this key is used only for this request and is not stored.</p>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">GoldAPI.io Key</div>
+            <div className="relative">
+              <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type={showKey ? "text" : "password"}
+                placeholder="Enter your goldapi.io key here..."
+                value={apiKeyInput}
+                onChange={e => { setApiKeyInput(e.target.value); if (warning) setWarning(null); }}
+                className="pl-9 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(s => !s)}
+                tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {warning ? (
+              <p className="text-[11px] text-red-600 font-medium">{warning}</p>
+            ) : apiKeyConfigured ? (
+              <p className="text-[11px] text-muted-foreground">A key is already saved for this shop — leave blank to reuse it, or paste a new one to replace it.</p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">Your key is saved securely and only used to fetch live rates for your shop.</p>
+            )}
           </div>
         )}
 
@@ -228,8 +262,8 @@ function LiveRateCard({
             </Button>
           ) : (
             <Button
-              onClick={() => onConnect(apiKeyInput || undefined)}
-              disabled={busy || (!apiKeyConfigured && !apiKeyInput.trim())}
+              onClick={handleConnectClick}
+              disabled={busy}
               style={{ background: NAVY }}
               className="flex items-center gap-2"
             >

@@ -29,7 +29,7 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
-    liveApiKeyConfigured: Boolean(process.env.GOLDAPI_KEY),
+    liveApiKeyConfigured: Boolean(p.liveApiKey || process.env.GOLDAPI_KEY),
     liveGoldRate24k: toNum(p.liveGoldRate24k),
     liveGoldRate22k: toNum(p.liveGoldRate22k),
     liveSilverRate: toNum(p.liveSilverRate),
@@ -98,14 +98,14 @@ router.put("/prices", async (req, res): Promise<void> => {
 
 router.post("/prices/live/connect", async (req, res): Promise<void> => {
   const body = (req.body ?? {}) as { apiKey?: string };
-  const apiKey = process.env.GOLDAPI_KEY || body.apiKey;
+  const current = await getOrCreate();
+  const providedKey = body.apiKey?.trim();
+  const apiKey = providedKey || current.liveApiKey || process.env.GOLDAPI_KEY || undefined;
 
   if (!apiKey) {
-    res.status(400).json({ error: "No GoldAPI.io API key configured. Provide one to connect." });
+    res.status(400).json({ error: "Please enter a valid API Key first." });
     return;
   }
-
-  const current = await getOrCreate();
 
   let gold: GoldApiMetalResponse;
   let silver: GoldApiMetalResponse;
@@ -139,6 +139,7 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
     .update(pricesTable)
     .set({
       liveModeConnected: true,
+      ...(providedKey ? { liveApiKey: providedKey } : {}),
       liveGoldRate24k: String(gold24kAed),
       liveGoldRate22k: String(gold22kAed),
       liveSilverRate: String(silverAed),

@@ -7,6 +7,6 @@
  */
 
 export interface ConnectLiveRateInput {
-  /** GoldAPI.io API key, used only when GOLDAPI_KEY is not configured server-side. Never persisted. */
+  /** GoldAPI.io API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted. */
   apiKey?: string;
 }

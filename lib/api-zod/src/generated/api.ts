@@ -259,7 +259,7 @@ export const UpdatePricesResponse = zod.object({
  * @summary Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
  */
 export const ConnectLiveRateBody = zod.object({
-  "apiKey": zod.string().optional().describe('GoldAPI.io API key, used only when GOLDAPI_KEY is not configured server-side. Never persisted.')
+  "apiKey": zod.string().optional().describe('GoldAPI.io API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted.')
 })
 
 export const ConnectLiveRateResponse = zod.object({
