@@ -207,7 +207,13 @@ export const GetPricesResponse = zod.object({
   "name": zod.string(),
   "rate": zod.number()
 })),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "liveModeConnected": zod.boolean(),
+  "liveApiKeyConfigured": zod.boolean(),
+  "liveGoldRate24k": zod.number().nullish(),
+  "liveGoldRate22k": zod.number().nullish(),
+  "liveSilverRate": zod.number().nullish(),
+  "liveLastSyncedAt": zod.string().nullish()
 })
 
 
@@ -239,7 +245,67 @@ export const UpdatePricesResponse = zod.object({
   "name": zod.string(),
   "rate": zod.number()
 })),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "liveModeConnected": zod.boolean(),
+  "liveApiKeyConfigured": zod.boolean(),
+  "liveGoldRate24k": zod.number().nullish(),
+  "liveGoldRate22k": zod.number().nullish(),
+  "liveSilverRate": zod.number().nullish(),
+  "liveLastSyncedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
+ */
+export const ConnectLiveRateBody = zod.object({
+  "apiKey": zod.string().optional().describe('GoldAPI.io API key, used only when GOLDAPI_KEY is not configured server-side. Never persisted.')
+})
+
+export const ConnectLiveRateResponse = zod.object({
+  "id": zod.number(),
+  "goldPricePerGram": zod.number(),
+  "silverPricePerGram": zod.number(),
+  "goldJewelryRate": zod.number(),
+  "goldBullionRate": zod.number(),
+  "ttBarRate": zod.number(),
+  "kgBarRate": zod.number(),
+  "customDescriptions": zod.array(zod.object({
+  "name": zod.string(),
+  "rate": zod.number()
+})),
+  "updatedAt": zod.string(),
+  "liveModeConnected": zod.boolean(),
+  "liveApiKeyConfigured": zod.boolean(),
+  "liveGoldRate24k": zod.number().nullish(),
+  "liveGoldRate22k": zod.number().nullish(),
+  "liveSilverRate": zod.number().nullish(),
+  "liveLastSyncedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Disconnect live rate sync and restore manual rates
+ */
+export const DisconnectLiveRateResponse = zod.object({
+  "id": zod.number(),
+  "goldPricePerGram": zod.number(),
+  "silverPricePerGram": zod.number(),
+  "goldJewelryRate": zod.number(),
+  "goldBullionRate": zod.number(),
+  "ttBarRate": zod.number(),
+  "kgBarRate": zod.number(),
+  "customDescriptions": zod.array(zod.object({
+  "name": zod.string(),
+  "rate": zod.number()
+})),
+  "updatedAt": zod.string(),
+  "liveModeConnected": zod.boolean(),
+  "liveApiKeyConfigured": zod.boolean(),
+  "liveGoldRate24k": zod.number().nullish(),
+  "liveGoldRate22k": zod.number().nullish(),
+  "liveSilverRate": zod.number().nullish(),
+  "liveLastSyncedAt": zod.string().nullish()
 })
 
 

@@ -23,6 +23,7 @@ import type {
   CategorySummary,
   CompanySettings,
   CompanySettingsInput,
+  ConnectLiveRateInput,
   Customer,
   CustomerInput,
   CustomerListItem,
@@ -599,6 +600,146 @@ export const useUpdatePrices = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdatePricesMutationOptions(options));
+    }
+
+export const getConnectLiveRateUrl = () => {
+
+
+
+
+  return `/api/prices/live/connect`
+}
+
+/**
+ * @summary Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
+ */
+export const connectLiveRate = async (connectLiveRateInput?: ConnectLiveRateInput, options?: RequestInit): Promise<Prices> => {
+
+  return customFetch<Prices>(getConnectLiveRateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(connectLiveRateInput)
+  }
+);}
+
+
+
+
+export const getConnectLiveRateMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof connectLiveRate>>, TError,{data?: BodyType<ConnectLiveRateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof connectLiveRate>>, TError,{data?: BodyType<ConnectLiveRateInput>}, TContext> => {
+
+const mutationKey = ['connectLiveRate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof connectLiveRate>>, {data?: BodyType<ConnectLiveRateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  connectLiveRate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConnectLiveRateMutationResult = NonNullable<Awaited<ReturnType<typeof connectLiveRate>>>
+    export type ConnectLiveRateMutationBody = BodyType<ConnectLiveRateInput> | undefined
+    export type ConnectLiveRateMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
+ */
+export const useConnectLiveRate = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof connectLiveRate>>, TError,{data?: BodyType<ConnectLiveRateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof connectLiveRate>>,
+        TError,
+        {data?: BodyType<ConnectLiveRateInput>},
+        TContext
+      > => {
+      return useMutation(getConnectLiveRateMutationOptions(options));
+    }
+
+export const getDisconnectLiveRateUrl = () => {
+
+
+
+
+  return `/api/prices/live/disconnect`
+}
+
+/**
+ * @summary Disconnect live rate sync and restore manual rates
+ */
+export const disconnectLiveRate = async ( options?: RequestInit): Promise<Prices> => {
+
+  return customFetch<Prices>(getDisconnectLiveRateUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDisconnectLiveRateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectLiveRate>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disconnectLiveRate>>, TError,void, TContext> => {
+
+const mutationKey = ['disconnectLiveRate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disconnectLiveRate>>, void> = () => {
+
+
+          return  disconnectLiveRate(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisconnectLiveRateMutationResult = NonNullable<Awaited<ReturnType<typeof disconnectLiveRate>>>
+
+    export type DisconnectLiveRateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Disconnect live rate sync and restore manual rates
+ */
+export const useDisconnectLiveRate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectLiveRate>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disconnectLiveRate>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDisconnectLiveRateMutationOptions(options));
     }
 
 export const getListCustomersUrl = (params?: ListCustomersParams,) => {

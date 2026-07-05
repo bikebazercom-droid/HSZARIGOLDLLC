@@ -3,6 +3,8 @@ import {
   useGetPrices,
   getGetPricesQueryKey,
   useUpdatePrices,
+  useConnectLiveRate,
+  useDisconnectLiveRate,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -16,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2 } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -32,15 +34,16 @@ interface RateCardProps {
   fieldKey: RateKey; savedValue: number; value: number;
   onChange: (field: RateKey, value: number) => void;
   onSave: (field: RateKey, value: number) => Promise<void>;
+  liveLocked?: boolean;
 }
 
-function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, onChange, onSave }: RateCardProps) {
+function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, onChange, onSave, liveLocked }: RateCardProps) {
   const [saving, setSaving] = useState(false);
   const changed = value !== savedValue;
   const handleSave = async () => { setSaving(true); await onSave(fieldKey, value); setSaving(false); };
   return (
     <Card className="relative overflow-hidden">
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: color }} />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: liveLocked ? "#10b981" : color }} />
       <CardHeader className="pb-2 pt-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
@@ -52,24 +55,28 @@ function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, o
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color }}>
+        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: liveLocked ? "#059669" : color }}>
           <CalendarDays className="w-3.5 h-3.5" />
-          Daily Rate — {TODAY}
+          {liveLocked ? "Live Market Rate — auto-synced" : `Daily Rate — ${TODAY}`}
         </div>
         <div>
           <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Rate per gram (AED)</div>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-            <Input type="number" step="0.01" min="0" value={value}
+            <Input type="number" step="0.01" min="0" value={value} disabled={liveLocked}
               onChange={e => onChange(fieldKey, parseFloat(e.target.value) || 0)}
               className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
           </div>
-          {changed && <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600"><span>●</span><span>Unsaved — was AED {savedValue.toFixed(2)}</span></div>}
+          {!liveLocked && changed && <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600"><span>●</span><span>Unsaved — was AED {savedValue.toFixed(2)}</span></div>}
         </div>
-        <Button className="w-full" style={{ background: changed ? NAVY : undefined }}
-          onClick={handleSave} disabled={saving || !changed} size="sm">
-          {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
-        </Button>
+        {liveLocked ? (
+          <div className="text-xs text-center text-emerald-600 font-medium py-1.5">Disconnect API to edit manually</div>
+        ) : (
+          <Button className="w-full" style={{ background: changed ? NAVY : undefined }}
+            onClick={handleSave} disabled={saving || !changed} size="sm">
+            {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -127,6 +134,115 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
   );
 }
 
+/* ── Live Gold Rate API connection card ─────────────────────── */
+interface LiveRateCardProps {
+  connected: boolean;
+  apiKeyConfigured: boolean;
+  lastSyncedAt: string | null;
+  liveGoldRate24k: number | null;
+  liveGoldRate22k: number | null;
+  liveSilverRate: number | null;
+  onConnect: (apiKey?: string) => void;
+  onDisconnect: () => void;
+  connecting: boolean;
+  disconnecting: boolean;
+}
+
+function LiveRateCard({
+  connected, apiKeyConfigured, lastSyncedAt, liveGoldRate24k, liveGoldRate22k, liveSilverRate,
+  onConnect, onDisconnect, connecting, disconnecting,
+}: LiveRateCardProps) {
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const busy = connecting || disconnecting;
+
+  return (
+    <Card className="relative overflow-hidden border-2" style={{ borderColor: connected ? "#10b98155" : "#e5e7eb" }}>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: connected ? "#10b981" : NAVY }} />
+      <CardHeader className="pb-3 pt-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: connected ? "#10b98118" : `${NAVY}12`, border: `2px solid ${connected ? "#10b98155" : `${NAVY}40`}` }}>
+              {connected ? <Wifi className="w-5 h-5 text-emerald-600" /> : <WifiOff className="w-5 h-5" style={{ color: NAVY }} />}
+            </div>
+            <div>
+              <CardTitle className="text-base font-bold leading-tight">Live Gold Rate API Integration</CardTitle>
+              <div className="text-xs text-muted-foreground mt-0.5">Powered by GoldAPI.io — 24K, 22K & Silver rates in AED</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: connected ? "#059669" : "#6b7280" }}>
+            <span style={{ color: connected ? "#10b981" : "#9ca3af" }}>●</span>
+            {connected ? "Live Market Rate" : "Manual Mode (Offline)"}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!apiKeyConfigured && !connected && (
+          <div className="space-y-1.5">
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">GoldAPI.io API Key</div>
+            <Input
+              type="password"
+              placeholder="Paste your GoldAPI.io API key"
+              value={apiKeyInput}
+              onChange={e => setApiKeyInput(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">No server-side key found — this key is used only for this request and is not stored.</p>
+          </div>
+        )}
+
+        {connected && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3 text-center bg-muted/20">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">24K Gold</div>
+              <div className="text-lg font-bold" style={{ fontFamily: "monospace" }}>{liveGoldRate24k?.toFixed(2) ?? "—"}</div>
+              <div className="text-[10px] text-muted-foreground">AED/g</div>
+            </div>
+            <div className="rounded-lg border p-3 text-center bg-muted/20">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">22K Gold</div>
+              <div className="text-lg font-bold" style={{ fontFamily: "monospace" }}>{liveGoldRate22k?.toFixed(2) ?? "—"}</div>
+              <div className="text-[10px] text-muted-foreground">AED/g</div>
+            </div>
+            <div className="rounded-lg border p-3 text-center bg-muted/20">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Silver</div>
+              <div className="text-lg font-bold" style={{ fontFamily: "monospace" }}>{liveSilverRate?.toFixed(2) ?? "—"}</div>
+              <div className="text-[10px] text-muted-foreground">AED/g</div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground">
+            {connected && lastSyncedAt
+              ? `Last synced: ${new Date(lastSyncedAt).toLocaleString("en-AE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
+              : "Not connected — rates are entered manually below"}
+          </div>
+          {connected ? (
+            <Button
+              variant="outline"
+              onClick={onDisconnect}
+              disabled={busy}
+              className="flex items-center gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <WifiOff className="w-4 h-4" />}
+              {disconnecting ? "Disconnecting..." : "Disconnect API"}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => onConnect(apiKeyInput || undefined)}
+              disabled={busy || (!apiKeyConfigured && !apiKeyInput.trim())}
+              style={{ background: NAVY }}
+              className="flex items-center gap-2"
+            >
+              {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+              {connecting ? "Connecting..." : "Connect API"}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ── "Add New Item" card (always visible in grid) ───────────── */
 function AddItemCard({ onClick }: { onClick: () => void }) {
   return (
@@ -150,6 +266,32 @@ export default function Prices() {
   const queryClient = useQueryClient();
   const { data: prices, isLoading } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
   const updatePrices = useUpdatePrices();
+  const connectLiveRate = useConnectLiveRate();
+  const disconnectLiveRate = useDisconnectLiveRate();
+
+  const handleConnectLiveRate = (apiKey?: string) => {
+    connectLiveRate.mutate({ data: apiKey ? { apiKey } : {} }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+        toast({ title: "✓ Connected to GoldAPI.io", description: "Live 24K, 22K & Silver rates applied." });
+      },
+      onError: (err: any) => {
+        toast({ title: "Connection failed", description: err?.message ?? "Could not reach GoldAPI.io", variant: "destructive" });
+      },
+    });
+  };
+
+  const handleDisconnectLiveRate = () => {
+    disconnectLiveRate.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+        toast({ title: "Disconnected", description: "Switched back to manual rate entry." });
+      },
+      onError: (err: any) => {
+        toast({ title: "Failed to disconnect", description: err?.message, variant: "destructive" });
+      },
+    });
+  };
 
   const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "kgBarRate", "silverPricePerGram"];
 
@@ -316,13 +458,28 @@ export default function Prices() {
         </Button>
       </div>
 
+      {/* Live Gold Rate API Integration */}
+      <LiveRateCard
+        connected={prices.liveModeConnected}
+        apiKeyConfigured={prices.liveApiKeyConfigured}
+        lastSyncedAt={prices.liveLastSyncedAt ?? null}
+        liveGoldRate24k={prices.liveGoldRate24k ?? null}
+        liveGoldRate22k={prices.liveGoldRate22k ?? null}
+        liveSilverRate={prices.liveSilverRate ?? null}
+        onConnect={handleConnectLiveRate}
+        onDisconnect={handleDisconnectLiveRate}
+        connecting={connectLiveRate.isPending}
+        disconnecting={disconnectLiveRate.isPending}
+      />
+
       {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {metals.map(metal => (
           <RateCard key={metal.fieldKey} {...metal}
             savedValue={(prices as any)[metal.fieldKey]}
             value={localRates[metal.fieldKey]}
-            onChange={handleChange} onSave={handleSaveOne} />
+            onChange={handleChange} onSave={handleSaveOne}
+            liveLocked={prices.liveModeConnected} />
         ))}
 
         {customItems.map(item => (

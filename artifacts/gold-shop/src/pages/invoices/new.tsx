@@ -71,6 +71,7 @@ interface PricesData {
   goldBullionRate: number;
   ttBarRate: number;
   kgBarRate: number;
+  liveModeConnected?: boolean;
 }
 
 const DESC_TO_PURITY: Record<string, string> = {
@@ -688,7 +689,18 @@ export default function NewInvoice() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Metal Rate (AED/g)</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Metal Rate (AED/g)</Label>
+                  {(prices as PricesData | undefined)?.liveModeConnected ? (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                      <span className="text-emerald-500">●</span> Live Market Rate
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                      <span>●</span> Manual Mode (Offline)
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <Input
                     type="number"

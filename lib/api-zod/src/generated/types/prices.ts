@@ -17,4 +17,14 @@ export interface Prices {
   kgBarRate: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
+  liveModeConnected: boolean;
+  liveApiKeyConfigured: boolean;
+  /** @nullable */
+  liveGoldRate24k?: number | null;
+  /** @nullable */
+  liveGoldRate22k?: number | null;
+  /** @nullable */
+  liveSilverRate?: number | null;
+  /** @nullable */
+  liveLastSyncedAt?: string | null;
 }

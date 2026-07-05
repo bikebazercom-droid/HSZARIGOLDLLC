@@ -133,6 +133,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Prices"
 
+  /prices/live/connect:
+    post:
+      operationId: connectLiveRate
+      tags: [prices]
+      summary: Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectLiveRateInput"
+      responses:
+        "200":
+          description: Connected — live rates applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prices"
+        "400":
+          description: Missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Failed to fetch live rates from GoldAPI.io
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /prices/live/disconnect:
+    post:
+      operationId: disconnectLiveRate
+      tags: [prices]
+      summary: Disconnect live rate sync and restore manual rates
+      responses:
+        "200":
+          description: Disconnected — manual rates restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prices"
+
   /customers:
     get:
       operationId: listCustomers
@@ -605,7 +649,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, kgBarRate, customDescriptions, updatedAt]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, kgBarRate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured]
       properties:
         id:
           type: integer
@@ -627,6 +671,25 @@ components:
             $ref: "#/components/schemas/CustomDescription"
         updatedAt:
           type: string
+        liveModeConnected:
+          type: boolean
+        liveApiKeyConfigured:
+          type: boolean
+        liveGoldRate24k:
+          type: ["number", "null"]
+        liveGoldRate22k:
+          type: ["number", "null"]
+        liveSilverRate:
+          type: ["number", "null"]
+        liveLastSyncedAt:
+          type: ["string", "null"]
+
+    ConnectLiveRateInput:
+      type: object
+      properties:
+        apiKey:
+          type: string
+          description: GoldAPI.io API key, used only when GOLDAPI_KEY is not configured server-side. Never persisted.
 
     CustomDescription:
       type: object

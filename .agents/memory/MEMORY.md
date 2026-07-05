@@ -1,2 +1,3 @@
 - [Raw PDF/file download routes](raw-download-routes.md) — Express routes for binary file downloads intentionally live outside the OpenAPI spec; frontend hits them directly via `window.open`.
 - [Gold-shop seeded admin login](gold-shop-admin-login.md) — seed script's default admin (0000000000/1234) only applies on empty DB; check `users` table for real credentials before e2e testing.
+- [Gold-shop live rate integration](gold-shop-live-rate.md) — live/manual gold-price toggle persists in `prices` table (not localStorage); manual values are snapshotted before overwrite and restored on disconnect.
