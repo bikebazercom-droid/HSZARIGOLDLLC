@@ -553,12 +553,14 @@ components:
 
     CategorySummaryRow:
       type: object
-      required: [category, label, grams, amount, invoiceCount]
+      required: [category, label, grossGrams, grams, amount, invoiceCount]
       properties:
         category:
           type: string
         label:
           type: string
+        grossGrams:
+          type: number
         grams:
           type: number
         amount:
@@ -568,7 +570,7 @@ components:
 
     CategorySummary:
       type: object
-      required: [startDate, endDate, rows, grandTotalGrams, grandTotalAmount]
+      required: [startDate, endDate, rows, grandTotalGrossGrams, grandTotalGrams, grandTotalAmount]
       properties:
         startDate:
           type: string
@@ -578,6 +580,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CategorySummaryRow"
+        grandTotalGrossGrams:
+          type: number
         grandTotalGrams:
           type: number
         grandTotalAmount:

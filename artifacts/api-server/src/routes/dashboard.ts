@@ -21,6 +21,7 @@ interface CatRow extends Record<string, unknown> {
   invoice_count: string;
   total_amount: string;
   total_weight: string;
+  total_gross_weight?: string;
 }
 
 function getCatStats(rows: CatRow[], category: string) {
@@ -218,7 +219,8 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
       COALESCE(ii.category, 'custom') AS category,
       COUNT(DISTINCT ii.invoice_id)::text AS invoice_count,
       COALESCE(SUM(ii.total_price::numeric), 0)::text AS total_amount,
-      COALESCE(SUM(COALESCE(ii.pure_weight::numeric, ii.gross_weight::numeric, 0)), 0)::text AS total_weight
+      COALESCE(SUM(COALESCE(ii.pure_weight::numeric, ii.gross_weight::numeric, 0)), 0)::text AS total_weight,
+      COALESCE(SUM(ii.gross_weight::numeric), 0)::text AS total_gross_weight
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
     WHERE i.created_at >= ${start} AND i.created_at < ${end}
@@ -236,20 +238,24 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
     const matching = normalizedRows.filter(r => r.category === category);
     let amount = 0;
     let grams = 0;
+    let grossGrams = 0;
     for (const r of matching) {
       amount += parseFloat(r.total_amount);
       grams += parseFloat(r.total_weight);
+      grossGrams += parseFloat(r.total_gross_weight ?? "0");
     }
     const invoiceCount = matching.reduce((s, r) => s + parseInt(r.invoice_count, 10), 0);
     return {
       category,
       label: CATEGORY_SUMMARY_LABEL[category],
+      grossGrams: Math.round(grossGrams * 1000) / 1000,
       grams: Math.round(grams * 1000) / 1000,
       amount: Math.round(amount * 100) / 100,
       invoiceCount,
     };
   });
 
+  const grandTotalGrossGrams = Math.round(rows.reduce((s, r) => s + r.grossGrams, 0) * 1000) / 1000;
   const grandTotalGrams = Math.round(rows.reduce((s, r) => s + r.grams, 0) * 1000) / 1000;
   const grandTotalAmount = Math.round(rows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
 
@@ -258,6 +264,7 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
       startDate,
       endDate,
       rows,
+      grandTotalGrossGrams,
       grandTotalGrams,
       grandTotalAmount,
     })

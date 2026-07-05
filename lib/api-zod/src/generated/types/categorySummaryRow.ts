@@ -9,6 +9,7 @@
 export interface CategorySummaryRow {
   category: string;
   label: string;
+  grossGrams: number;
   grams: number;
   amount: number;
   invoiceCount: number;

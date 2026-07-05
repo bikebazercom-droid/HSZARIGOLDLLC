@@ -121,6 +121,7 @@ function CategorySalesSummary() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-4">Category</TableHead>
+                  <TableHead className="text-right">Total Gross Wt. (g)</TableHead>
                   <TableHead className="text-right">Total Grams Sold (g)</TableHead>
                   <TableHead className="text-right pr-4">Total Sales Revenue (AED)</TableHead>
                 </TableRow>
@@ -129,12 +130,14 @@ function CategorySalesSummary() {
                 {data?.rows.map((row) => (
                   <TableRow key={row.category}>
                     <TableCell className="font-medium pl-4">{row.label}</TableCell>
+                    <TableCell className="text-right">{fmtGrams(row.grossGrams)} g</TableCell>
                     <TableCell className="text-right">{fmtGrams(row.grams)} g</TableCell>
                     <TableCell className="text-right pr-4">AED {fmtAED(row.amount)}</TableCell>
                   </TableRow>
                 ))}
                 <TableRow className="bg-muted/40 font-bold border-t-2">
                   <TableCell className="pl-4">Grand Total</TableCell>
+                  <TableCell className="text-right">{fmtGrams(data?.grandTotalGrossGrams)} g</TableCell>
                   <TableCell className="text-right">{fmtGrams(data?.grandTotalGrams)} g</TableCell>
                   <TableCell className="text-right pr-4">AED {fmtAED(data?.grandTotalAmount)}</TableCell>
                 </TableRow>
@@ -183,13 +186,16 @@ function CategorySalesSummary() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
             <thead>
               <tr>
-                <th style={{ background: NAVY, color: "#fff", textAlign: "left", padding: "8px 10px", border: `1px solid ${NAVY}` }}>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "left", padding: "8px 8px", border: `1px solid ${NAVY}` }}>
                   Category
                 </th>
-                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 10px", border: `1px solid ${NAVY}` }}>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 8px", border: `1px solid ${NAVY}` }}>
+                  Total Gross Wt. (g)
+                </th>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 8px", border: `1px solid ${NAVY}` }}>
                   Total Grams Sold (g)
                 </th>
-                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 10px", border: `1px solid ${NAVY}` }}>
+                <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 8px", border: `1px solid ${NAVY}` }}>
                   Total Revenue (AED)
                 </th>
               </tr>
@@ -197,17 +203,21 @@ function CategorySalesSummary() {
             <tbody>
               {data?.rows.map((row, idx) => (
                 <tr key={row.category} style={{ background: idx % 2 === 0 ? "#fff" : "#f7f7f7" }}>
-                  <td style={{ padding: "7px 10px", border: "1px solid #ddd" }}>{row.label}</td>
-                  <td style={{ padding: "7px 10px", border: "1px solid #ddd", textAlign: "right" }}>{fmtGrams(row.grams)} g</td>
-                  <td style={{ padding: "7px 10px", border: "1px solid #ddd", textAlign: "right" }}>AED {fmtAED(row.amount)}</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>{row.label}</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtGrams(row.grossGrams)} g</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtGrams(row.grams)} g</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(row.amount)}</td>
                 </tr>
               ))}
               <tr style={{ background: "#eee6cf" }}>
-                <td style={{ padding: "9px 10px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>Grand Total</td>
-                <td style={{ padding: "9px 10px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right" }}>
+                <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>Grand Total</td>
+                <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
+                  {fmtGrams(data?.grandTotalGrossGrams)} g
+                </td>
+                <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
                   {fmtGrams(data?.grandTotalGrams)} g
                 </td>
-                <td style={{ padding: "9px 10px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right" }}>
+                <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
                   AED {fmtAED(data?.grandTotalAmount)}
                 </td>
               </tr>

@@ -175,10 +175,12 @@ export const GetCategorySummaryResponse = zod.object({
   "rows": zod.array(zod.object({
   "category": zod.string(),
   "label": zod.string(),
+  "grossGrams": zod.number(),
   "grams": zod.number(),
   "amount": zod.number(),
   "invoiceCount": zod.number()
 })),
+  "grandTotalGrossGrams": zod.number(),
   "grandTotalGrams": zod.number(),
   "grandTotalAmount": zod.number()
 })

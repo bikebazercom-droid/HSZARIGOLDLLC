@@ -143,6 +143,7 @@ export interface DashboardStats {
 export interface CategorySummaryRow {
   category: string;
   label: string;
+  grossGrams: number;
   grams: number;
   amount: number;
   invoiceCount: number;
@@ -152,6 +153,7 @@ export interface CategorySummary {
   startDate: string;
   endDate: string;
   rows: CategorySummaryRow[];
+  grandTotalGrossGrams: number;
   grandTotalGrams: number;
   grandTotalAmount: number;
 }

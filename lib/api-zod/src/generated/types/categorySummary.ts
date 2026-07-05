@@ -11,6 +11,7 @@ export interface CategorySummary {
   startDate: string;
   endDate: string;
   rows: CategorySummaryRow[];
+  grandTotalGrossGrams: number;
   grandTotalGrams: number;
   grandTotalAmount: number;
 }
