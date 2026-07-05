@@ -533,11 +533,11 @@ export default function Prices() {
   }
 
   const assetCards = [
-    { label: "Ten Tola Bar TTB", sublabel: "24K / 995.0 — 10 Tola", image: tenTolaBarImg, fieldKey: "ttBarRate" as const, unitGrams: TOLA_TO_GRAM * 10 },
-    { label: "Jewellery 22K 1GM", sublabel: "22K / 916 — 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const, unitGrams: 1 },
-    { label: "Gold 9999 1GM", sublabel: "24K / 999.9 — 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const, unitGrams: 1 },
-    { label: "Gold 9999 1KG", sublabel: "24K / 999.9 — 1 Kilogram", image: goldKiloBrickImg, fieldKey: "goldBullionRate" as const, unitGrams: 1000 },
-    { label: "Kilo Bar 995 1KG", sublabel: "24K / 995.0 — 1 Kilogram", image: goldBarStackImg, fieldKey: "kgBarRate" as const, unitGrams: 1000 },
+    { label: "TT. BAR", sublabel: "24K / 995.0 — 10 Tola", image: tenTolaBarImg, fieldKey: "ttBarRate" as const, unitGrams: TOLA_TO_GRAM * 10 },
+    { label: "Gold Jewelry", sublabel: "22K / 916 — 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const, unitGrams: 1 },
+    { label: "GOLD", sublabel: "24K / 999.9 — 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const, unitGrams: 1 },
+    { label: "KG BAR", sublabel: "24K / 995.0 — 1 Kilogram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const, unitGrams: 1000 },
+    { label: "Silver", sublabel: "999.0 Fine — 1 Kilogram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const, unitGrams: 1000 },
   ];
 
   return (
