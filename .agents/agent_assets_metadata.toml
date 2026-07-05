@@ -1,0 +1,32 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "BsIChgGdAOMqMbsLj3VQr"
+uri = "file://attached_assets/generated_images/ten_tola_gold_bar.png"
+type = "image"
+title = "ten tola gold bar"
+
+[[generated]]
+id = "1wXr7voJDeLdygX-QiRZE"
+uri = "file://attached_assets/generated_images/gold_jewelry_ring.png"
+type = "image"
+title = "gold jewelry ring"
+
+[[generated]]
+id = "mX-WDW8mC7s1M-A3xAvJN"
+uri = "file://attached_assets/generated_images/single_gold_bar.png"
+type = "image"
+title = "single gold bar"
+
+[[generated]]
+id = "TuEeZi6aqct4lVGdeS71G"
+uri = "file://attached_assets/generated_images/gold_kilo_brick.png"
+type = "image"
+title = "gold kilo brick"
+
+[[generated]]
+id = "QWF5kkyGP6n-aDzPq_LrP"
+uri = "file://attached_assets/generated_images/gold_bar_stack.png"
+type = "image"
+title = "gold bar stack"

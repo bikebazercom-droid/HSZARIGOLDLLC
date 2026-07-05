@@ -19,58 +19,88 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
+import tenTolaBarImg from "@/assets/rates/ten-tola-bar.png";
+import jewelryRingImg from "@/assets/rates/jewelry-ring.png";
+import singleGoldBarImg from "@/assets/rates/single-gold-bar.png";
+import goldKiloBrickImg from "@/assets/rates/gold-kilo-brick.png";
+import goldBarStackImg from "@/assets/rates/gold-bar-stack.png";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
+const TOLA_TO_GRAM = 11.6638;
 
 type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
 interface CustomItem { name: string; rate: number }
 
 const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
 
-/* ── Built-in rate card ─────────────────────────────────────── */
-interface RateCardProps {
-  label: string; sublabel: string; icon: string; color: string;
-  fieldKey: RateKey; savedValue: number; value: number;
+/* ── Luxury asset rate card ───────────────────────────────────── */
+interface AssetCardProps {
+  label: string; sublabel: string; image: string;
+  fieldKey: RateKey; savedValue: number; value: number; unitGrams: number;
   onChange: (field: RateKey, value: number) => void;
   onSave: (field: RateKey, value: number) => Promise<void>;
   liveLocked?: boolean;
 }
 
-function RateCard({ label, sublabel, icon, color, fieldKey, savedValue, value, onChange, onSave, liveLocked }: RateCardProps) {
+function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, unitGrams, onChange, onSave, liveLocked }: AssetCardProps) {
   const [saving, setSaving] = useState(false);
   const changed = value !== savedValue;
+  const totalValue = value * unitGrams;
   const handleSave = async () => { setSaving(true); await onSave(fieldKey, value); setSaving(false); };
   return (
-    <Card className="relative overflow-hidden">
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: liveLocked ? "#10b981" : color }} />
+    <Card
+      className="relative overflow-hidden transition-shadow"
+      style={liveLocked ? { borderColor: "#10b98166", boxShadow: "0 0 0 1px #10b98133, 0 8px 24px -8px #10b98155" } : undefined}
+    >
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: liveLocked ? "#10b981" : NAVY }} />
       <CardHeader className="pb-2 pt-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
-            style={{ background: `${color}18`, border: `2px solid ${color}40` }}>{icon}</div>
-          <div>
-            <CardTitle className="text-base font-bold leading-tight">{label}</CardTitle>
+          <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 border" style={{ borderColor: liveLocked ? "#10b98155" : "#e5e7eb" }}>
+            <img src={image} alt={label} className="w-full h-full object-cover" />
+          </div>
+          <div className="min-w-0">
+            <CardTitle className="text-base font-bold leading-tight truncate">{label}</CardTitle>
             <div className="text-xs text-muted-foreground mt-0.5">{sublabel}</div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: liveLocked ? "#059669" : color }}>
+        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: liveLocked ? "#059669" : NAVY }}>
           <CalendarDays className="w-3.5 h-3.5" />
           {liveLocked ? "Live Market Rate — auto-synced" : `Daily Rate — ${TODAY}`}
         </div>
         <div>
-          <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Rate per gram (AED)</div>
+          <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">
+            {unitGrams === 1 ? "Rate per gram (AED)" : "Total Value (AED)"}
+          </div>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-            <Input type="number" step="0.01" min="0" value={value} disabled={liveLocked}
-              onChange={e => onChange(fieldKey, parseFloat(e.target.value) || 0)}
-              className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
+            {liveLocked ? (
+              <div className="pl-14 text-xl font-bold h-12 flex items-center rounded-md border bg-emerald-50/50" style={{ fontFamily: "monospace", borderColor: "#10b98155" }}>
+                {totalValue.toFixed(2)}
+              </div>
+            ) : (
+              <Input type="number" step="0.01" min="0" value={unitGrams === 1 ? value : Number(totalValue.toFixed(2))}
+                onChange={e => {
+                  const entered = parseFloat(e.target.value) || 0;
+                  onChange(fieldKey, unitGrams === 1 ? entered : entered / unitGrams);
+                }}
+                className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
+            )}
           </div>
-          {!liveLocked && changed && <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600"><span>●</span><span>Unsaved — was AED {savedValue.toFixed(2)}</span></div>}
+          {unitGrams !== 1 && (
+            <div className="text-[11px] text-muted-foreground mt-1">Per gram: AED {value.toFixed(2)}</div>
+          )}
+          {!liveLocked && changed && <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600"><span>●</span><span>Unsaved — was AED {(savedValue * unitGrams).toFixed(2)}</span></div>}
         </div>
         {liveLocked ? (
-          <div className="text-xs text-center text-emerald-600 font-medium py-1.5">Disconnect API to edit manually</div>
+          <div
+            className="text-[10px] text-center font-bold uppercase tracking-wide py-1.5 rounded-md"
+            style={{ color: "#059669", background: "#10b98118", border: "1px solid #10b98140" }}
+          >
+            Read-Only — API Synced <span className="mx-1">·</span> Auto-Populated by Live API
+          </div>
         ) : (
           <Button className="w-full" style={{ background: changed ? NAVY : undefined }}
             onClick={handleSave} disabled={saving || !changed} size="sm">
@@ -138,6 +168,7 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
 interface LiveRateCardProps {
   connected: boolean;
   apiKeyConfigured: boolean;
+  apiKeyMasked: string | null;
   lastSyncedAt: string | null;
   liveGoldRate24k: number | null;
   liveGoldRate22k: number | null;
@@ -149,7 +180,7 @@ interface LiveRateCardProps {
 }
 
 function LiveRateCard({
-  connected, apiKeyConfigured, lastSyncedAt, liveGoldRate24k, liveGoldRate22k, liveSilverRate,
+  connected, apiKeyConfigured, apiKeyMasked, lastSyncedAt, liveGoldRate24k, liveGoldRate22k, liveSilverRate,
   onConnect, onDisconnect, connecting, disconnecting,
 }: LiveRateCardProps) {
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -181,30 +212,36 @@ function LiveRateCard({
               <div className="text-xs text-muted-foreground mt-0.5">Powered by GoldAPI.io — 24K, 22K & Silver rates in AED</div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: connected ? "#059669" : "#6b7280" }}>
-            <span style={{ color: connected ? "#10b981" : "#9ca3af" }}>●</span>
-            {connected ? "Live Market Rate" : "Manual Mode (Offline)"}
+          <div
+            className="flex items-center gap-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide px-3 py-1.5 rounded-full"
+            style={{
+              color: connected ? "#059669" : "#4b5563",
+              background: connected ? "#10b98118" : "#f3f4f6",
+              border: `1px solid ${connected ? "#10b98155" : "#d1d5db"}`,
+            }}
+          >
+            {connected ? "((●)) Live Market Rate (AED) - ACTIVE" : "● Manual Mode (Offline)"}
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {connected ? (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-sm text-emerald-700">
-            <KeyRound className="w-4 h-4 flex-shrink-0" />
-            <span className="font-medium">GoldAPI.io Key: •••••••••••••••• (connected & secured)</span>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide sm:w-44 flex-shrink-0">
+            GoldAPI.io Token/Key:
           </div>
-        ) : (
-          <div className="space-y-1.5">
-            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">GoldAPI.io Key</div>
-            <div className="relative">
-              <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type={showKey ? "text" : "password"}
-                placeholder="Enter your goldapi.io key here..."
-                value={apiKeyInput}
-                onChange={e => { setApiKeyInput(e.target.value); if (warning) setWarning(null); }}
-                className="pl-9 pr-10"
-              />
+          <div className="relative flex-1 min-w-0">
+            <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type={connected ? "text" : showKey ? "text" : "password"}
+              placeholder={apiKeyMasked ?? "Enter your goldapi.io key here..."}
+              value={connected ? (apiKeyMasked ?? "") : apiKeyInput}
+              disabled={connected}
+              readOnly={connected}
+              onChange={e => { setApiKeyInput(e.target.value); if (warning) setWarning(null); }}
+              className="pl-9 pr-10"
+              style={connected ? { fontFamily: "monospace" } : undefined}
+            />
+            {!connected && (
               <button
                 type="button"
                 onClick={() => setShowKey(s => !s)}
@@ -213,15 +250,33 @@ function LiveRateCard({
               >
                 {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
-            </div>
-            {warning ? (
-              <p className="text-[11px] text-red-600 font-medium">{warning}</p>
-            ) : apiKeyConfigured ? (
-              <p className="text-[11px] text-muted-foreground">A key is already saved for this shop — leave blank to reuse it, or paste a new one to replace it.</p>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">Your key is saved securely and only used to fetch live rates for your shop.</p>
             )}
           </div>
+          {connected ? (
+            <Button
+              onClick={onDisconnect}
+              disabled={busy}
+              style={{ background: NAVY }}
+              className="flex items-center gap-2 flex-shrink-0"
+            >
+              {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <WifiOff className="w-4 h-4" />}
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleConnectClick}
+              disabled={busy}
+              style={{ background: NAVY }}
+              className="flex items-center gap-2 flex-shrink-0"
+            >
+              {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+              {connecting ? "Connecting..." : "Connect"}
+            </Button>
+          )}
+        </div>
+        {warning && <p className="text-[11px] text-red-600 font-medium">{warning}</p>}
+        {!connected && apiKeyConfigured && !warning && (
+          <p className="text-[11px] text-muted-foreground">A key is already saved for this shop — leave blank to reuse it, or paste a new one to replace it.</p>
         )}
 
         {connected && (
@@ -244,33 +299,10 @@ function LiveRateCard({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs text-muted-foreground">
-            {connected && lastSyncedAt
-              ? `Last synced: ${new Date(lastSyncedAt).toLocaleString("en-AE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
-              : "Not connected — rates are entered manually below"}
-          </div>
-          {connected ? (
-            <Button
-              variant="outline"
-              onClick={onDisconnect}
-              disabled={busy}
-              className="flex items-center gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-            >
-              {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <WifiOff className="w-4 h-4" />}
-              {disconnecting ? "Disconnecting..." : "Disconnect API"}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleConnectClick}
-              disabled={busy}
-              style={{ background: NAVY }}
-              className="flex items-center gap-2"
-            >
-              {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-              {connecting ? "Connecting..." : "Connect API"}
-            </Button>
-          )}
+        <div className="text-xs text-muted-foreground">
+          {connected && lastSyncedAt
+            ? `Last synced: ${new Date(lastSyncedAt).toLocaleString("en-AE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
+            : "Not connected — rates are entered manually below"}
         </div>
       </CardContent>
     </Card>
@@ -465,12 +497,12 @@ export default function Prices() {
     );
   }
 
-  const metals = [
-    { label: "Gold Jewelry", sublabel: "22K / 916", icon: "💍", color: GOLD, fieldKey: "goldJewelryRate" as const },
-    { label: "GOLD", sublabel: "24K / 995.0", icon: "🥇", color: "#d4aa00", fieldKey: "goldBullionRate" as const },
-    { label: "TT BAR", sublabel: "24K / 995.0", icon: "📊", color: "#e67e22", fieldKey: "ttBarRate" as const },
-    { label: "KG BAR", sublabel: "24K / 995.0", icon: "🏅", color: "#f39c12", fieldKey: "kgBarRate" as const },
-    { label: "Silver", sublabel: "Pure Silver", icon: "🪙", color: "#95a5a6", fieldKey: "silverPricePerGram" as const },
+  const assetCards = [
+    { label: "Ten Tola Bar TTB", sublabel: "24K / 995.0 — 10 Tola", image: tenTolaBarImg, fieldKey: "ttBarRate" as const, unitGrams: TOLA_TO_GRAM * 10 },
+    { label: "Jewellery 22K 1GM", sublabel: "22K / 916 — 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const, unitGrams: 1 },
+    { label: "Gold 9999 1GM", sublabel: "24K / 999.9 — 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const, unitGrams: 1 },
+    { label: "Gold 9999 1KG", sublabel: "24K / 999.9 — 1 Kilogram", image: goldKiloBrickImg, fieldKey: "goldBullionRate" as const, unitGrams: 1000 },
+    { label: "Kilo Bar 995 1KG", sublabel: "24K / 995.0 — 1 Kilogram", image: goldBarStackImg, fieldKey: "kgBarRate" as const, unitGrams: 1000 },
   ];
 
   return (
@@ -496,6 +528,7 @@ export default function Prices() {
       <LiveRateCard
         connected={prices.liveModeConnected}
         apiKeyConfigured={prices.liveApiKeyConfigured}
+        apiKeyMasked={prices.liveApiKeyMasked ?? null}
         lastSyncedAt={prices.liveLastSyncedAt ?? null}
         liveGoldRate24k={prices.liveGoldRate24k ?? null}
         liveGoldRate22k={prices.liveGoldRate22k ?? null}
@@ -508,10 +541,10 @@ export default function Prices() {
 
       {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {metals.map(metal => (
-          <RateCard key={metal.fieldKey} {...metal}
-            savedValue={(prices as any)[metal.fieldKey]}
-            value={localRates[metal.fieldKey]}
+        {assetCards.map(asset => (
+          <AssetCard key={asset.label} {...asset}
+            savedValue={(prices as any)[asset.fieldKey]}
+            value={localRates[asset.fieldKey]}
             onChange={handleChange} onSave={handleSaveOne}
             liveLocked={prices.liveModeConnected} />
         ))}

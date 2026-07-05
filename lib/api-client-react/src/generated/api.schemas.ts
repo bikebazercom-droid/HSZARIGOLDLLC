@@ -184,6 +184,8 @@ export interface Prices {
   liveModeConnected: boolean;
   liveApiKeyConfigured: boolean;
   /** @nullable */
+  liveApiKeyMasked?: string | null;
+  /** @nullable */
   liveGoldRate24k?: number | null;
   /** @nullable */
   liveGoldRate22k?: number | null;

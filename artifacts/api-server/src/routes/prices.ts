@@ -15,6 +15,13 @@ function toNum(v: string | number | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return "*".repeat(key.length);
+  const prefix = key.slice(0, 8);
+  const suffix = key.slice(-4);
+  return `${prefix}${"*".repeat(7)}...${suffix}`;
+}
+
 function parsePrices(p: typeof pricesTable.$inferSelect) {
   let customDescriptions: { name: string; rate: number }[] = [];
   try { customDescriptions = JSON.parse(p.customDescriptions || "[]"); } catch {}
@@ -30,6 +37,7 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
     liveApiKeyConfigured: Boolean(p.liveApiKey || process.env.GOLDAPI_KEY),
+    liveApiKeyMasked: p.liveApiKey ? maskApiKey(p.liveApiKey) : (process.env.GOLDAPI_KEY ? maskApiKey(process.env.GOLDAPI_KEY) : null),
     liveGoldRate24k: toNum(p.liveGoldRate24k),
     liveGoldRate22k: toNum(p.liveGoldRate22k),
     liveSilverRate: toNum(p.liveSilverRate),

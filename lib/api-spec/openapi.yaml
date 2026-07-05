@@ -675,6 +675,8 @@ components:
           type: boolean
         liveApiKeyConfigured:
           type: boolean
+        liveApiKeyMasked:
+          type: ["string", "null"]
         liveGoldRate24k:
           type: ["number", "null"]
         liveGoldRate22k:
