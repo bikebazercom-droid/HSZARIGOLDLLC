@@ -166,6 +166,17 @@ export interface CategorySummary {
   paymentBreakdown: PaymentMethodBreakdown;
 }
 
+/**
+ * Which metal price provider is currently configured/active.
+ */
+export type PricesLiveApiProvider = typeof PricesLiveApiProvider[keyof typeof PricesLiveApiProvider];
+
+
+export const PricesLiveApiProvider = {
+  goldapi: 'goldapi',
+  metalpriceapi: 'metalpriceapi',
+} as const;
+
 export interface CustomDescription {
   name: string;
   rate: number;
@@ -185,6 +196,8 @@ export interface Prices {
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;
+  /** Which metal price provider is currently configured/active. */
+  liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
   /** @nullable */
@@ -195,9 +208,22 @@ export interface Prices {
   liveLastSyncedAt?: string | null;
 }
 
+/**
+ * Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.
+ */
+export type ConnectLiveRateInputApiProvider = typeof ConnectLiveRateInputApiProvider[keyof typeof ConnectLiveRateInputApiProvider];
+
+
+export const ConnectLiveRateInputApiProvider = {
+  goldapi: 'goldapi',
+  metalpriceapi: 'metalpriceapi',
+} as const;
+
 export interface ConnectLiveRateInput {
-  /** GoldAPI.io API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted. */
+  /** API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi. */
   apiKey?: string;
+  /** Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted. */
+  apiProvider?: ConnectLiveRateInputApiProvider;
 }
 
 export interface PricesInput {

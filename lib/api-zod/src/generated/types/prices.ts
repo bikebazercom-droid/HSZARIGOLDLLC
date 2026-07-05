@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CustomDescription } from './customDescription';
+import type { PricesLiveApiProvider } from './pricesLiveApiProvider';
 
 export interface Prices {
   id: number;
@@ -21,6 +22,8 @@ export interface Prices {
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;
+  /** Which metal price provider is currently configured/active. */
+  liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
   /** @nullable */

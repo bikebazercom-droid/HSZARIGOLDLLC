@@ -211,6 +211,7 @@ export const GetPricesResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
+  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
@@ -250,6 +251,7 @@ export const UpdatePricesResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
+  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
@@ -261,7 +263,8 @@ export const UpdatePricesResponse = zod.object({
  * @summary Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
  */
 export const ConnectLiveRateBody = zod.object({
-  "apiKey": zod.string().optional().describe('GoldAPI.io API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted.')
+  "apiKey": zod.string().optional().describe('API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi.'),
+  "apiProvider": zod.enum(['goldapi', 'metalpriceapi']).optional().describe('Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.')
 })
 
 export const ConnectLiveRateResponse = zod.object({
@@ -280,6 +283,7 @@ export const ConnectLiveRateResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
+  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
@@ -306,6 +310,7 @@ export const DisconnectLiveRateResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
+  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),

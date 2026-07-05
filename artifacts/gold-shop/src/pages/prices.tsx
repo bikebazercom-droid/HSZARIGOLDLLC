@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
@@ -165,36 +166,50 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
 }
 
 /* ── Live Gold Rate API connection card ─────────────────────── */
+type ApiProvider = "goldapi" | "metalpriceapi";
+
+const API_PROVIDERS: { value: ApiProvider; label: string; keyPlaceholder: string }[] = [
+  { value: "goldapi", label: "GoldAPI.io", keyPlaceholder: "Enter your goldapi.io key here..." },
+  { value: "metalpriceapi", label: "MetalpriceAPI.com", keyPlaceholder: "Enter your metalpriceapi.com key here..." },
+];
+
 interface LiveRateCardProps {
   connected: boolean;
   apiKeyConfigured: boolean;
   apiKeyMasked: string | null;
+  apiProvider: ApiProvider;
   lastSyncedAt: string | null;
   liveGoldRate24k: number | null;
   liveGoldRate22k: number | null;
   liveSilverRate: number | null;
-  onConnect: (apiKey?: string) => void;
+  onConnect: (apiKey: string | undefined, apiProvider: ApiProvider) => void;
   onDisconnect: () => void;
   connecting: boolean;
   disconnecting: boolean;
 }
 
 function LiveRateCard({
-  connected, apiKeyConfigured, apiKeyMasked, lastSyncedAt, liveGoldRate24k, liveGoldRate22k, liveSilverRate,
+  connected, apiKeyConfigured, apiKeyMasked, apiProvider, lastSyncedAt, liveGoldRate24k, liveGoldRate22k, liveSilverRate,
   onConnect, onDisconnect, connecting, disconnecting,
 }: LiveRateCardProps) {
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<ApiProvider>(apiProvider);
   const [showKey, setShowKey] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const busy = connecting || disconnecting;
 
+  useEffect(() => { setSelectedProvider(apiProvider); }, [apiProvider]);
+
+  const providerMeta = API_PROVIDERS.find(p => p.value === selectedProvider) ?? API_PROVIDERS[0];
+  const providerUnchanged = selectedProvider === apiProvider;
+
   const handleConnectClick = () => {
-    if (!apiKeyConfigured && !apiKeyInput.trim()) {
-      setWarning("Please enter a valid API Key first.");
+    if (!(providerUnchanged && apiKeyConfigured) && !apiKeyInput.trim()) {
+      setWarning(`Please enter a valid ${providerMeta.label} API Key first.`);
       return;
     }
     setWarning(null);
-    onConnect(apiKeyInput.trim() || undefined);
+    onConnect(apiKeyInput.trim() || undefined, selectedProvider);
   };
 
   return (
@@ -209,7 +224,7 @@ function LiveRateCard({
             </div>
             <div>
               <CardTitle className="text-base font-bold leading-tight">Live Gold Rate API Integration</CardTitle>
-              <div className="text-xs text-muted-foreground mt-0.5">Powered by GoldAPI.io — 24K, 22K & Silver rates in AED</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Powered by {providerMeta.label} — 24K, 22K & Silver rates in AED</div>
             </div>
           </div>
           <div
@@ -227,13 +242,32 @@ function LiveRateCard({
       <CardContent className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide sm:w-44 flex-shrink-0">
-            GoldAPI.io Token/Key:
+            API Provider:
+          </div>
+          <Select
+            value={selectedProvider}
+            disabled={connected}
+            onValueChange={v => { setSelectedProvider(v as ApiProvider); setApiKeyInput(""); if (warning) setWarning(null); }}
+          >
+            <SelectTrigger className="sm:w-56 flex-shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {API_PROVIDERS.map(p => (
+                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide sm:w-44 flex-shrink-0">
+            {providerMeta.label} Token/Key:
           </div>
           <div className="relative flex-1 min-w-0">
             <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               type={connected ? "text" : showKey ? "text" : "password"}
-              placeholder={apiKeyMasked ?? "Enter your goldapi.io key here..."}
+              placeholder={(providerUnchanged ? apiKeyMasked : null) ?? providerMeta.keyPlaceholder}
               value={connected ? (apiKeyMasked ?? "") : apiKeyInput}
               disabled={connected}
               readOnly={connected}
@@ -335,14 +369,15 @@ export default function Prices() {
   const connectLiveRate = useConnectLiveRate();
   const disconnectLiveRate = useDisconnectLiveRate();
 
-  const handleConnectLiveRate = (apiKey?: string) => {
-    connectLiveRate.mutate({ data: apiKey ? { apiKey } : {} }, {
+  const handleConnectLiveRate = (apiKey: string | undefined, apiProvider: ApiProvider) => {
+    const providerLabel = API_PROVIDERS.find(p => p.value === apiProvider)?.label ?? apiProvider;
+    connectLiveRate.mutate({ data: { ...(apiKey ? { apiKey } : {}), apiProvider } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-        toast({ title: "✓ Connected to GoldAPI.io", description: "Live 24K, 22K & Silver rates applied." });
+        toast({ title: `✓ Connected to ${providerLabel}`, description: "Live 24K, 22K & Silver rates applied." });
       },
       onError: (err: any) => {
-        toast({ title: "Connection failed", description: err?.message ?? "Could not reach GoldAPI.io", variant: "destructive" });
+        toast({ title: "Connection failed", description: err?.message ?? `Could not reach ${providerLabel}`, variant: "destructive" });
       },
     });
   };
@@ -529,6 +564,7 @@ export default function Prices() {
         connected={prices.liveModeConnected}
         apiKeyConfigured={prices.liveApiKeyConfigured}
         apiKeyMasked={prices.liveApiKeyMasked ?? null}
+        apiProvider={(prices.liveApiProvider as ApiProvider) ?? "goldapi"}
         lastSyncedAt={prices.liveLastSyncedAt ?? null}
         liveGoldRate24k={prices.liveGoldRate24k ?? null}
         liveGoldRate22k={prices.liveGoldRate22k ?? null}

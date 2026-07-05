@@ -15,6 +15,7 @@ export const pricesTable = pgTable("prices", {
 
   liveModeConnected: boolean("live_mode_connected").notNull().default(false),
   liveApiKey: text("live_api_key"),
+  liveApiProvider: text("live_api_provider").notNull().default("goldapi"),
   liveGoldRate24k: numeric("live_gold_rate_24k", { precision: 12, scale: 4 }),
   liveGoldRate22k: numeric("live_gold_rate_22k", { precision: 12, scale: 4 }),
   liveSilverRate: numeric("live_silver_rate", { precision: 12, scale: 4 }),

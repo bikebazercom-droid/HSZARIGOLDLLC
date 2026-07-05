@@ -649,7 +649,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, kgBarRate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, kgBarRate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider]
       properties:
         id:
           type: integer
@@ -677,6 +677,10 @@ components:
           type: boolean
         liveApiKeyMasked:
           type: ["string", "null"]
+        liveApiProvider:
+          type: string
+          enum: [goldapi, metalpriceapi]
+          description: Which metal price provider is currently configured/active.
         liveGoldRate24k:
           type: ["number", "null"]
         liveGoldRate22k:
@@ -691,7 +695,11 @@ components:
       properties:
         apiKey:
           type: string
-          description: GoldAPI.io API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted.
+          description: API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi.
+        apiProvider:
+          type: string
+          enum: [goldapi, metalpriceapi]
+          description: Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.
 
     CustomDescription:
       type: object

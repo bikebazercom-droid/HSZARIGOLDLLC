@@ -4,10 +4,21 @@ import { GetPricesResponse, UpdatePricesResponse, ConnectLiveRateResponse, Disco
 
 const router: IRouter = Router();
 
-// GoldAPI.io reports metal spot prices in USD per troy ounce (and USD/gram
-// karat breakdowns for gold). AED is pegged to USD at this fixed rate.
+// Both GoldAPI.io and MetalpriceAPI.com report metal spot prices in USD per
+// troy ounce. AED is pegged to USD at this fixed rate.
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
+
+type ApiProvider = "goldapi" | "metalpriceapi";
+
+function normalizeProvider(v: unknown): ApiProvider {
+  return v === "metalpriceapi" ? "metalpriceapi" : "goldapi";
+}
+
+const PROVIDER_LABELS: Record<ApiProvider, string> = {
+  goldapi: "GoldAPI.io",
+  metalpriceapi: "MetalpriceAPI.com",
+};
 
 function toNum(v: string | number | null): number | null {
   if (v == null) return null;
@@ -38,11 +49,20 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     liveModeConnected: p.liveModeConnected,
     liveApiKeyConfigured: Boolean(p.liveApiKey || process.env.GOLDAPI_KEY),
     liveApiKeyMasked: p.liveApiKey ? maskApiKey(p.liveApiKey) : (process.env.GOLDAPI_KEY ? maskApiKey(process.env.GOLDAPI_KEY) : null),
+    liveApiProvider: normalizeProvider(p.liveApiProvider),
     liveGoldRate24k: toNum(p.liveGoldRate24k),
     liveGoldRate22k: toNum(p.liveGoldRate22k),
     liveSilverRate: toNum(p.liveSilverRate),
     liveLastSyncedAt: p.liveLastSyncedAt ? p.liveLastSyncedAt.toISOString() : null,
   };
+}
+
+// A minimal, provider-agnostic result: USD spot price per troy ounce, plus
+// (when the provider supplies them directly) USD-per-gram karat breakdowns.
+interface MetalSpot {
+  usdPerOunce: number;
+  usdPerGram24k?: number;
+  usdPerGram22k?: number;
 }
 
 interface GoldApiMetalResponse {
@@ -51,14 +71,58 @@ interface GoldApiMetalResponse {
   price_gram_22k?: number;
 }
 
-async function fetchGoldApiMetal(symbol: "XAU" | "XAG", apiKey: string): Promise<GoldApiMetalResponse> {
+async function fetchGoldApiMetal(symbol: "XAU" | "XAG", apiKey: string): Promise<MetalSpot> {
   const res = await fetch(`https://www.goldapi.io/api/${symbol}/USD`, {
     headers: { "x-access-token": apiKey, "Content-Type": "application/json" },
   });
   if (!res.ok) {
     throw new Error(`GoldAPI.io request failed (${symbol}): ${res.status} ${res.statusText}`);
   }
-  return (await res.json()) as GoldApiMetalResponse;
+  const data = (await res.json()) as GoldApiMetalResponse;
+  const usdPerOunce = data.price ?? (data.price_gram_24k != null ? data.price_gram_24k * TROY_OUNCE_TO_GRAM : NaN);
+  if (!Number.isFinite(usdPerOunce)) {
+    throw new Error(`GoldAPI.io returned an unexpected response for ${symbol} — missing price.`);
+  }
+  return { usdPerOunce, usdPerGram24k: data.price_gram_24k, usdPerGram22k: data.price_gram_22k };
+}
+
+interface MetalpriceApiResponse {
+  success?: boolean;
+  rates?: Record<string, number>;
+  error?: { code?: number; type?: string; info?: string };
+}
+
+async function fetchMetalpriceApiMetals(apiKey: string): Promise<{ xau: MetalSpot; xag: MetalSpot }> {
+  const url = `https://api.metalpriceapi.com/v1/latest?api_key=${encodeURIComponent(apiKey)}&base=USD&currencies=XAU,XAG`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`MetalpriceAPI.com request failed: ${res.status} ${res.statusText}`);
+  }
+  const data = (await res.json()) as MetalpriceApiResponse;
+  if (!data.success || !data.rates) {
+    throw new Error(`MetalpriceAPI.com request failed: ${data.error?.info ?? "unknown error"}`);
+  }
+  // `USDXAU`/`USDXAG` are the reciprocal convenience fields already expressed
+  // as USD price per troy ounce. Fall back to inverting the base `XAU`/`XAG`
+  // rate (troy-oz-of-metal per 1 USD) if the convenience fields are missing.
+  const xauUsd = data.rates.USDXAU ?? (data.rates.XAU ? 1 / data.rates.XAU : NaN);
+  const xagUsd = data.rates.USDXAG ?? (data.rates.XAG ? 1 / data.rates.XAG : NaN);
+  if (!Number.isFinite(xauUsd) || !Number.isFinite(xagUsd)) {
+    throw new Error("MetalpriceAPI.com returned an unexpected response — could not determine spot prices.");
+  }
+  return { xau: { usdPerOunce: xauUsd }, xag: { usdPerOunce: xagUsd } };
+}
+
+async function fetchLiveMetalRates(provider: ApiProvider, apiKey: string): Promise<{ gold: MetalSpot; silver: MetalSpot }> {
+  if (provider === "metalpriceapi") {
+    const { xau, xag } = await fetchMetalpriceApiMetals(apiKey);
+    return { gold: xau, silver: xag };
+  }
+  const [gold, silver] = await Promise.all([
+    fetchGoldApiMetal("XAU", apiKey),
+    fetchGoldApiMetal("XAG", apiKey),
+  ]);
+  return { gold, silver };
 }
 
 async function getOrCreate() {
@@ -105,35 +169,38 @@ router.put("/prices", async (req, res): Promise<void> => {
 });
 
 router.post("/prices/live/connect", async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as { apiKey?: string };
+  const body = (req.body ?? {}) as { apiKey?: string; apiProvider?: string };
   const current = await getOrCreate();
   const providedKey = body.apiKey?.trim();
-  const apiKey = providedKey || current.liveApiKey || process.env.GOLDAPI_KEY || undefined;
+  // Switching providers invalidates a previously-saved key for the *other*
+  // provider, so only fall back to the stored key when the provider is
+  // unchanged (or unspecified, i.e. re-syncing with the existing setup).
+  const provider = body.apiProvider != null ? normalizeProvider(body.apiProvider) : normalizeProvider(current.liveApiProvider);
+  const providerChanged = provider !== normalizeProvider(current.liveApiProvider);
+  const fallbackKey = provider === "goldapi" ? process.env.GOLDAPI_KEY : undefined;
+  const apiKey = providedKey || (!providerChanged ? current.liveApiKey ?? undefined : undefined) || fallbackKey || undefined;
 
   if (!apiKey) {
-    res.status(400).json({ error: "Please enter a valid API Key first." });
+    res.status(400).json({ error: `Please enter a valid ${PROVIDER_LABELS[provider]} API Key first.` });
     return;
   }
 
-  let gold: GoldApiMetalResponse;
-  let silver: GoldApiMetalResponse;
+  let gold: MetalSpot;
+  let silver: MetalSpot;
   try {
-    [gold, silver] = await Promise.all([
-      fetchGoldApiMetal("XAU", apiKey),
-      fetchGoldApiMetal("XAG", apiKey),
-    ]);
+    ({ gold, silver } = await fetchLiveMetalRates(provider, apiKey));
   } catch (err) {
-    req.log.error({ err }, "Failed to fetch live rates from GoldAPI.io");
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to fetch live rates from GoldAPI.io" });
+    req.log.error({ err, provider }, `Failed to fetch live rates from ${PROVIDER_LABELS[provider]}`);
+    res.status(502).json({ error: err instanceof Error ? err.message : `Failed to fetch live rates from ${PROVIDER_LABELS[provider]}` });
     return;
   }
 
-  const gold24kUsd = gold.price_gram_24k ?? (gold.price != null ? gold.price / TROY_OUNCE_TO_GRAM : null);
-  const gold22kUsd = gold.price_gram_22k ?? (gold24kUsd != null ? gold24kUsd * (22 / 24) : null);
-  const silverUsd = silver.price_gram_24k ?? (silver.price != null ? silver.price / TROY_OUNCE_TO_GRAM : null);
+  const gold24kUsd = gold.usdPerGram24k ?? gold.usdPerOunce / TROY_OUNCE_TO_GRAM;
+  const gold22kUsd = gold.usdPerGram22k ?? gold24kUsd * (22 / 24);
+  const silverUsd = silver.usdPerGram24k ?? silver.usdPerOunce / TROY_OUNCE_TO_GRAM;
 
-  if (gold24kUsd == null || gold22kUsd == null || silverUsd == null) {
-    res.status(502).json({ error: "GoldAPI.io returned an unexpected response — could not determine per-gram rates." });
+  if (!Number.isFinite(gold24kUsd) || !Number.isFinite(gold22kUsd) || !Number.isFinite(silverUsd)) {
+    res.status(502).json({ error: `${PROVIDER_LABELS[provider]} returned an unexpected response — could not determine per-gram rates.` });
     return;
   }
 
@@ -147,6 +214,7 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
     .update(pricesTable)
     .set({
       liveModeConnected: true,
+      liveApiProvider: provider,
       ...(providedKey ? { liveApiKey: providedKey } : {}),
       liveGoldRate24k: String(gold24kAed),
       liveGoldRate22k: String(gold22kAed),
