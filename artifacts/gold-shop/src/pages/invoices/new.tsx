@@ -74,19 +74,36 @@ interface PricesData {
   liveModeConnected?: boolean;
 }
 
+// The 5 core "live-priced" asset descriptions, kept in sync with the asset
+// cards on the Live Prices page. Selecting one of these in an invoice row
+// auto-fills that row's rate from whichever source (live API or manual
+// fallback) is currently active for the underlying per-gram field.
+const LIVE_ASSET_DESCRIPTIONS = [
+  "Ten Tola Bar TTB",
+  "Jewellery 22K 1GM",
+  "Gold 9999 1GM",
+  "Gold 9999 1KG",
+  "Kilo Bar 995 1KG",
+] as const;
+
 const DESC_TO_PURITY: Record<string, string> = {
   "22K Gold Jewelry": "22K (916.0)",
   "24K GOLD": "24K (995.0)",
   "TT. BAR": "24K (995.0)",
   "KG. BAR": "24K (995.0)",
   "Silver": "",
+  "Ten Tola Bar TTB": "24K (995.0)",
+  "Jewellery 22K 1GM": "22K (916.0)",
+  "Gold 9999 1GM": "24K (999.9)",
+  "Gold 9999 1KG": "24K (999.9)",
+  "Kilo Bar 995 1KG": "24K (995.0)",
 };
 
 function descToCategory(desc: string): string {
-  if (desc === "22K Gold Jewelry") return "gold_jewelry";
-  if (desc === "24K GOLD") return "gold";
-  if (desc === "TT. BAR") return "tt_bar";
-  if (desc === "KG. BAR") return "kg_bar";
+  if (desc === "22K Gold Jewelry" || desc === "Jewellery 22K 1GM") return "gold_jewelry";
+  if (desc === "24K GOLD" || desc === "Gold 9999 1GM" || desc === "Gold 9999 1KG") return "gold";
+  if (desc === "TT. BAR" || desc === "Ten Tola Bar TTB") return "tt_bar";
+  if (desc === "KG. BAR" || desc === "Kilo Bar 995 1KG") return "kg_bar";
   if (desc === "Silver") return "silver";
   // Anything else (custom-typed description, saved custom price, or a Product) is Custom
   return "custom";
@@ -94,10 +111,10 @@ function descToCategory(desc: string): string {
 
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
   if (!prices) return fallback;
-  if (description === "22K Gold Jewelry") return prices.goldJewelryRate;
-  if (description === "24K GOLD") return prices.goldBullionRate;
-  if (description === "TT. BAR") return prices.ttBarRate;
-  if (description === "KG. BAR") return prices.kgBarRate;
+  if (description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.goldJewelryRate;
+  if (description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return prices.goldBullionRate;
+  if (description === "TT. BAR" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
+  if (description === "KG. BAR" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
   if (description === "Silver") return prices.silverPricePerGram;
   // Check custom descriptions
   const custom = (prices as any).customDescriptions as { name: string; rate: number }[] | undefined;
@@ -466,10 +483,11 @@ export default function NewInvoice() {
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="22K Gold Jewelry">22K Gold Jewelry</SelectItem>
-                              <SelectItem value="24K GOLD">24K GOLD</SelectItem>
-                              <SelectItem value="TT. BAR">TT. BAR</SelectItem>
-                              <SelectItem value="KG. BAR">KG. BAR</SelectItem>
+                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Live-Priced Assets</div>
+                              {LIVE_ASSET_DESCRIPTIONS.map(d => (
+                                <SelectItem key={d} value={d}>{d}</SelectItem>
+                              ))}
+                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Other</div>
                               <SelectItem value="Silver">Silver</SelectItem>
                               {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
                                 <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
