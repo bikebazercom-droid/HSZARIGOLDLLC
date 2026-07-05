@@ -227,6 +227,34 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
     GROUP BY COALESCE(ii.category, 'custom')
   `).then(r => r.rows as CatRow[]);
 
+  // Payment method breakdown for the same date range.
+  // Credit/Due sales are any invoice marked isPending, regardless of the recorded payment method.
+  // Remaining (settled) invoices are split into Cash vs Card (bank_transfer is grouped with Card as electronic settlement).
+  const rangeInvoices = await db
+    .select({ total: invoicesTable.total, paymentMethod: invoicesTable.paymentMethod, isPending: invoicesTable.isPending })
+    .from(invoicesTable)
+    .where(sql`${invoicesTable.createdAt} >= ${start} AND ${invoicesTable.createdAt} < ${end}`);
+
+  let totalCash = 0;
+  let totalCard = 0;
+  let totalCredit = 0;
+  for (const inv of rangeInvoices) {
+    const amount = Number(inv.total);
+    if (inv.isPending) {
+      totalCredit += amount;
+    } else if (inv.paymentMethod === "cash") {
+      totalCash += amount;
+    } else {
+      totalCard += amount;
+    }
+  }
+  const paymentBreakdown = {
+    totalCash: Math.round(totalCash * 100) / 100,
+    totalCard: Math.round(totalCard * 100) / 100,
+    totalCredit: Math.round(totalCredit * 100) / 100,
+    grandTotal: Math.round((totalCash + totalCard + totalCredit) * 100) / 100,
+  };
+
   // Anything with a category not in our known set is folded into "Custom"
   const knownCategories = new Set(CATEGORY_ORDER);
   const normalizedRows = catRows.map(r => ({
@@ -267,6 +295,7 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
       grandTotalGrossGrams,
       grandTotalGrams,
       grandTotalAmount,
+      paymentBreakdown,
     })
   );
 });

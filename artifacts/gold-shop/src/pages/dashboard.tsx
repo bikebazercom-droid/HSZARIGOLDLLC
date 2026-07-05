@@ -116,34 +116,68 @@ function CategorySalesSummary() {
         {isLoading ? (
           <Skeleton className="h-56" />
         ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Category</TableHead>
-                  <TableHead className="text-right">Total Gross Wt. (g)</TableHead>
-                  <TableHead className="text-right">Total Grams Sold (g)</TableHead>
-                  <TableHead className="text-right pr-4">Total Sales Revenue (AED)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data?.rows.map((row) => (
-                  <TableRow key={row.category}>
-                    <TableCell className="font-medium pl-4">{row.label}</TableCell>
-                    <TableCell className="text-right">{fmtGrams(row.grossGrams)} g</TableCell>
-                    <TableCell className="text-right">{fmtGrams(row.grams)} g</TableCell>
-                    <TableCell className="text-right pr-4">AED {fmtAED(row.amount)}</TableCell>
+          <>
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4">Category</TableHead>
+                    <TableHead className="text-right">Total Gross Wt. (g)</TableHead>
+                    <TableHead className="text-right">Total Grams Sold (g)</TableHead>
+                    <TableHead className="text-right pr-4">Total Sales Revenue (AED)</TableHead>
                   </TableRow>
-                ))}
-                <TableRow className="bg-muted/40 font-bold border-t-2">
-                  <TableCell className="pl-4">Grand Total</TableCell>
-                  <TableCell className="text-right">{fmtGrams(data?.grandTotalGrossGrams)} g</TableCell>
-                  <TableCell className="text-right">{fmtGrams(data?.grandTotalGrams)} g</TableCell>
-                  <TableCell className="text-right pr-4">AED {fmtAED(data?.grandTotalAmount)}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {data?.rows.map((row) => (
+                    <TableRow key={row.category}>
+                      <TableCell className="font-medium pl-4">{row.label}</TableCell>
+                      <TableCell className="text-right">{fmtGrams(row.grossGrams)} g</TableCell>
+                      <TableCell className="text-right">{fmtGrams(row.grams)} g</TableCell>
+                      <TableCell className="text-right pr-4">AED {fmtAED(row.amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="bg-muted/40 font-bold border-t-2">
+                    <TableCell className="pl-4">Grand Total</TableCell>
+                    <TableCell className="text-right">{fmtGrams(data?.grandTotalGrossGrams)} g</TableCell>
+                    <TableCell className="text-right">{fmtGrams(data?.grandTotalGrams)} g</TableCell>
+                    <TableCell className="text-right pr-4">AED {fmtAED(data?.grandTotalAmount)}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold text-primary mb-2">Payment Method Breakdown</div>
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-4">Payment Method</TableHead>
+                      <TableHead className="text-right pr-4">Total (AED)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="pl-4">Cash</TableCell>
+                      <TableCell className="text-right pr-4">AED {fmtAED(data?.paymentBreakdown.totalCash)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="pl-4">Card</TableCell>
+                      <TableCell className="text-right pr-4">AED {fmtAED(data?.paymentBreakdown.totalCard)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="pl-4">Credit / Due (Account)</TableCell>
+                      <TableCell className="text-right pr-4">AED {fmtAED(data?.paymentBreakdown.totalCredit)}</TableCell>
+                    </TableRow>
+                    <TableRow className="bg-muted/40 font-bold border-t-2">
+                      <TableCell className="pl-4">Grand Total</TableCell>
+                      <TableCell className="text-right pr-4">AED {fmtAED(data?.paymentBreakdown.grandTotal)}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </>
         )}
       </CardContent>
 
@@ -223,6 +257,51 @@ function CategorySalesSummary() {
               </tr>
             </tbody>
           </table>
+
+          {/* Payment Method Breakdown — official financial summary */}
+          <div style={{ marginTop: "18px" }}>
+            <div style={{ fontSize: "12px", fontWeight: "bold", color: NAVY, letterSpacing: "0.5px", marginBottom: "6px" }}>
+              PAYMENT METHOD BREAKDOWN
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+              <thead>
+                <tr>
+                  <th style={{ background: NAVY, color: "#fff", textAlign: "left", padding: "8px 8px", border: `1px solid ${NAVY}` }}>
+                    Payment Method
+                  </th>
+                  <th style={{ background: NAVY, color: "#fff", textAlign: "right", padding: "8px 8px", border: `1px solid ${NAVY}` }}>
+                    Total (AED)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ background: "#fff" }}>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>Cash</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>
+                    AED {fmtAED(data?.paymentBreakdown.totalCash)}
+                  </td>
+                </tr>
+                <tr style={{ background: "#f7f7f7" }}>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>Card</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>
+                    AED {fmtAED(data?.paymentBreakdown.totalCard)}
+                  </td>
+                </tr>
+                <tr style={{ background: "#fff" }}>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>Credit / Due (Account)</td>
+                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>
+                    AED {fmtAED(data?.paymentBreakdown.totalCredit)}
+                  </td>
+                </tr>
+                <tr style={{ background: "#eee6cf" }}>
+                  <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>Grand Total</td>
+                  <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
+                    AED {fmtAED(data?.paymentBreakdown.grandTotal)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           {/* Footer */}
           <div style={{

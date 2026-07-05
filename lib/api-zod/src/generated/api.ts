@@ -182,7 +182,13 @@ export const GetCategorySummaryResponse = zod.object({
 })),
   "grandTotalGrossGrams": zod.number(),
   "grandTotalGrams": zod.number(),
-  "grandTotalAmount": zod.number()
+  "grandTotalAmount": zod.number(),
+  "paymentBreakdown": zod.object({
+  "totalCash": zod.number(),
+  "totalCard": zod.number(),
+  "totalCredit": zod.number(),
+  "grandTotal": zod.number()
+})
 })
 
 

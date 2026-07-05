@@ -28,6 +28,7 @@ export * from './listCustomersParams';
 export * from './listInvoicesParams';
 export * from './listProductsParams';
 export * from './monthlySale';
+export * from './paymentMethodBreakdown';
 export * from './prices';
 export * from './pricesInput';
 export * from './product';

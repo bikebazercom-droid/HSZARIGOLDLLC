@@ -149,6 +149,13 @@ export interface CategorySummaryRow {
   invoiceCount: number;
 }
 
+export interface PaymentMethodBreakdown {
+  totalCash: number;
+  totalCard: number;
+  totalCredit: number;
+  grandTotal: number;
+}
+
 export interface CategorySummary {
   startDate: string;
   endDate: string;
@@ -156,6 +163,7 @@ export interface CategorySummary {
   grandTotalGrossGrams: number;
   grandTotalGrams: number;
   grandTotalAmount: number;
+  paymentBreakdown: PaymentMethodBreakdown;
 }
 
 export interface CustomDescription {

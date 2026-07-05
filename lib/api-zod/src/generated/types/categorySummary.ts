@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CategorySummaryRow } from './categorySummaryRow';
+import type { PaymentMethodBreakdown } from './paymentMethodBreakdown';
 
 export interface CategorySummary {
   startDate: string;
@@ -14,4 +15,5 @@ export interface CategorySummary {
   grandTotalGrossGrams: number;
   grandTotalGrams: number;
   grandTotalAmount: number;
+  paymentBreakdown: PaymentMethodBreakdown;
 }

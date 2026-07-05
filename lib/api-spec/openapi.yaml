@@ -569,9 +569,22 @@ components:
         invoiceCount:
           type: integer
 
+    PaymentMethodBreakdown:
+      type: object
+      required: [totalCash, totalCard, totalCredit, grandTotal]
+      properties:
+        totalCash:
+          type: number
+        totalCard:
+          type: number
+        totalCredit:
+          type: number
+        grandTotal:
+          type: number
+
     CategorySummary:
       type: object
-      required: [startDate, endDate, rows, grandTotalGrossGrams, grandTotalGrams, grandTotalAmount]
+      required: [startDate, endDate, rows, grandTotalGrossGrams, grandTotalGrams, grandTotalAmount, paymentBreakdown]
       properties:
         startDate:
           type: string
@@ -587,6 +600,8 @@ components:
           type: number
         grandTotalAmount:
           type: number
+        paymentBreakdown:
+          $ref: "#/components/schemas/PaymentMethodBreakdown"
 
     Prices:
       type: object
