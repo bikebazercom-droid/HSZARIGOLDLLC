@@ -888,6 +888,9 @@ components:
           type: string
         isPending:
           type: boolean
+        createdAt:
+          type: string
+          description: "Optional invoice date (ISO datetime string). When provided, overrides the default current timestamp so back-dated invoices can be created."
         items:
           type: array
           items:

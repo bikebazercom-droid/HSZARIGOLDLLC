@@ -122,7 +122,17 @@ router.post("/invoices", async (req, res): Promise<void> => {
     return;
   }
 
-  const { items, ...invoiceData } = parsed.data;
+  const { items, createdAt, ...invoiceData } = parsed.data;
+
+  let invoiceCreatedAt: Date | undefined;
+  if (createdAt) {
+    const parsedDate = new Date(createdAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      res.status(400).json({ error: "Invalid createdAt date" });
+      return;
+    }
+    invoiceCreatedAt = parsedDate;
+  }
 
   // Generate invoice number based on max existing number (not count, to handle deletions)
   const [maxRow] = await db.execute<{ max_num: string | null }>(
@@ -148,6 +158,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
       isPending: invoiceData.isPending ?? false,
       createdByUserId: req.session.userId ?? null,
       createdByUserName: req.session.fullName ?? null,
+      ...(invoiceCreatedAt ? { createdAt: invoiceCreatedAt } : {}),
     })
     .returning();
 

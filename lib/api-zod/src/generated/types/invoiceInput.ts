@@ -31,5 +31,7 @@ export interface InvoiceInput {
   roundOffDiscount?: number;
   notes?: string;
   isPending?: boolean;
+  /** Optional invoice date (ISO datetime string). When provided, overrides the default current timestamp so back-dated invoices can be created. */
+  createdAt?: string;
   items: InvoiceItemInput[];
 }

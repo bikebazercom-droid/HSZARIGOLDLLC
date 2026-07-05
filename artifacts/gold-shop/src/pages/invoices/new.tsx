@@ -155,6 +155,11 @@ export default function NewInvoice() {
   const [customerNationality, setCustomerNationality] = useState("");
   const [customerCountry, setCustomerCountry] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState<string>(() => {
+    const now = new Date();
+    const tzOffsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - tzOffsetMs).toISOString().slice(0, 10);
+  });
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
@@ -283,10 +288,26 @@ export default function NewInvoice() {
 
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const buildInvoiceCreatedAt = () => {
+    const now = new Date();
+    const [year, month, day] = invoiceDate.split("-").map(Number);
+    if (!year || !month || !day) return undefined;
+    return new Date(
+      year,
+      month - 1,
+      day,
+      now.getHours(),
+      now.getMinutes(),
+      now.getSeconds(),
+      now.getMilliseconds()
+    ).toISOString();
+  };
+
   const doCreateInvoice = (resolvedCustomerId?: number) => {
     createInvoice.mutate({
       data: {
         customerId: resolvedCustomerId ?? customerId,
+        createdAt: buildInvoiceCreatedAt(),
         customerName,
         customerMobile,
         customerEmail,
@@ -687,6 +708,16 @@ export default function NewInvoice() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Invoice Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setInvoiceDate(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">

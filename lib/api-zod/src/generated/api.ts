@@ -507,6 +507,7 @@ export const CreateInvoiceBody = zod.object({
   "roundOffDiscount": zod.number().optional(),
   "notes": zod.string().optional(),
   "isPending": zod.boolean().optional(),
+  "createdAt": zod.string().optional().describe('Optional invoice date (ISO datetime string). When provided, overrides the default current timestamp so back-dated invoices can be created.'),
   "items": zod.array(zod.object({
   "productId": zod.number().optional(),
   "description": zod.string(),
