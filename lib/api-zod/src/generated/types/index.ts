@@ -13,6 +13,7 @@ export * from './companySettingsInput';
 export * from './customDescription';
 export * from './customer';
 export * from './customerInput';
+export * from './customerListItem';
 export * from './dashboardStats';
 export * from './errorResponse';
 export * from './getCategorySummaryParams';

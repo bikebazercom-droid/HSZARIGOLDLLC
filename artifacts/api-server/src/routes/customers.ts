@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike } from "drizzle-orm";
-import { db, customersTable } from "@workspace/db";
+import { eq, ilike, or, sql } from "drizzle-orm";
+import { db, customersTable, invoicesTable } from "@workspace/db";
 import {
   ListCustomersQueryParams,
   CreateCustomerBody,
@@ -20,18 +20,47 @@ router.get("/customers", async (req, res): Promise<void> => {
   const query = ListCustomersQueryParams.safeParse(req.query);
   const search = query.success ? query.data.search : undefined;
 
-  let rows;
-  if (search) {
-    rows = await db
-      .select()
-      .from(customersTable)
-      .where(ilike(customersTable.name, `%${search}%`))
-      .orderBy(customersTable.createdAt);
-  } else {
-    rows = await db.select().from(customersTable).orderBy(customersTable.createdAt);
-  }
+  // Multi-field global search (OR logic) across name, mobile, passport number, and Emirates ID
+  const searchCondition = search
+    ? or(
+        ilike(customersTable.name, `%${search}%`),
+        ilike(customersTable.mobile, `%${search}%`),
+        ilike(customersTable.passportNumber, `%${search}%`),
+        ilike(customersTable.emiratesId, `%${search}%`)
+      )
+    : undefined;
 
-  res.json(ListCustomersResponse.parse(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() }))));
+  const rows = await db
+    .select({
+      id: customersTable.id,
+      name: customersTable.name,
+      mobile: customersTable.mobile,
+      email: customersTable.email,
+      passportNumber: customersTable.passportNumber,
+      emiratesId: customersTable.emiratesId,
+      nationality: customersTable.nationality,
+      address: customersTable.address,
+      country: customersTable.country,
+      createdAt: customersTable.createdAt,
+      invoiceCount: sql<string>`COUNT(DISTINCT ${invoicesTable.id})`,
+      totalSpent: sql<string>`COALESCE(SUM(${invoicesTable.total}::numeric), 0)`,
+    })
+    .from(customersTable)
+    .leftJoin(invoicesTable, eq(invoicesTable.customerId, customersTable.id))
+    .where(searchCondition)
+    .groupBy(customersTable.id)
+    .orderBy(customersTable.createdAt);
+
+  res.json(
+    ListCustomersResponse.parse(
+      rows.map(r => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        invoiceCount: parseInt(r.invoiceCount, 10),
+        totalSpent: Math.round(parseFloat(r.totalSpent) * 100) / 100,
+      }))
+    )
+  );
 });
 
 router.post("/customers", async (req, res): Promise<void> => {

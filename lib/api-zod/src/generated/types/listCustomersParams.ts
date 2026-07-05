@@ -7,5 +7,8 @@
  */
 
 export type ListCustomersParams = {
+/**
+ * Global search term matched (case-insensitive, OR logic) against name, mobile, passportNumber, and emiratesId.
+ */
 search?: string;
 };

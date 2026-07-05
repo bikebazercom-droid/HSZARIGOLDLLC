@@ -25,6 +25,7 @@ import type {
   CompanySettingsInput,
   Customer,
   CustomerInput,
+  CustomerListItem,
   DashboardStats,
   ErrorResponse,
   GetCategorySummaryParams,
@@ -618,9 +619,9 @@ export const getListCustomersUrl = (params?: ListCustomersParams,) => {
 /**
  * @summary List all customers
  */
-export const listCustomers = async (params?: ListCustomersParams, options?: RequestInit): Promise<Customer[]> => {
+export const listCustomers = async (params?: ListCustomersParams, options?: RequestInit): Promise<CustomerListItem[]> => {
 
-  return customFetch<Customer[]>(getListCustomersUrl(params),
+  return customFetch<CustomerListItem[]>(getListCustomersUrl(params),
   {
     ...options,
     method: 'GET'

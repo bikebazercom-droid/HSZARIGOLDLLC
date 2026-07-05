@@ -141,6 +141,7 @@ paths:
       parameters:
         - name: search
           in: query
+          description: "Global search term matched (case-insensitive, OR logic) against name, mobile, passportNumber, and emiratesId."
           schema:
             type: string
       responses:
@@ -151,7 +152,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Customer"
+                  $ref: "#/components/schemas/CustomerListItem"
     post:
       operationId: createCustomer
       tags: [customers]
@@ -665,6 +666,35 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
+
+    CustomerListItem:
+      type: object
+      required: [id, name, createdAt, invoiceCount, totalSpent]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        mobile:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        passportNumber:
+          type: ["string", "null"]
+        emiratesId:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        invoiceCount:
+          type: integer
+        totalSpent:
+          type: number
 
     CustomerInput:
       type: object

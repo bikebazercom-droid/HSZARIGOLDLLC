@@ -205,6 +205,28 @@ export interface Customer {
   createdAt: string;
 }
 
+export interface CustomerListItem {
+  id: number;
+  name: string;
+  /** @nullable */
+  mobile?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  passportNumber?: string | null;
+  /** @nullable */
+  emiratesId?: string | null;
+  /** @nullable */
+  nationality?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  country?: string | null;
+  createdAt: string;
+  invoiceCount: number;
+  totalSpent: number;
+}
+
 export interface CustomerInput {
   name: string;
   mobile?: string;
@@ -335,6 +357,9 @@ endDate: string;
 };
 
 export type ListCustomersParams = {
+/**
+ * Global search term matched (case-insensitive, OR logic) against name, mobile, passportNumber, and emiratesId.
+ */
 search?: string;
 };
 

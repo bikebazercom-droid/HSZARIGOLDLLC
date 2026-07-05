@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useListCustomers, getListCustomersQueryKey, useDeleteCustomer } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,22 @@ import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
+function fmtAED(n: number | undefined | null): string {
+  return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function Customers() {
   const [search, setSearch] = useState("");
-  const { data: customers, isLoading } = useListCustomers(
-    { search: search || undefined },
-    { query: { queryKey: getListCustomersQueryKey({ search: search || undefined }) } }
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data: customers, isLoading, isFetching } = useListCustomers(
+    { search: debouncedSearch || undefined },
+    { query: { queryKey: getListCustomersQueryKey({ search: debouncedSearch || undefined }) } }
   );
 
   const queryClient = useQueryClient();
@@ -43,12 +54,12 @@ export default function Customers() {
         </Link>
       </div>
 
-      <div className="flex items-center gap-2 max-w-sm">
-        <div className="relative flex-1">
+      <div className="max-w-xl">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input 
-            placeholder="Search customers..." 
-            className="pl-9" 
+          <Input
+            placeholder="Search by Name, Phone, Passport, or Emirates ID..."
+            className="pl-9 h-11 text-base"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -63,6 +74,8 @@ export default function Customers() {
               <TableHead>Contact</TableHead>
               <TableHead>ID / Passport</TableHead>
               <TableHead>Nationality</TableHead>
+              <TableHead className="text-right">Total Invoices</TableHead>
+              <TableHead className="text-right">Total Spent (AED)</TableHead>
               <TableHead>Added</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -70,17 +83,17 @@ export default function Customers() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">Loading...</TableCell>
+                <TableCell colSpan={8} className="h-24 text-center">Loading...</TableCell>
               </TableRow>
             ) : customers?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No customers found.
+                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                  {search ? `No customers found matching "${search}".` : "No customers found."}
                 </TableCell>
               </TableRow>
             ) : (
               customers?.map((customer) => (
-                <TableRow key={customer.id}>
+                <TableRow key={customer.id} className={isFetching ? "opacity-60" : undefined}>
                   <TableCell className="font-medium">
                     <Link href={`/customers/${customer.id}`} className="hover:underline text-primary">
                       {customer.name}
@@ -95,6 +108,8 @@ export default function Customers() {
                     <div className="text-xs text-muted-foreground">{customer.passportNumber || ""}</div>
                   </TableCell>
                   <TableCell>{customer.nationality || "-"}</TableCell>
+                  <TableCell className="text-right">{customer.invoiceCount}</TableCell>
+                  <TableCell className="text-right">AED {fmtAED(customer.totalSpent)}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {format(new Date(customer.createdAt), "MMM d, yyyy")}
                   </TableCell>

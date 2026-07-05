@@ -241,7 +241,7 @@ export const UpdatePricesResponse = zod.object({
  * @summary List all customers
  */
 export const ListCustomersQueryParams = zod.object({
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional().describe('Global search term matched (case-insensitive, OR logic) against name, mobile, passportNumber, and emiratesId.')
 })
 
 export const ListCustomersResponseItem = zod.object({
@@ -254,7 +254,9 @@ export const ListCustomersResponseItem = zod.object({
   "nationality": zod.string().nullish(),
   "address": zod.string().nullish(),
   "country": zod.string().nullish(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "invoiceCount": zod.number(),
+  "totalSpent": zod.number()
 })
 export const ListCustomersResponse = zod.array(ListCustomersResponseItem)
 
