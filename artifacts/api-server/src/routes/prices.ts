@@ -51,6 +51,9 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     ttBarRate: Number(p.ttBarRate),
     ttBar24kRate: Number(p.ttBar24kRate),
     kgBarRate: Number(p.kgBarRate),
+    gold22kRate: Number(p.gold22kRate),
+    gold21kRate: Number(p.gold21kRate),
+    gold18kRate: Number(p.gold18kRate),
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
@@ -154,6 +157,9 @@ router.put("/prices", async (req, res): Promise<void> => {
     ttBarRate?: number;
     ttBar24kRate?: number;
     kgBarRate?: number;
+    gold22kRate?: number;
+    gold21kRate?: number;
+    gold18kRate?: number;
     customDescriptions?: { name: string; rate: number }[];
   };
 
@@ -167,6 +173,9 @@ router.put("/prices", async (req, res): Promise<void> => {
   if (body.ttBarRate != null) updates.ttBarRate = String(body.ttBarRate);
   if (body.ttBar24kRate != null) updates.ttBar24kRate = String(body.ttBar24kRate);
   if (body.kgBarRate != null) updates.kgBarRate = String(body.kgBarRate);
+  if (body.gold22kRate != null) updates.gold22kRate = String(body.gold22kRate);
+  if (body.gold21kRate != null) updates.gold21kRate = String(body.gold21kRate);
+  if (body.gold18kRate != null) updates.gold18kRate = String(body.gold18kRate);
   if (body.customDescriptions != null) updates.customDescriptions = JSON.stringify(body.customDescriptions);
 
   const [updated] = await db
@@ -221,6 +230,11 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
   const gold995Aed = Math.round(gold24kAed * PURITY_995_FACTOR * 100) / 100;
   // TT. BAR 24K is a strict 999.0 purity bullion bar.
   const gold999Aed = Math.round(gold24kAed * PURITY_999_FACTOR * 100) / 100;
+  // Jewelry karat rates (22K/21K/18K) are first-class core assets, computed
+  // from the raw 24K spot rate the same way as the 995/999 purity bars above.
+  const gold916Aed = Math.round(gold24kAed * 0.916 * 100) / 100;
+  const gold875Aed = Math.round(gold24kAed * 0.875 * 100) / 100;
+  const gold750Aed = Math.round(gold24kAed * 0.750 * 100) / 100;
 
   const wasConnected = current.liveModeConnected;
 
@@ -243,6 +257,9 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
         preLiveTtBar24kRate: current.ttBar24kRate,
         preLiveKgBarRate: current.kgBarRate,
         preLiveSilverPricePerGram: current.silverPricePerGram,
+        preLiveGold22kRate: current.gold22kRate,
+        preLiveGold21kRate: current.gold21kRate,
+        preLiveGold18kRate: current.gold18kRate,
       }),
       goldPricePerGram: String(gold24kAed),
       goldJewelryRate: String(gold22kAed),
@@ -250,6 +267,9 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
       ttBarRate: String(gold995Aed),
       ttBar24kRate: String(gold999Aed),
       kgBarRate: String(gold995Aed),
+      gold22kRate: String(gold916Aed),
+      gold21kRate: String(gold875Aed),
+      gold18kRate: String(gold750Aed),
       silverPricePerGram: String(silverAed),
       updatedAt: new Date(),
     })
@@ -274,6 +294,9 @@ router.post("/prices/live/disconnect", async (req, res): Promise<void> => {
       ttBarRate: current.preLiveTtBarRate ?? current.ttBarRate,
       ttBar24kRate: current.preLiveTtBar24kRate ?? current.ttBar24kRate,
       kgBarRate: current.preLiveKgBarRate ?? current.kgBarRate,
+      gold22kRate: current.preLiveGold22kRate ?? current.gold22kRate,
+      gold21kRate: current.preLiveGold21kRate ?? current.gold21kRate,
+      gold18kRate: current.preLiveGold18kRate ?? current.gold18kRate,
       silverPricePerGram: current.preLiveSilverPricePerGram ?? current.silverPricePerGram,
       goldPricePerGram: current.preLiveGoldBullionRate ?? current.goldPricePerGram,
       preLiveGoldJewelryRate: null,
@@ -282,6 +305,9 @@ router.post("/prices/live/disconnect", async (req, res): Promise<void> => {
       preLiveTtBar24kRate: null,
       preLiveKgBarRate: null,
       preLiveSilverPricePerGram: null,
+      preLiveGold22kRate: null,
+      preLiveGold21kRate: null,
+      preLiveGold18kRate: null,
       updatedAt: new Date(),
     })
     .returning();

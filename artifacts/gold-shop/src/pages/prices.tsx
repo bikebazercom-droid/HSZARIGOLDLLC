@@ -24,11 +24,11 @@ import tenTolaBarImg from "@/assets/rates/ten-tola-bar.png";
 import singleGoldBarImg from "@/assets/rates/single-gold-bar.png";
 import goldKiloBrickImg from "@/assets/rates/gold-kilo-brick.png";
 import goldBarStackImg from "@/assets/rates/gold-bar-stack.png";
+import jewelryRingImg from "@/assets/rates/jewelry-ring.png";
 
 const NAVY = "#1e3a5f";
-const GOLD = "#c8a43a";
 
-type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "ttBar24kRate" | "kgBarRate" | "silverPricePerGram";
+type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "ttBar24kRate" | "kgBarRate" | "silverPricePerGram" | "gold22kRate" | "gold21kRate" | "gold18kRate";
 interface CustomItem { name: string; rate: number }
 
 const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
@@ -99,55 +99,6 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChan
             {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
           </Button>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ── Derived per-gram karat cards (read-only, computed from raw spot) ── */
-interface DerivedCardProps {
-  label: string; sublabel: string; multiplier: number; spotRate: number;
-}
-
-function DerivedKaratCard({ label, sublabel, multiplier, spotRate }: DerivedCardProps) {
-  const value = spotRate > 0 ? spotRate * multiplier : 0;
-  return (
-    <Card className="relative overflow-hidden" style={{ borderColor: "#c8a43a66", boxShadow: "0 0 0 1px #c8a43a33" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: GOLD }} />
-      <CardHeader className="pb-2 pt-5">
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 border flex items-center justify-center text-xl font-bold"
-            style={{ borderColor: "#c8a43a55", background: "#c8a43a12", color: GOLD }}>
-            {label.split(" ")[0]}
-          </div>
-          <div className="min-w-0">
-            <CardTitle className="text-base font-bold leading-tight truncate">{label}</CardTitle>
-            <div className="text-xs text-muted-foreground mt-0.5">{sublabel}</div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#a3841f" }}>
-          <CalendarDays className="w-3.5 h-3.5" />
-          Derived from Raw Spot Rate — ×{multiplier}
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">
-            Rate per gram (AED)
-          </div>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-            <div className="pl-14 text-xl font-bold h-12 flex items-center rounded-md border bg-amber-50/40" style={{ fontFamily: "monospace", borderColor: "#c8a43a55" }}>
-              {value.toFixed(2)}
-            </div>
-          </div>
-        </div>
-        <div
-          className="text-[10px] text-center font-bold uppercase tracking-wide py-1.5 rounded-md"
-          style={{ color: "#a3841f", background: "#c8a43a18", border: "1px solid #c8a43a40" }}
-        >
-          Read-Only — Auto-Computed
-        </div>
       </CardContent>
     </Card>
   );
@@ -434,10 +385,11 @@ export default function Prices() {
     });
   };
 
-  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram"];
+  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram", "gold22kRate", "gold21kRate", "gold18kRate"];
 
   const [localRates, setLocalRates] = useState<Record<RateKey, number>>({
     goldJewelryRate: 0, goldBullionRate: 0, ttBarRate: 0, ttBar24kRate: 0, kgBarRate: 0, silverPricePerGram: 0,
+    gold22kRate: 0, gold21kRate: 0, gold18kRate: 0,
   });
   const [syncingAll, setSyncingAll] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
@@ -456,6 +408,9 @@ export default function Prices() {
         ttBar24kRate: prices.ttBar24kRate,
         kgBarRate: prices.kgBarRate,
         silverPricePerGram: prices.silverPricePerGram,
+        gold22kRate: prices.gold22kRate,
+        gold21kRate: prices.gold21kRate,
+        gold18kRate: prices.gold18kRate,
       });
       const items = (prices.customDescriptions ?? []) as CustomItem[];
       setCustomItems(items);
@@ -579,6 +534,9 @@ export default function Prices() {
     { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const },
     { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const },
     { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const },
+    { label: "Gold Jewelry 22K", sublabel: "Purity 0.916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold22kRate" as const },
+    { label: "Gold Jewelry 21K", sublabel: "Purity 0.875 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold21kRate" as const },
+    { label: "Gold Jewelry 18K", sublabel: "Purity 0.750 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold18kRate" as const },
   ];
 
   return (
@@ -615,16 +573,6 @@ export default function Prices() {
         connecting={connectLiveRate.isPending}
         disconnecting={disconnectLiveRate.isPending}
       />
-
-      {/* Derived per-gram karat cards — computed live from the raw 24K/0.9999 spot rate */}
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Gold Karat Prices — Per Gram</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          <DerivedKaratCard label="Gold Jewelry 22K" sublabel="Purity 0.916 — Rate per 1 Gram" multiplier={0.916} spotRate={localRates.goldBullionRate} />
-          <DerivedKaratCard label="Gold 21K" sublabel="Purity 0.875 — Rate per 1 Gram" multiplier={0.875} spotRate={localRates.goldBullionRate} />
-          <DerivedKaratCard label="Gold 18K" sublabel="Purity 0.750 — Rate per 1 Gram" multiplier={0.750} spotRate={localRates.goldBullionRate} />
-        </div>
-      </div>
 
       {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

@@ -17,6 +17,9 @@ export interface Prices {
   ttBarRate: number;
   ttBar24kRate: number;
   kgBarRate: number;
+  gold22kRate: number;
+  gold21kRate: number;
+  gold18kRate: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;

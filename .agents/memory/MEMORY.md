@@ -2,3 +2,4 @@
 - [Gold-shop seeded admin login](gold-shop-admin-login.md) — seed script's default admin (0000000000/1234) only applies on empty DB; check `users` table for real credentials before e2e testing.
 - [Gold-shop live rate integration](gold-shop-live-rate.md) — live/manual gold-price toggle persists in `prices` table (not localStorage); manual values are snapshotted before overwrite and restored on disconnect.
 - [Gold-shop invoice price-locking](gold-shop-price-locking.md) — invoices/invoice_items are frozen numeric snapshots (metalRate, unitPrice, purityMultiplier) written once at creation; no update route exists, and detail/PDF views must only ever read stored fields, never live prices.
+- [Gold-shop core asset parity](gold-shop-asset-parity.md) — new metal/karat rate types must get full manual-editable/live-syncable parity (DB column, API, OpenAPI, AssetCard, invoice lookup) like existing assets, not a derived/read-only shortcut.

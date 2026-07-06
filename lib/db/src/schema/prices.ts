@@ -11,6 +11,12 @@ export const pricesTable = pgTable("prices", {
   ttBarRate: numeric("tt_bar_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   ttBar24kRate: numeric("tt_bar_24k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   kgBarRate: numeric("kg_bar_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  // First-class core asset rates for the three jewelry karats — manually
+  // editable and independently saved, exactly like ttBarRate/kgBarRate above.
+  // Auto-populated from the live spot rate on Connect, just like the others.
+  gold22kRate: numeric("gold_22k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  gold21kRate: numeric("gold_21k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  gold18kRate: numeric("gold_18k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   customDescriptions: text("custom_descriptions").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 
@@ -27,6 +33,9 @@ export const pricesTable = pgTable("prices", {
   preLiveTtBar24kRate: numeric("pre_live_tt_bar_24k_rate", { precision: 12, scale: 4 }),
   preLiveKgBarRate: numeric("pre_live_kg_bar_rate", { precision: 12, scale: 4 }),
   preLiveSilverPricePerGram: numeric("pre_live_silver_price_per_gram", { precision: 12, scale: 4 }),
+  preLiveGold22kRate: numeric("pre_live_gold_22k_rate", { precision: 12, scale: 4 }),
+  preLiveGold21kRate: numeric("pre_live_gold_21k_rate", { precision: 12, scale: 4 }),
+  preLiveGold18kRate: numeric("pre_live_gold_18k_rate", { precision: 12, scale: 4 }),
 });
 
 export const insertPricesSchema = createInsertSchema(pricesTable).omit({ id: true, updatedAt: true });

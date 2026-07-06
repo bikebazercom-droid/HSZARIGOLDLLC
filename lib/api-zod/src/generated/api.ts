@@ -205,6 +205,9 @@ export const GetPricesResponse = zod.object({
   "ttBarRate": zod.number(),
   "ttBar24kRate": zod.number(),
   "kgBarRate": zod.number(),
+  "gold22kRate": zod.number(),
+  "gold21kRate": zod.number(),
+  "gold18kRate": zod.number(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -232,6 +235,9 @@ export const UpdatePricesBody = zod.object({
   "ttBarRate": zod.number().optional(),
   "ttBar24kRate": zod.number().optional(),
   "kgBarRate": zod.number().optional(),
+  "gold22kRate": zod.number().optional(),
+  "gold21kRate": zod.number().optional(),
+  "gold18kRate": zod.number().optional(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -247,6 +253,9 @@ export const UpdatePricesResponse = zod.object({
   "ttBarRate": zod.number(),
   "ttBar24kRate": zod.number(),
   "kgBarRate": zod.number(),
+  "gold22kRate": zod.number(),
+  "gold21kRate": zod.number(),
+  "gold18kRate": zod.number(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -280,6 +289,9 @@ export const ConnectLiveRateResponse = zod.object({
   "ttBarRate": zod.number(),
   "ttBar24kRate": zod.number(),
   "kgBarRate": zod.number(),
+  "gold22kRate": zod.number(),
+  "gold21kRate": zod.number(),
+  "gold18kRate": zod.number(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -308,6 +320,9 @@ export const DisconnectLiveRateResponse = zod.object({
   "ttBarRate": zod.number(),
   "ttBar24kRate": zod.number(),
   "kgBarRate": zod.number(),
+  "gold22kRate": zod.number(),
+  "gold21kRate": zod.number(),
+  "gold18kRate": zod.number(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
