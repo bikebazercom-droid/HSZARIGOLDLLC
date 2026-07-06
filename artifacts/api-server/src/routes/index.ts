@@ -7,7 +7,7 @@ import customersRouter from "./customers";
 import productsRouter from "./products";
 import pricesRouter, { publicPricesRouter } from "./prices";
 import invoicesRouter from "./invoices";
-import settingsRouter from "./settings";
+import settingsRouter, { publicSettingsRouter } from "./settings";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -15,6 +15,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(publicPricesRouter);
+router.use(publicSettingsRouter);
 
 router.use(requireAuth);
 

@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { useGetPublicPrices, getGetPublicPricesQueryKey } from "@workspace/api-client-react";
+import {
+  useGetPublicPrices,
+  getGetPublicPricesQueryKey,
+  useGetPublicSettings,
+  getGetPublicSettingsQueryKey,
+} from "@workspace/api-client-react";
 
 const GOLD = "#d4af37";
 const TOLA_BAR_GRAMS = 116.638;
@@ -86,25 +91,31 @@ function MetricTile({ label, value, arrow }: MetricTileProps) {
   const arrowColor = arrow === "down" ? "#ef4444" : "#22c55e";
   return (
     <div
-      className="relative rounded-xl flex flex-col items-center justify-center text-center"
+      className="relative rounded-2xl flex flex-col items-center justify-center text-center overflow-hidden"
       style={{
-        background: "linear-gradient(160deg, #151515 0%, #0a0a0a 100%)",
-        border: `1px solid ${GOLD}3d`,
-        padding: "clamp(0.5rem, 1.4vh, 1.1rem) clamp(0.5rem, 1.5vw, 1.5rem)",
-        gap: "clamp(0.15rem, 0.6vh, 0.5rem)",
+        background: "linear-gradient(160deg, #171717 0%, #0a0a0a 100%)",
+        border: "2px solid #D4AF37",
+        boxShadow: `0 0 0 1px ${GOLD}22 inset, 0 10px 30px -12px ${GOLD}40`,
+        padding: "clamp(0.75rem, 2.2vh, 1.75rem) clamp(0.75rem, 2vw, 2rem)",
+        gap: "clamp(0.25rem, 0.9vh, 0.75rem)",
         height: "100%",
       }}
     >
       <div
-        className="uppercase tracking-widest font-semibold text-neutral-400"
-        style={{ fontSize: "clamp(0.6rem, calc(0.55vh + 0.4vw), 0.95rem)", letterSpacing: "0.08em", whiteSpace: "nowrap" }}
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `linear-gradient(180deg, ${GOLD}14 0%, transparent 40%)` }}
+      />
+      <div
+        className="relative uppercase tracking-widest font-bold text-neutral-300"
+        style={{ fontSize: "clamp(0.7rem, calc(0.7vh + 0.55vw), 1.15rem)", letterSpacing: "0.12em", whiteSpace: "nowrap" }}
       >
         {label}
       </div>
-      <div className="flex items-center justify-center gap-2">
+      <div className="relative flex items-center justify-center gap-3">
         {arrow && (
           <span
-            style={{ color: arrowColor, fontSize: "clamp(0.9rem, calc(1vh + 0.7vw), 1.75rem)", fontWeight: 900, lineHeight: 1 }}
+            style={{ color: arrowColor, fontSize: "clamp(1.2rem, calc(1.6vh + 1.2vw), 3rem)", fontWeight: 900, lineHeight: 1 }}
           >
             {arrow === "down" ? "↓" : "↑"}
           </span>
@@ -112,11 +123,12 @@ function MetricTile({ label, value, arrow }: MetricTileProps) {
         <span
           className="font-extrabold tabular-nums text-white"
           style={{
-            fontSize: "clamp(1rem, calc(1.3vh + 1.1vw), 2.25rem)",
+            fontSize: "clamp(1.6rem, calc(2.4vh + 2vw), 4.5rem)",
             lineHeight: 1,
             fontFamily: "monospace",
             letterSpacing: "-0.02em",
             whiteSpace: "nowrap",
+            textShadow: `0 0 30px ${GOLD}33`,
           }}
         >
           {value}
@@ -196,6 +208,10 @@ export default function ShowroomBoard() {
   const { data: prices } = useGetPublicPrices({
     query: { queryKey: getGetPublicPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
   });
+  const { data: publicSettings } = useGetPublicSettings({
+    query: { queryKey: getGetPublicSettingsQueryKey(), refetchInterval: 60000, refetchIntervalInBackground: true },
+  });
+  const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
 
   // Every asset value here is derived directly from the persisted per-gram
   // rates returned by /prices/public — the same source of truth the Price
@@ -237,20 +253,37 @@ export default function ShowroomBoard() {
           className="flex flex-col items-center shrink-0"
           style={{ gap: "clamp(0.4rem, 1.2vh, 1.25rem)", paddingBottom: "clamp(0.5rem, 1.6vh, 1.5rem)" }}
         >
-          <div
-            className="font-black uppercase flex items-center justify-center"
-            style={{
-              color: GOLD,
-              fontSize: "clamp(1.15rem, calc(1.6vh + 1.6vw), 2.75rem)",
-              letterSpacing: "0.14em",
-              textShadow: `0 0 30px ${GOLD}55`,
-              fontFamily: "serif",
-              gap: "clamp(0.35rem, 0.8vw, 0.75rem)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Hazari Gold <span style={{ color: "#f5f5f5", fontSize: "0.65em" }}>✦</span>
-          </div>
+          {showroomLogoUrl ? (
+            <div
+              className="flex items-center justify-center"
+              style={{
+                height: "clamp(3rem, 9vh, 6.5rem)",
+                filter: `drop-shadow(0 0 24px ${GOLD}55)`,
+              }}
+            >
+              <img
+                src={showroomLogoUrl}
+                alt="Showroom logo"
+                className="max-h-full max-w-full object-contain"
+                style={{ maxWidth: "min(90vw, 640px)" }}
+              />
+            </div>
+          ) : (
+            <div
+              className="font-black uppercase flex items-center justify-center"
+              style={{
+                color: GOLD,
+                fontSize: "clamp(1.15rem, calc(1.6vh + 1.6vw), 2.75rem)",
+                letterSpacing: "0.14em",
+                textShadow: `0 0 30px ${GOLD}55`,
+                fontFamily: "serif",
+                gap: "clamp(0.35rem, 0.8vw, 0.75rem)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Hazari Gold <span style={{ color: "#f5f5f5", fontSize: "0.65em" }}>✦</span>
+            </div>
+          )}
           <div
             className="flex items-center justify-between rounded-full w-full"
             style={{
@@ -277,13 +310,24 @@ export default function ShowroomBoard() {
         </div>
 
         <div
-          className="grid grid-cols-2 lg:grid-cols-4 shrink-0"
-          style={{ gap: "clamp(0.4rem, 1vh, 1rem)", paddingBottom: "clamp(0.5rem, 1.6vh, 1.5rem)" }}
+          className="relative rounded-3xl shrink-0"
+          style={{
+            border: "2px solid #D4AF37",
+            background: `linear-gradient(160deg, ${GOLD}12 0%, transparent 60%), #0a0a0a`,
+            boxShadow: `0 0 0 1px ${GOLD}1a inset, 0 20px 50px -20px ${GOLD}40`,
+            padding: "clamp(0.6rem, 1.6vh, 1.25rem)",
+            marginBottom: "clamp(0.5rem, 1.6vh, 1.5rem)",
+          }}
         >
-          <MetricTile label="BID oz" value={fmt(prices?.liveGoldBid)} />
-          <MetricTile label="ASK oz" value={fmt(prices?.liveGoldAsk)} />
-          <MetricTile label="Low" value={fmt(prices?.liveGoldLow)} arrow="down" />
-          <MetricTile label="High" value={fmt(prices?.liveGoldHigh)} arrow="up" />
+          <div
+            className="grid grid-cols-2"
+            style={{ gap: "clamp(0.5rem, 1.4vh, 1.25rem)" }}
+          >
+            <MetricTile label="BID oz" value={fmt(prices?.liveGoldBid)} />
+            <MetricTile label="ASK oz" value={fmt(prices?.liveGoldAsk)} />
+            <MetricTile label="Low" value={fmt(prices?.liveGoldLow)} arrow="down" />
+            <MetricTile label="High" value={fmt(prices?.liveGoldHigh)} arrow="up" />
+          </div>
         </div>
 
         <div

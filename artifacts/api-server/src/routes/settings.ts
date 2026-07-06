@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, companySettingsTable } from "@workspace/db";
-import { GetSettingsResponse, UpdateSettingsResponse } from "@workspace/api-zod";
+import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -31,6 +31,7 @@ router.put("/settings", async (req, res): Promise<void> => {
     logoInitial?: string;
     logoImageUrl?: string;
     stampSignatureUrl?: string;
+    showroomLogoUrl?: string;
   };
   const [updated] = await db
     .update(companySettingsTable)
@@ -38,6 +39,18 @@ router.put("/settings", async (req, res): Promise<void> => {
     .where(eq(companySettingsTable.id, settings.id))
     .returning();
   res.json(UpdateSettingsResponse.parse(updated));
+});
+
+// Public, unauthenticated router — mounted separately, before the requireAuth
+// gate, so the showroom TV price-display board can fetch its custom logo
+// without a logged in session. Only exposes the showroom logo URL; never
+// leaks company contact details or other admin-only settings.
+export const publicSettingsRouter: IRouter = Router();
+publicSettingsRouter.get("/settings/public", async (_req, res): Promise<void> => {
+  const settings = await getOrCreate();
+  res.json(GetPublicSettingsResponse.parse({
+    showroomLogoUrl: settings.showroomLogoUrl,
+  }));
 });
 
 export default router;

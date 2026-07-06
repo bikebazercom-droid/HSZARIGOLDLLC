@@ -438,6 +438,11 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
+  /**
+     * Optional custom logo image shown at the top of the public showroom TV price display board.
+     * @nullable
+     */
+  showroomLogoUrl?: string | null;
 }
 
 export interface CompanySettingsInput {
@@ -452,6 +457,15 @@ export interface CompanySettingsInput {
   logoInitial?: string;
   logoImageUrl?: string;
   stampSignatureUrl?: string;
+  showroomLogoUrl?: string;
+}
+
+/**
+ * Minimal, non-sensitive settings exposed publicly for the showroom price display board.
+ */
+export interface PublicSettings {
+  /** @nullable */
+  showroomLogoUrl: string | null;
 }
 
 export interface MonthlySale {

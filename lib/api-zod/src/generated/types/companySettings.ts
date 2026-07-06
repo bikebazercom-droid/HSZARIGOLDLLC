@@ -23,4 +23,9 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
+  /**
+     * Optional custom logo image shown at the top of the public showroom TV price display board.
+     * @nullable
+     */
+  showroomLogoUrl?: string | null;
 }

@@ -23,7 +23,8 @@ export const GetSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish()
+  "stampSignatureUrl": zod.string().nullish(),
+  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.')
 })
 
 
@@ -41,7 +42,8 @@ export const UpdateSettingsBody = zod.object({
   "logoType": zod.string().optional(),
   "logoInitial": zod.string().optional(),
   "logoImageUrl": zod.string().optional(),
-  "stampSignatureUrl": zod.string().optional()
+  "stampSignatureUrl": zod.string().optional(),
+  "showroomLogoUrl": zod.string().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -56,8 +58,17 @@ export const UpdateSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish()
+  "stampSignatureUrl": zod.string().nullish(),
+  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.')
 })
+
+
+/**
+ * @summary Get public showroom display settings (unauthenticated)
+ */
+export const GetPublicSettingsResponse = zod.object({
+  "showroomLogoUrl": zod.string().nullable()
+}).describe('Minimal, non-sensitive settings exposed publicly for the showroom price display board.')
 
 
 /**

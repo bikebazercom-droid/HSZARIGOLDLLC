@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv } from "lucide-react";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
 
@@ -39,6 +39,7 @@ export default function SettingsPage() {
   const [logoInitial, setLogoInitial] = useState("H");
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
+  const [showroomLogoUrl, setShowroomLogoUrl] = useState<string>("");
 
   useEffect(() => {
     if (settings) {
@@ -53,6 +54,7 @@ export default function SettingsPage() {
       setLogoInitial(settings.logoInitial ?? "H");
       setLogoImageUrl(settings.logoImageUrl ?? "");
       setStampSignatureUrl(settings.stampSignatureUrl ?? "");
+      setShowroomLogoUrl(settings.showroomLogoUrl ?? "");
     }
   }, [settings]);
 
@@ -70,6 +72,7 @@ export default function SettingsPage() {
         logoInitial,
         logoImageUrl,
         stampSignatureUrl,
+        showroomLogoUrl,
       }
     }, {
       onSuccess: () => {
@@ -386,6 +389,73 @@ export default function SettingsPage() {
                   if (!file) return;
                   const reader = new FileReader();
                   reader.onload = ev => setStampSignatureUrl(ev.target?.result as string);
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Showroom TV Logo */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Tv className="w-5 h-5 text-primary" />
+            <CardTitle>Showroom TV Logo</CardTitle>
+          </div>
+          <CardDescription>
+            Upload a custom logo to display at the top of the Showroom Live Price Board (/showroom-board). Leave empty to show the default text header.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {showroomLogoUrl ? (
+            <div className="flex items-center gap-4">
+              <div className="w-28 h-20 rounded-lg border overflow-hidden bg-black flex items-center justify-center p-2">
+                <img src={showroomLogoUrl} alt="Showroom TV logo" className="max-w-full max-h-full object-contain" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-green-700 font-medium">✓ Showroom logo uploaded</p>
+                <label className="cursor-pointer">
+                  <span className="text-xs text-primary underline">Replace image</span>
+                  <input
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setShowroomLogoUrl(ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowroomLogoUrl("")}
+                  className="block text-xs text-destructive underline"
+                >
+                  Remove logo
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all">
+              <Tv className="w-8 h-8 text-muted-foreground" />
+              <div className="text-center">
+                <div className="text-sm font-medium">Click to upload your showroom TV logo</div>
+                <div className="text-xs text-muted-foreground mt-0.5">PNG, JPG, SVG · Transparent background recommended</div>
+              </div>
+              <input
+                type="file"
+                accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setShowroomLogoUrl(ev.target?.result as string);
                   reader.readAsDataURL(file);
                 }}
               />

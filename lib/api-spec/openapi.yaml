@@ -53,6 +53,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/CompanySettings"
 
+  /settings/public:
+    get:
+      operationId: getPublicSettings
+      tags: [settings]
+      summary: Get public showroom display settings (unauthenticated)
+      responses:
+        "200":
+          description: Public showroom settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicSettings"
+
   /healthz:
     get:
       operationId: healthCheck
@@ -1133,6 +1146,9 @@ components:
           type: ["string", "null"]
         stampSignatureUrl:
           type: ["string", "null"]
+        showroomLogoUrl:
+          type: ["string", "null"]
+          description: Optional custom logo image shown at the top of the public showroom TV price display board.
 
     CompanySettingsInput:
       type: object
@@ -1159,6 +1175,16 @@ components:
           type: string
         stampSignatureUrl:
           type: string
+        showroomLogoUrl:
+          type: string
+
+    PublicSettings:
+      type: object
+      description: Minimal, non-sensitive settings exposed publicly for the showroom price display board.
+      required: [showroomLogoUrl]
+      properties:
+        showroomLogoUrl:
+          type: ["string", "null"]
 
     MonthlySale:
       type: object
