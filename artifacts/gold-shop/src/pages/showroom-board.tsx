@@ -96,9 +96,10 @@ function MetricTile({ label, value, arrow }: MetricTileProps) {
         background: "linear-gradient(160deg, #171717 0%, #0a0a0a 100%)",
         border: "2px solid #D4AF37",
         boxShadow: `0 0 0 1px ${GOLD}22 inset, 0 10px 30px -12px ${GOLD}40`,
-        padding: "clamp(0.75rem, 2.2vh, 1.75rem) clamp(0.75rem, 2vw, 2rem)",
-        gap: "clamp(0.25rem, 0.9vh, 0.75rem)",
+        padding: "clamp(0.4rem, 1.1vh, 0.85rem) clamp(0.6rem, 1.6vw, 1.5rem)",
+        gap: "clamp(0.1rem, 0.4vh, 0.3rem)",
         height: "100%",
+        maxHeight: "clamp(4rem, 11vh, 6.5rem)",
       }}
     >
       <div
@@ -108,14 +109,14 @@ function MetricTile({ label, value, arrow }: MetricTileProps) {
       />
       <div
         className="relative uppercase tracking-widest font-bold text-neutral-300"
-        style={{ fontSize: "clamp(0.7rem, calc(0.7vh + 0.55vw), 1.15rem)", letterSpacing: "0.12em", whiteSpace: "nowrap" }}
+        style={{ fontSize: "clamp(0.6rem, calc(0.5vh + 0.45vw), 0.9rem)", letterSpacing: "0.12em", whiteSpace: "nowrap" }}
       >
         {label}
       </div>
-      <div className="relative flex items-center justify-center gap-3">
+      <div className="relative flex items-center justify-center gap-2">
         {arrow && (
           <span
-            style={{ color: arrowColor, fontSize: "clamp(1.2rem, calc(1.6vh + 1.2vw), 3rem)", fontWeight: 900, lineHeight: 1 }}
+            style={{ color: arrowColor, fontSize: "clamp(0.9rem, calc(1vh + 0.8vw), 1.75rem)", fontWeight: 900, lineHeight: 1 }}
           >
             {arrow === "down" ? "↓" : "↑"}
           </span>
@@ -123,7 +124,7 @@ function MetricTile({ label, value, arrow }: MetricTileProps) {
         <span
           className="font-extrabold tabular-nums text-white"
           style={{
-            fontSize: "clamp(1.6rem, calc(2.4vh + 2vw), 4.5rem)",
+            fontSize: "clamp(1.15rem, calc(1.4vh + 1.3vw), 2.5rem)",
             lineHeight: 1,
             fontFamily: "monospace",
             letterSpacing: "-0.02em",
@@ -257,15 +258,17 @@ export default function ShowroomBoard() {
             <div
               className="flex items-center justify-center"
               style={{
-                height: "clamp(3rem, 9vh, 6.5rem)",
-                filter: `drop-shadow(0 0 24px ${GOLD}55)`,
+                height: "clamp(4.5rem, 15vh, 120px)",
+                maxHeight: 120,
+                marginBottom: "clamp(0.5rem, 1.6vh, 1.25rem)",
+                filter: `drop-shadow(0 0 28px ${GOLD}66)`,
               }}
             >
               <img
                 src={showroomLogoUrl}
                 alt="Showroom logo"
                 className="max-h-full max-w-full object-contain"
-                style={{ maxWidth: "min(90vw, 640px)" }}
+                style={{ maxWidth: "min(90vw, 280px)" }}
               />
             </div>
           ) : (
@@ -315,13 +318,13 @@ export default function ShowroomBoard() {
             border: "2px solid #D4AF37",
             background: `linear-gradient(160deg, ${GOLD}12 0%, transparent 60%), #0a0a0a`,
             boxShadow: `0 0 0 1px ${GOLD}1a inset, 0 20px 50px -20px ${GOLD}40`,
-            padding: "clamp(0.6rem, 1.6vh, 1.25rem)",
+            padding: "clamp(0.4rem, 1vh, 0.85rem)",
             marginBottom: "clamp(0.5rem, 1.6vh, 1.5rem)",
           }}
         >
           <div
             className="grid grid-cols-2"
-            style={{ gap: "clamp(0.5rem, 1.4vh, 1.25rem)" }}
+            style={{ gap: "clamp(0.4rem, 1vh, 0.85rem)" }}
           >
             <MetricTile label="BID oz" value={fmt(prices?.liveGoldBid)} />
             <MetricTile label="ASK oz" value={fmt(prices?.liveGoldAsk)} />
