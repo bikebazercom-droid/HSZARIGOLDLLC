@@ -28,7 +28,6 @@ import goldBarStackImg from "@/assets/rates/gold-bar-stack.png";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
-const TOLA_TO_GRAM = 11.6638;
 
 type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
 interface CustomItem { name: string; rate: number }
@@ -38,16 +37,15 @@ const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "s
 /* ── Luxury asset rate card ───────────────────────────────────── */
 interface AssetCardProps {
   label: string; sublabel: string; image: string;
-  fieldKey: RateKey; savedValue: number; value: number; unitGrams: number;
+  fieldKey: RateKey; savedValue: number; value: number;
   onChange: (field: RateKey, value: number) => void;
   onSave: (field: RateKey, value: number) => Promise<void>;
   liveLocked?: boolean;
 }
 
-function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, unitGrams, onChange, onSave, liveLocked }: AssetCardProps) {
+function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChange, onSave, liveLocked }: AssetCardProps) {
   const [saving, setSaving] = useState(false);
   const changed = value !== savedValue;
-  const totalValue = value * unitGrams;
   const handleSave = async () => { setSaving(true); await onSave(fieldKey, value); setSaving(false); };
   return (
     <Card
@@ -73,27 +71,21 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, unitGr
         </div>
         <div>
           <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">
-            {unitGrams === 1 ? "Rate per gram (AED)" : "Total Value (AED)"}
+            Rate per gram (AED)
           </div>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
             {liveLocked ? (
               <div className="pl-14 text-xl font-bold h-12 flex items-center rounded-md border bg-emerald-50/50" style={{ fontFamily: "monospace", borderColor: "#10b98155" }}>
-                {totalValue.toFixed(2)}
+                {value.toFixed(2)}
               </div>
             ) : (
-              <Input type="number" step="0.01" min="0" value={unitGrams === 1 ? value : Number(totalValue.toFixed(2))}
-                onChange={e => {
-                  const entered = parseFloat(e.target.value) || 0;
-                  onChange(fieldKey, unitGrams === 1 ? entered : entered / unitGrams);
-                }}
+              <Input type="number" step="0.01" min="0" value={value}
+                onChange={e => onChange(fieldKey, parseFloat(e.target.value) || 0)}
                 className="pl-14 text-xl font-bold h-12" style={{ fontFamily: "monospace" }} />
             )}
           </div>
-          {unitGrams !== 1 && (
-            <div className="text-[11px] text-muted-foreground mt-1">Per gram: AED {value.toFixed(2)}</div>
-          )}
-          {!liveLocked && changed && <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600"><span>●</span><span>Unsaved — was AED {(savedValue * unitGrams).toFixed(2)}</span></div>}
+          {!liveLocked && changed && <div className="flex items-center gap-1 mt-1.5 text-xs text-amber-600"><span>●</span><span>Unsaved — was AED {savedValue.toFixed(2)}</span></div>}
         </div>
         {liveLocked ? (
           <div
@@ -533,11 +525,11 @@ export default function Prices() {
   }
 
   const assetCards = [
-    { label: "TT. BAR", sublabel: "24K / 995.0 — 10 Tola", image: tenTolaBarImg, fieldKey: "ttBarRate" as const, unitGrams: TOLA_TO_GRAM * 10 },
-    { label: "Gold Jewelry", sublabel: "22K / 916 — 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const, unitGrams: 1 },
-    { label: "GOLD", sublabel: "24K / 999.9 — 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const, unitGrams: 1 },
-    { label: "KG BAR", sublabel: "24K / 995.0 — 1 Kilogram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const, unitGrams: 1000 },
-    { label: "Silver", sublabel: "999.0 Fine — 1 Kilogram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const, unitGrams: 1000 },
+    { label: "TT. BAR", sublabel: "24K / 995.0 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate" as const },
+    { label: "Gold Jewelry", sublabel: "22K / 916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const },
+    { label: "GOLD", sublabel: "24K / 999.9 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const },
+    { label: "KG BAR", sublabel: "24K / 995.0 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const },
+    { label: "Silver", sublabel: "999.0 Fine — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const },
   ];
 
   return (
