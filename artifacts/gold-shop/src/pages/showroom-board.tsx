@@ -70,18 +70,22 @@ export default function ShowroomBoard() {
     query: { queryKey: getGetPublicPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
   });
 
-  const goldBullionRate = prices?.goldBullionRate ?? 0;
   const silverRate = prices?.liveModeConnected ? (prices?.liveSilverRate ?? prices?.silverPricePerGram ?? 0) : (prices?.silverPricePerGram ?? 0);
 
+  // Every asset here reads its own persisted per-gram rate directly from the
+  // public prices API — the same fields the Price List page reads/edits —
+  // rather than recomputing from goldBullionRate client-side. This keeps the
+  // TV Display perfectly in sync with the Price List at all times, whether
+  // Live Mode is connected (auto-synced) or disconnected (manually edited).
   const rows: AssetRow[] = [
-    { label: "TT. BAR", purityLabel: "0.995", rate: goldBullionRate * 0.995 },
-    { label: "TT. BAR", purityLabel: "0.999", rate: goldBullionRate * 0.999 },
-    { label: "KG BAR", purityLabel: "0.995", rate: goldBullionRate * 0.995 },
-    { label: "GOLD", purityLabel: "0.9999", rate: goldBullionRate },
+    { label: "TT. BAR", purityLabel: "0.995", rate: prices?.ttBarRate ?? 0 },
+    { label: "TT. BAR", purityLabel: "0.999", rate: prices?.ttBar24kRate ?? 0 },
+    { label: "KG BAR", purityLabel: "0.995", rate: prices?.kgBarRate ?? 0 },
+    { label: "GOLD", purityLabel: "0.9999", rate: prices?.gold9999Rate ?? 0 },
     { label: "Silver", purityLabel: "0.999", rate: silverRate },
-    { label: "Gold Jewelry 22K", purityLabel: "0.916", rate: goldBullionRate * 0.916 },
-    { label: "Gold Jewelry 21K", purityLabel: "0.875", rate: goldBullionRate * 0.875 },
-    { label: "Gold Jewelry 18K", purityLabel: "0.750", rate: goldBullionRate * 0.750 },
+    { label: "Gold Jewelry 22K", purityLabel: "0.916", rate: prices?.gold22kRate ?? 0 },
+    { label: "Gold Jewelry 21K", purityLabel: "0.875", rate: prices?.gold21kRate ?? 0 },
+    { label: "Gold Jewelry 18K", purityLabel: "0.750", rate: prices?.gold18kRate ?? 0 },
   ];
 
   return (

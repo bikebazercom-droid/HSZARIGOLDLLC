@@ -18,5 +18,6 @@ export interface PricesInput {
   gold22kRate?: number;
   gold21kRate?: number;
   gold18kRate?: number;
+  gold9999Rate?: number;
   customDescriptions?: CustomDescription[];
 }

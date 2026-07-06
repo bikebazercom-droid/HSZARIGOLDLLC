@@ -662,7 +662,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider]
       properties:
         id:
           type: integer
@@ -685,6 +685,8 @@ components:
         gold21kRate:
           type: number
         gold18kRate:
+          type: number
+        gold9999Rate:
           type: number
         customDescriptions:
           type: array
@@ -714,7 +716,7 @@ components:
     PublicPrices:
       type: object
       description: Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
-      required: [goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, silverPricePerGram, gold22kRate, gold21kRate, gold18kRate, liveModeConnected, updatedAt]
+      required: [goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, silverPricePerGram, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, liveModeConnected, updatedAt]
       properties:
         goldBullionRate:
           type: number
@@ -731,6 +733,8 @@ components:
         gold21kRate:
           type: number
         gold18kRate:
+          type: number
+        gold9999Rate:
           type: number
         liveModeConnected:
           type: boolean
@@ -781,6 +785,8 @@ components:
         gold21kRate:
           type: number
         gold18kRate:
+          type: number
+        gold9999Rate:
           type: number
         customDescriptions:
           type: array

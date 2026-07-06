@@ -18,6 +18,7 @@ export interface PublicPrices {
   gold22kRate: number;
   gold21kRate: number;
   gold18kRate: number;
+  gold9999Rate: number;
   liveModeConnected: boolean;
   /** @nullable */
   liveSilverRate?: number | null;

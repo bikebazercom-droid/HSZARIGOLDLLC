@@ -20,6 +20,7 @@ export interface Prices {
   gold22kRate: number;
   gold21kRate: number;
   gold18kRate: number;
+  gold9999Rate: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;

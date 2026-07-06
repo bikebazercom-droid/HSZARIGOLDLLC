@@ -40,6 +40,7 @@ export const pricesTable = pgTable("prices", {
   preLiveGold22kRate: numeric("pre_live_gold_22k_rate", { precision: 12, scale: 4 }),
   preLiveGold21kRate: numeric("pre_live_gold_21k_rate", { precision: 12, scale: 4 }),
   preLiveGold18kRate: numeric("pre_live_gold_18k_rate", { precision: 12, scale: 4 }),
+  preLiveGold9999Rate: numeric("pre_live_gold_9999_rate", { precision: 12, scale: 4 }),
 });
 
 export const insertPricesSchema = createInsertSchema(pricesTable).omit({ id: true, updatedAt: true });

@@ -62,6 +62,7 @@ interface PricesData {
   gold22kRate: number;
   gold21kRate: number;
   gold18kRate: number;
+  gold9999Rate: number;
   liveModeConnected?: boolean;
 }
 
@@ -126,9 +127,9 @@ const DESC_TO_PURITY: Record<string, string> = {
 
 function descToCategory(desc: string): string {
   if (desc === "Gold Jewelry 22K" || desc === "Gold Jewelry 21K" || desc === "Gold Jewelry 18K" || desc === "Gold 22K (0.916)" || desc === "Gold 21K (0.875)" || desc === "Gold 18K (0.750)" || desc === "Gold Jewelry 22k" || desc === "Gold Jewelry 21k" || desc === "Gold Jewelry 18k" || desc === "Gold Jewelry" || desc === "22K Gold Jewelry" || desc === "Jewellery 22K 1GM") return "gold_jewelry";
-  if (desc === "GOLD (0.9999)" || desc === "GOLD 999.99" || desc === "GOLD" || desc === "24K GOLD" || desc === "Gold 9999 1GM") return "gold";
+  if (desc === "GOLD (0.9999)" || desc === "GOLD 999.99" || desc === "GOLD" || desc === "24K GOLD" || desc === "Gold 9999 1GM" || desc === "Gold 9999 1KG") return "gold";
   if (desc === "TT. BAR" || desc === "TT. BAR (0.995)" || desc === "TT. BAR (0.999)" || desc === "TT. BAR 995" || desc === "TT. BAR 24K" || desc === "Ten Tola Bar TTB") return "tt_bar";
-  if (desc === "KG BAR" || desc === "KG BAR (0.995)" || desc === "KG BAR 995" || desc === "KG. BAR" || desc === "Gold 9999 1KG" || desc === "Kilo Bar 995 1KG") return "kg_bar";
+  if (desc === "KG BAR" || desc === "KG BAR (0.995)" || desc === "KG BAR 995" || desc === "KG. BAR" || desc === "Kilo Bar 995 1KG") return "kg_bar";
   if (desc === "Silver" || desc === "Silver (0.999)" || desc === "Silver 999") return "silver";
   // Anything else (custom-typed description, saved custom price, or a Product) is Custom
   return "custom";
@@ -142,7 +143,7 @@ function descToCategory(desc: string): string {
 function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number): number {
   if (!prices) return fallback;
   if (category === "silver") return prices.silverPricePerGram;
-  if (purity === "0.9999") return prices.goldBullionRate;
+  if (purity === "0.9999") return prices.gold9999Rate;
   if (purity === "0.916") return prices.gold22kRate;
   if (purity === "0.875") return prices.gold21kRate;
   if (purity === "0.750") return prices.gold18kRate;
@@ -162,10 +163,10 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
   if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.gold22kRate;
   if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return prices.gold21kRate;
   if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return prices.gold18kRate;
-  if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM") return prices.goldBullionRate;
+  if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return prices.gold9999Rate;
   if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
   if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return prices.ttBar24kRate;
-  if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Gold 9999 1KG" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
+  if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
   if (description === "Silver" || description === "Silver (0.999)" || description === "Silver 999") return prices.silverPricePerGram;
   // Check custom descriptions
   const custom = (prices as any).customDescriptions as { name: string; rate: number }[] | undefined;
