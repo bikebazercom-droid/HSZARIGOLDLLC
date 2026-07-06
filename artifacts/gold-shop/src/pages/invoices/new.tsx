@@ -34,7 +34,6 @@ interface LineItem {
   makingRate: number;
   makingAmt: number;
   totalPrice: number;
-  rate: number;
 }
 
 // The Purity dropdown shows ONLY raw decimal numbers — no item names or text
@@ -185,11 +184,11 @@ function roundTo(num: number, decimals: number): number {
   return sign * rounded;
 }
 
-// Every line item now carries its OWN live-injected `rate` (AED/g) — there is
-// no shared/global metal rate applied across rows anymore. This lets an
-// invoice mix e.g. a TT. BAR line and a Gold Jewelry 18K line, each priced at
-// its own correct live rate, instead of forcing every row onto one number.
-function calcItem(item: LineItem): LineItem {
+// Every line item now reads from a SINGLE global Metal Rate (AED/g) — the one
+// field in the Payment & Summary panel. There is no more per-row rate; every
+// line item's Gold Value, and the invoice total, are always driven by this
+// one shared number.
+function calcItem(item: LineItem, metalRate: number): LineItem {
   // Pure Wt. = Gross Wt. × Purity, always computed by direct multiplication —
   // no per-category exceptions. Rounded to 3 decimal places, recalculated live
   // as either value changes (e.g. 92.50 × 0.999 = 92.408).
@@ -197,25 +196,22 @@ function calcItem(item: LineItem): LineItem {
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
     ? roundTo(item.grossWeight * purityFactor, 3)
     : item.pureWeight;
-  // Gold Value = Pure Weight × this row's own live Metal Rate, priced per
-  // gram (never a mock/fallback constant, never a different row's rate).
-  const goldValue = roundTo(pureWeight * (item.rate || 0), 2);
+  // Gold Value = Pure Weight × the single global Metal Rate, priced per gram.
+  const goldValue = roundTo(pureWeight * (metalRate || 0), 2);
   // Item Total = Gold Value + Making Amount
   const totalPrice = roundTo(goldValue + item.makingAmt, 2);
   return { ...item, pureWeight, totalPrice };
 }
 
-// Single entry point for "what should this row's live Metal Rate be right
-// now" — always derived from the description (if it maps to a known
-// live-priced asset) or the selected purity, reading directly from the
-// server's `prices` record. The server itself keeps goldBullionRate /
-// ttBarRate / gold22kRate / etc. equal to the live-synced value whenever Live
-// Mode is connected (see prices.ts), so reading these fields IS reading the
-// live rate — there is no separate "manual override" path left on this page.
-function resolveLiveRate(description: string, purity: string, category: string, prices: PricesData | undefined, fallback: number): number {
-  if (description) return getRateForDesc(description, prices, fallback);
-  if (purity) return getRateForPurity(purity, category, prices, fallback);
-  return fallback;
+// Determines "the 100% accurate live calculated rate" that should be pushed
+// into the global Metal Rate field — resolved from the invoice's primary
+// item (the first row that has a description or purity chosen). Falls back
+// to the raw live spot rate when no item has been specified yet.
+function resolvePrimaryRate(currentItems: LineItem[], prices: PricesData | undefined, fallback: number): number {
+  const primary = currentItems.find(i => i.description || i.purity);
+  if (!primary) return fallback;
+  if (primary.description) return getRateForDesc(primary.description, prices, fallback);
+  return getRateForPurity(primary.purity, primary.category, prices, fallback);
 }
 
 export default function NewInvoice() {
@@ -257,25 +253,25 @@ export default function NewInvoice() {
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
   const [isPending, setIsPending] = useState(false);
   const [notes, setNotes] = useState("");
-  // Manual rate entry only exists as a fallback for when Live Mode is fully
-  // disconnected (no API feed at all) — this is the one case where nothing
-  // from the server can be treated as "the live rate". Whenever Live Mode is
-  // connected, this override is ignored entirely: every row reads straight
-  // from `prices`, never from anything the user typed.
-  const [manualRateOverride, setManualRateOverride] = useState<number | null>(null);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [vatRate, setVatRate] = useState<number>(5);
   const [roundOffDiscount, setRoundOffDiscount] = useState<number>(0);
 
   const [items, setItems] = useState<LineItem[]>([]);
 
-  // Headline reference rate shown in the Payment & Summary panel and used as
-  // the fallback for brand-new/custom rows. Always the live goldBullionRate
-  // when Live Mode is connected — never a frozen snapshot, never something
-  // the user can override while connected.
-  const referenceRate = isLive
+  // The single, global Metal Rate (AED/g) — the ONE source every line item's
+  // Gold Value and the invoice total are calculated from. There is no more
+  // per-row rate. While Live Mode is connected, this is kept in lockstep with
+  // the invoice's primary item (see the effect below) and is read-only; while
+  // disconnected, the user can type it directly.
+  const [metalRate, setMetalRate] = useState<number>(0);
+
+  // Baseline/fallback figure used only to seed `metalRate` before any item
+  // has a description/purity chosen, and as the `fallback` argument to
+  // getRateForDesc/getRateForPurity.
+  const baselineRate = isLive
     ? (prices?.goldBullionRate ?? goldRate)
-    : (manualRateOverride ?? prices?.goldPricePerGram ?? goldRate);
+    : (prices?.goldPricePerGram ?? goldRate);
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -311,30 +307,33 @@ export default function NewInvoice() {
       makingRate: 0,
       makingAmt: 0,
       totalPrice: 0,
-      rate: referenceRate,
     }]);
+    // The very first row added to a fresh invoice should immediately give the
+    // global Metal Rate field a sensible starting value.
+    if (items.length === 0) setMetalRate(baselineRate);
   };
 
   const updateItem = (index: number, field: keyof LineItem, value: string | number | boolean) => {
+    let pushedRate: number | null = null;
     setItems(prev => {
       const next = [...prev];
       let updated = { ...next[index], [field]: value };
       // Selecting a Stock Description OR changing Purity is an explicit
-      // trigger to instantly re-derive this row's own Metal Rate — computed
-      // as Live Spot Gold Rate × Selected Purity Factor (or the asset's own
-      // first-class live rate when one exists) — and inject it straight into
-      // the row's `rate` state. The user never types this value.
+      // trigger to instantly re-derive the correct live rate — computed as
+      // Live Spot Gold Rate × Selected Purity Factor (or the asset's own
+      // first-class live rate when one exists) — and push it straight into
+      // the single GLOBAL Metal Rate field. The user never types a per-row
+      // rate anymore.
       if (field === "description") {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
-        const liveRate = value
-          ? getRateForDesc(value as string, prices as PricesData | undefined, referenceRate)
-          : referenceRate;
+        if (value) {
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate);
+        }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
         updated = {
           ...updated,
-          rate: liveRate,
           category: autoCategory,
           purity: autoPurity,
           purityIsCustom: false,
@@ -344,7 +343,7 @@ export default function NewInvoice() {
       }
       if (field === "purity" && value) {
         const currentCategory = updated.category ?? "gold_jewelry";
-        updated.rate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, referenceRate);
+        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate);
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {
@@ -353,48 +352,57 @@ export default function NewInvoice() {
       if (field === "grossWeight" && updated.makingRate > 0) {
         updated.makingAmt = parseFloat(((value as number) * updated.makingRate).toFixed(2));
       }
-      next[index] = calcItem(updated as LineItem);
+      next[index] = calcItem(updated as LineItem, pushedRate ?? metalRate);
       return next;
     });
+    if (pushedRate != null) setMetalRate(pushedRate);
   };
 
   const removeItem = (index: number) => {
     setItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Instant re-computation: every time `prices` refreshes (live poll tick, or
-  // a manual edit on the Prices page landing), re-derive each row's own Metal
-  // Rate from its description/purity and recompute Pure Weight + Total off of
-  // it — smoothly, without a full reload, and without touching rows that
-  // haven't picked a description/purity yet.
+  // While Live Mode is connected, keep the global Metal Rate locked to "the
+  // 100% accurate live calculated rate" for the invoice's primary item —
+  // recomputed whenever `prices` ticks or whenever any item's description/
+  // purity changes. Depends on a stable description|purity signature (not the
+  // `items` array reference itself) so this never fights with the recompute
+  // effect below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const itemSignature = items.map(i => `${i.description}|${i.purity}|${i.category}`).join("~");
   useEffect(() => {
-    if (!prices || items.length === 0) return;
-    setItems(prev => prev.map(item => {
-      if (!item.description && !item.purity) return item;
-      const liveRate = resolveLiveRate(item.description, item.purity, item.category, prices as PricesData, item.rate);
-      if (liveRate === item.rate) return calcItem(item);
-      return calcItem({ ...item, rate: liveRate });
-    }));
+    if (!isLive) return;
+    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prices]);
+  }, [isLive, prices, itemSignature]);
+
+  // Seed the global Metal Rate with a sensible baseline the moment prices
+  // first load (covers page load / Live Mode toggling before any item has a
+  // description or purity chosen yet).
+  useEffect(() => {
+    if (metalRate === 0 && baselineRate > 0) setMetalRate(baselineRate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baselineRate]);
+
+  // Every line item's Pure Weight + Total must fully recalculate the instant
+  // the single global Metal Rate changes — whether that's a live tick, an
+  // auto-push from a description/purity pick, or a manual edit while offline.
+  useEffect(() => {
+    setItems(prev => prev.map(item => calcItem(item, metalRate)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metalRate]);
 
   // Totals following the formula:
-  // Gold Value = Σ(Pure Weight × this row's own live Metal Rate per gram)
+  // Gold Value = Σ(Pure Weight) × the single global Metal Rate per gram
   // Total Before VAT = Gold Value + Σ(Making Amount)
   const totalGrossWeight = items.reduce((s, i) => s + (i.grossWeight || 0), 0);
   const totalPureWeight = items.reduce((s, i) => s + (i.pureWeight || 0), 0);
-  // Gold Value is the sum of each row's own live-priced value — never a
-  // single blended constant applied across every row.
-  const totalGoldValue = roundTo(items.reduce((s, i) => s + roundTo((i.pureWeight || 0) * (i.rate || 0), 2), 0), 2);
+  const totalGoldValue = roundTo(items.reduce((s, i) => s + roundTo((i.pureWeight || 0) * metalRate, 2), 0), 2);
   const totalMakingAmount = items.reduce((s, i) => s + (i.makingAmt || 0), 0);
   const subtotal = roundTo(totalGoldValue + totalMakingAmount, 2);
   const totalBeforeVat = Math.max(0, subtotal);
   const vatAmount = roundTo(totalBeforeVat * vatRate / 100, 2);
   const totalIncludingVat = roundTo(totalBeforeVat + vatAmount - roundOffDiscount, 2);
-  // Weighted-average per-gram rate across all priced rows — used only as the
-  // header-level display/record rate (e.g. on the printed invoice), since the
-  // invoice as a whole may legitimately mix several live-priced assets.
-  const blendedMetalRate = totalPureWeight > 0 ? roundTo(totalGoldValue / totalPureWeight, 3) : referenceRate;
 
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -429,7 +437,7 @@ export default function NewInvoice() {
         paymentMethod,
         isPending,
         notes,
-        metalRate: blendedMetalRate || goldRate,
+        metalRate: metalRate || goldRate,
         placeOfSupply,
         subtotal,
         discount: roundOffDiscount,
@@ -451,11 +459,11 @@ export default function NewInvoice() {
           pureWeight: item.pureWeight || undefined,
           makingRate: item.makingRate || undefined,
           makingAmt: item.makingAmt || undefined,
-          // Literal frozen metal rate (AED/gram) locked in at sale time — this
-          // row's own live-injected rate, written to the DB as a plain number
-          // and must never be recomputed from a live price feed when the
-          // invoice is viewed/printed later.
-          unitPrice: item.rate || referenceRate || goldRate,
+          // Literal frozen metal rate (AED/gram) locked in at sale time — the
+          // single global rate, written to the DB as a plain number and must
+          // never be recomputed from a live price feed when the invoice is
+          // viewed/printed later.
+          unitPrice: metalRate || goldRate,
           totalPrice: item.totalPrice,
         })),
       }
@@ -533,14 +541,13 @@ export default function NewInvoice() {
                 <thead>
                   <tr style={{ backgroundColor: "#1e3a5f" }}>
                     <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap w-10">S.No.</th>
-                    <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap min-w-[180px]">Stock Description</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[100px]">Gross Wt.</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Purity</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Metal Rate (AED/g)</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[90px]">Pure Wt.</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Making Rate</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[120px]">Making Amt. (AED)</th>
-                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Total (AED)</th>
+                    <th className="py-2.5 px-3 text-left text-xs font-semibold text-white whitespace-nowrap min-w-[220px]">Stock Description</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[130px]">Gross Wt.</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[150px]">Purity</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[110px]">Pure Wt.</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[140px]">Making Rate</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[150px]">Making Amt. (AED)</th>
+                    <th className="py-2.5 px-3 text-center text-xs font-semibold text-white whitespace-nowrap w-[130px]">Total (AED)</th>
                     <th className="w-8 bg-[#1e3a5f]"></th>
                   </tr>
                 </thead>
@@ -657,17 +664,6 @@ export default function NewInvoice() {
                           </div>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-center">
-                        <div
-                          className="h-8 flex items-center justify-center rounded-md border border-input bg-muted/40 font-mono text-sm font-semibold"
-                          title="Live Spot Gold Rate × Selected Purity — computed automatically, never typed"
-                        >
-                          {item.rate > 0 ? item.rate.toFixed(2) : "—"}
-                        </div>
-                        {isLive && item.rate > 0 && (
-                          <div className="text-[9px] text-emerald-600 text-center mt-0.5 font-medium">● Live</div>
-                        )}
-                      </td>
                       <td className="py-2 px-3">
                         <Input
                           type="number"
@@ -688,13 +684,13 @@ export default function NewInvoice() {
                           onChange={e => updateItem(index, "makingRate", parseFloat(e.target.value) || 0)}
                           className="h-8 text-sm text-center"
                         />
-                        {item.description && item.rate > 0 && (
+                        {item.description && metalRate > 0 && (
                           <button
                             type="button"
                             className="text-[10px] text-center text-amber-600 mt-0.5 w-full hover:underline"
-                            onClick={() => updateItem(index, "makingRate", item.rate)}
+                            onClick={() => updateItem(index, "makingRate", metalRate)}
                           >
-                            Suggested: {item.rate} AED/g
+                            Suggested: {metalRate} AED/g
                           </button>
                         )}
                       </td>
@@ -818,7 +814,7 @@ export default function NewInvoice() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label>Reference Metal Rate (AED/g)</Label>
+                  <Label className="text-base font-semibold">Metal Rate (AED/g)</Label>
                   {isLive ? (
                     <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
                       <span className="text-emerald-500">●</span> Live Market Rate
@@ -830,35 +826,29 @@ export default function NewInvoice() {
                   )}
                 </div>
                 {isLive ? (
-                  // Live Mode connected: the active API rate is the absolute
-                  // source of truth — no manual override is offered at all.
+                  // Live Mode connected: this is the single, absolute source
+                  // of truth for every line item and the invoice total — no
+                  // manual override is offered at all.
                   <div
-                    className="h-10 flex items-center px-3 rounded-md border border-input bg-muted/40 font-mono text-sm font-semibold"
-                    title="Live spot gold rate — each line item computes its own rate from this automatically"
+                    className="h-11 flex items-center px-3 rounded-md border-2 border-primary/40 bg-muted/40 font-mono text-base font-bold"
+                    title="Live spot gold rate — every line item and the invoice total compute from this single number automatically"
                   >
-                    {referenceRate ? referenceRate.toFixed(3) : "0.000"}
+                    {metalRate ? metalRate.toFixed(3) : "0.000"}
                   </div>
                 ) : (
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      value={manualRateOverride ?? referenceRate}
-                      onChange={e => setManualRateOverride(parseFloat(e.target.value) || 0)}
-                      placeholder="e.g. 320.000"
-                    />
-                    {manualRateOverride !== null && (
-                      <button
-                        type="button"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-blue-500 hover:underline"
-                        onClick={() => setManualRateOverride(null)}
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    className="h-11 text-base font-bold font-mono border-2 border-primary/40"
+                    value={metalRate || ""}
+                    onChange={e => setMetalRate(parseFloat(e.target.value) || 0)}
+                    placeholder="e.g. 320.000"
+                  />
                 )}
+                <p className="text-[11px] text-muted-foreground">
+                  Every line item's Gold Value and the invoice total are calculated from this single rate.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -905,7 +895,7 @@ export default function NewInvoice() {
               <div className="border rounded-md overflow-hidden">
                 <div className="p-3 space-y-2 text-sm">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Gold Value ({fmt(totalPureWeight)}g pure × {fmt(blendedMetalRate)}/g avg)</span>
+                    <span>Gold Value ({fmt(totalPureWeight)}g pure × {fmt(metalRate)}/g)</span>
                     <span>{fmt(totalGoldValue)} AED</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
