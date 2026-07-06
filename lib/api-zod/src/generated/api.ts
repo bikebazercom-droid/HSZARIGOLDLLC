@@ -221,6 +221,10 @@ export const GetPricesResponse = zod.object({
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
+  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -271,6 +275,10 @@ export const UpdatePricesResponse = zod.object({
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
+  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -308,6 +316,10 @@ export const ConnectLiveRateResponse = zod.object({
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
+  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -340,6 +352,10 @@ export const DisconnectLiveRateResponse = zod.object({
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
+  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -359,6 +375,10 @@ export const GetPublicPricesResponse = zod.object({
   "gold9999Rate": zod.number(),
   "liveModeConnected": zod.boolean(),
   "liveSilverRate": zod.number().nullish(),
+  "liveGoldBid": zod.number().nullish(),
+  "liveGoldAsk": zod.number().nullish(),
+  "liveGoldHigh": zod.number().nullish(),
+  "liveGoldLow": zod.number().nullish(),
   "updatedAt": zod.string()
 }).describe('Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.')
 

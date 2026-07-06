@@ -1,0 +1,28 @@
+Hey Agent, let's redesign the standalone Showroom Live Price Display Board (`/showroom-board`) to match the premium mobile app UI theme provided in the reference image (photo_2026-07-05_19-27-38.jpg). 
+
+Please implement the UI components and layout strictly as follows:
+
+1. **Header & Clock Section:**
+   - Use a solid, high-end deep black gradient background (`#0b0b0b` to `#121212`) with a subtle geometric background grid pattern.
+   - Display the elegant gold "Hazari Gold ✦" logo at the top center.
+   - Create a clean horizontal row container right below the logo with a thin gold border showing the current live system date on the left and a ticking digital clock (`HH:MM:SS PM`) on the right.
+
+2. **Market Metrics (Top 4 Boxes):**
+   - Create a 2x2 grid for the raw market metrics:
+     * **BID oz:** Display live gold bullion bid rate per ounce.
+     * **ASK oz:** Display live gold bullion ask rate per ounce.
+     * **Low:** Display daily low rate with a bold red down-arrow (`↓`).
+     * **High:** Display daily high rate with a bold green up-arrow (`↑`).
+   - Use large, high-contrast white text for the numeric values inside these dark boxes.
+
+3. **Horizontal Asset Rows (The 5 Core Display Items):**
+   - Instead of standard square cards, list the items as full-width horizontal rows with thin gold borders and rounded corners, just like the image:
+     * **ROW 1: TEN TOLA BAR | TTB** ➡️ Display total bar price (`goldBullionRate * 116.638 * 0.995`). Include a gold bar thumbnail icon on the left.
+     * **ROW 2: JEWELLERY 22K | 1GM** ➡️ Display per-gram price (`goldBullionRate * 0.916`). Include a gold ring icon on the left.
+     * **ROW 3: GOLD 9999 | 1GM** ➡️ Display pure per-gram rate (`goldBullionRate * 0.9999`).
+     * **ROW 4: GOLD 9999 | 1KG** ➡️ Display total kilo price (`goldBullionRate * 1000 * 0.9999`).
+     * **ROW 5: KILO BAR 995 | 1KG** ➡️ Display total 995 kilo bar price (`goldBullionRate * 1000 * 0.995`).
+   - Ensure the rightmost part of each row renders the calculated price in massive, bold gold/white text.
+
+4. **Public Synchronization:**
+   - Ensure all math calculations derive directly from the clean `/prices/public` API context and refresh smoothly every 5 seconds. Run a full typecheck once completed!

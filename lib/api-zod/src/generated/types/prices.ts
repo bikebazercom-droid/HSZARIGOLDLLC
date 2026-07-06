@@ -35,6 +35,26 @@ export interface Prices {
   liveGoldRate22k?: number | null;
   /** @nullable */
   liveSilverRate?: number | null;
+  /**
+     * Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldBid?: number | null;
+  /**
+     * Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldAsk?: number | null;
+  /**
+     * Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldHigh?: number | null;
+  /**
+     * Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldLow?: number | null;
   /** @nullable */
   liveLastSyncedAt?: string | null;
 }

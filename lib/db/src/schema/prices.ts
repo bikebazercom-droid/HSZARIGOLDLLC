@@ -30,6 +30,13 @@ export const pricesTable = pgTable("prices", {
   liveGoldRate24k: numeric("live_gold_rate_24k", { precision: 12, scale: 4 }),
   liveGoldRate22k: numeric("live_gold_rate_22k", { precision: 12, scale: 4 }),
   liveSilverRate: numeric("live_silver_rate", { precision: 12, scale: 4 }),
+  // Raw market metrics (AED per troy ounce) for the showroom TV board's BID/ASK/Low/High
+  // tiles. Only populated when the provider (GoldAPI.io) supplies them; null otherwise
+  // (e.g. MetalpriceAPI.com or manual/disconnected mode) — never a first-class editable asset.
+  liveGoldBid: numeric("live_gold_bid", { precision: 12, scale: 4 }),
+  liveGoldAsk: numeric("live_gold_ask", { precision: 12, scale: 4 }),
+  liveGoldHigh: numeric("live_gold_high", { precision: 12, scale: 4 }),
+  liveGoldLow: numeric("live_gold_low", { precision: 12, scale: 4 }),
   liveLastSyncedAt: timestamp("live_last_synced_at", { withTimezone: true }),
   preLiveGoldJewelryRate: numeric("pre_live_gold_jewelry_rate", { precision: 12, scale: 4 }),
   preLiveGoldBullionRate: numeric("pre_live_gold_bullion_rate", { precision: 12, scale: 4 }),

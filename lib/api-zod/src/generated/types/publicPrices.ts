@@ -22,5 +22,13 @@ export interface PublicPrices {
   liveModeConnected: boolean;
   /** @nullable */
   liveSilverRate?: number | null;
+  /** @nullable */
+  liveGoldBid?: number | null;
+  /** @nullable */
+  liveGoldAsk?: number | null;
+  /** @nullable */
+  liveGoldHigh?: number | null;
+  /** @nullable */
+  liveGoldLow?: number | null;
   updatedAt: string;
 }

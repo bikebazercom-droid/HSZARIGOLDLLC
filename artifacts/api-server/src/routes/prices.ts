@@ -64,6 +64,10 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     liveGoldRate24k: toNum(p.liveGoldRate24k),
     liveGoldRate22k: toNum(p.liveGoldRate22k),
     liveSilverRate: toNum(p.liveSilverRate),
+    liveGoldBid: toNum(p.liveGoldBid),
+    liveGoldAsk: toNum(p.liveGoldAsk),
+    liveGoldHigh: toNum(p.liveGoldHigh),
+    liveGoldLow: toNum(p.liveGoldLow),
     liveLastSyncedAt: p.liveLastSyncedAt ? p.liveLastSyncedAt.toISOString() : null,
   };
 }
@@ -74,12 +78,22 @@ interface MetalSpot {
   usdPerOunce: number;
   usdPerGram24k?: number;
   usdPerGram22k?: number;
+  // Raw market metrics (USD per troy ounce) — only supplied by GoldAPI.io, used
+  // for the showroom TV board's BID/ASK/Low/High display tiles.
+  bidUsdPerOunce?: number;
+  askUsdPerOunce?: number;
+  highUsdPerOunce?: number;
+  lowUsdPerOunce?: number;
 }
 
 interface GoldApiMetalResponse {
   price?: number;
   price_gram_24k?: number;
   price_gram_22k?: number;
+  bid?: number;
+  ask?: number;
+  high_price?: number;
+  low_price?: number;
 }
 
 async function fetchGoldApiMetal(symbol: "XAU" | "XAG", apiKey: string): Promise<MetalSpot> {
@@ -94,7 +108,15 @@ async function fetchGoldApiMetal(symbol: "XAU" | "XAG", apiKey: string): Promise
   if (!Number.isFinite(usdPerOunce)) {
     throw new Error(`GoldAPI.io returned an unexpected response for ${symbol} — missing price.`);
   }
-  return { usdPerOunce, usdPerGram24k: data.price_gram_24k, usdPerGram22k: data.price_gram_22k };
+  return {
+    usdPerOunce,
+    usdPerGram24k: data.price_gram_24k,
+    usdPerGram22k: data.price_gram_22k,
+    bidUsdPerOunce: data.bid,
+    askUsdPerOunce: data.ask,
+    highUsdPerOunce: data.high_price,
+    lowUsdPerOunce: data.low_price,
+  };
 }
 
 interface MetalpriceApiResponse {
@@ -169,6 +191,10 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
     gold9999Rate: parsed.gold9999Rate,
     liveModeConnected: parsed.liveModeConnected,
     liveSilverRate: parsed.liveSilverRate,
+    liveGoldBid: parsed.liveGoldBid,
+    liveGoldAsk: parsed.liveGoldAsk,
+    liveGoldHigh: parsed.liveGoldHigh,
+    liveGoldLow: parsed.liveGoldLow,
     updatedAt: parsed.updatedAt,
   }));
 });
@@ -265,6 +291,13 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
   // GOLD 9999 (1GM / 1KG) — same per-gram rate for both weight variants,
   // scaled from the raw 24K spot rate by the 0.9999 purity factor.
   const gold9999Aed = Math.round(gold24kAed * 0.9999 * 100) / 100;
+  // Raw market metrics (AED per troy ounce) for the showroom TV board — only
+  // supplied by GoldAPI.io; left null for MetalpriceAPI.com or when missing.
+  const toAedOrNull = (usd?: number) => (usd != null && Number.isFinite(usd) ? Math.round(usd * USD_TO_AED * 100) / 100 : null);
+  const goldBidAed = toAedOrNull(gold.bidUsdPerOunce);
+  const goldAskAed = toAedOrNull(gold.askUsdPerOunce);
+  const goldHighAed = toAedOrNull(gold.highUsdPerOunce);
+  const goldLowAed = toAedOrNull(gold.lowUsdPerOunce);
 
   const wasConnected = current.liveModeConnected;
 
@@ -277,6 +310,10 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
       liveGoldRate24k: String(gold24kAed),
       liveGoldRate22k: String(gold22kAed),
       liveSilverRate: String(silverAed),
+      liveGoldBid: goldBidAed != null ? String(goldBidAed) : null,
+      liveGoldAsk: goldAskAed != null ? String(goldAskAed) : null,
+      liveGoldHigh: goldHighAed != null ? String(goldHighAed) : null,
+      liveGoldLow: goldLowAed != null ? String(goldLowAed) : null,
       liveLastSyncedAt: new Date(),
       // Snapshot the manual rates once, the first time we connect, so
       // disconnecting can restore exactly what the admin had before.
@@ -320,6 +357,10 @@ router.post("/prices/live/disconnect", async (req, res): Promise<void> => {
       liveGoldRate24k: null,
       liveGoldRate22k: null,
       liveSilverRate: null,
+      liveGoldBid: null,
+      liveGoldAsk: null,
+      liveGoldHigh: null,
+      liveGoldLow: null,
       liveLastSyncedAt: null,
       goldJewelryRate: current.preLiveGoldJewelryRate ?? current.goldJewelryRate,
       goldBullionRate: current.preLiveGoldBullionRate ?? current.goldBullionRate,

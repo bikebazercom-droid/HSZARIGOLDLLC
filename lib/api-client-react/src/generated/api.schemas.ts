@@ -211,6 +211,26 @@ export interface Prices {
   liveGoldRate22k?: number | null;
   /** @nullable */
   liveSilverRate?: number | null;
+  /**
+     * Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldBid?: number | null;
+  /**
+     * Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldAsk?: number | null;
+  /**
+     * Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldHigh?: number | null;
+  /**
+     * Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * @nullable
+     */
+  liveGoldLow?: number | null;
   /** @nullable */
   liveLastSyncedAt?: string | null;
 }
@@ -231,6 +251,14 @@ export interface PublicPrices {
   liveModeConnected: boolean;
   /** @nullable */
   liveSilverRate?: number | null;
+  /** @nullable */
+  liveGoldBid?: number | null;
+  /** @nullable */
+  liveGoldAsk?: number | null;
+  /** @nullable */
+  liveGoldHigh?: number | null;
+  /** @nullable */
+  liveGoldLow?: number | null;
   updatedAt: string;
 }
 

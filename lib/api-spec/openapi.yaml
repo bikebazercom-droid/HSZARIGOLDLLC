@@ -710,6 +710,18 @@ components:
           type: ["number", "null"]
         liveSilverRate:
           type: ["number", "null"]
+        liveGoldBid:
+          type: ["number", "null"]
+          description: Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+        liveGoldAsk:
+          type: ["number", "null"]
+          description: Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+        liveGoldHigh:
+          type: ["number", "null"]
+          description: Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+        liveGoldLow:
+          type: ["number", "null"]
+          description: Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
         liveLastSyncedAt:
           type: ["string", "null"]
 
@@ -739,6 +751,14 @@ components:
         liveModeConnected:
           type: boolean
         liveSilverRate:
+          type: ["number", "null"]
+        liveGoldBid:
+          type: ["number", "null"]
+        liveGoldAsk:
+          type: ["number", "null"]
+        liveGoldHigh:
+          type: ["number", "null"]
+        liveGoldLow:
           type: ["number", "null"]
         updatedAt:
           type: string
