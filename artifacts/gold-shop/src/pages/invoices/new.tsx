@@ -591,10 +591,10 @@ export default function NewInvoice() {
                           type="number"
                           min="0"
                           step="0.0001"
-                          value={item.pureWeight || ""}
+                          value={item.pureWeight ? item.pureWeight.toFixed(3) : ""}
                           onChange={e => updateItem(index, "pureWeight", parseFloat(e.target.value) || 0)}
                           className="h-8 text-sm text-center"
-                          placeholder="0.0000"
+                          placeholder="0.000"
                         />
                       </td>
                       <td className="py-2 px-3">
