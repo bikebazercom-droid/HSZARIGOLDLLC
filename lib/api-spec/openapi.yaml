@@ -649,7 +649,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, kgBarRate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider]
       properties:
         id:
           type: integer
@@ -662,6 +662,8 @@ components:
         goldBullionRate:
           type: number
         ttBarRate:
+          type: number
+        ttBar24kRate:
           type: number
         kgBarRate:
           type: number
@@ -722,6 +724,8 @@ components:
         goldBullionRate:
           type: number
         ttBarRate:
+          type: number
+        ttBar24kRate:
           type: number
         kgBarRate:
           type: number

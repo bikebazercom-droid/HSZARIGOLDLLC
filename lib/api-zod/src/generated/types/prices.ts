@@ -15,6 +15,7 @@ export interface Prices {
   goldJewelryRate: number;
   goldBullionRate: number;
   ttBarRate: number;
+  ttBar24kRate: number;
   kgBarRate: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;

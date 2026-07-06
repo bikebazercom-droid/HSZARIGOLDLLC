@@ -9,6 +9,7 @@ export const pricesTable = pgTable("prices", {
   goldJewelryRate: numeric("gold_jewelry_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   goldBullionRate: numeric("gold_bullion_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   ttBarRate: numeric("tt_bar_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  ttBar24kRate: numeric("tt_bar_24k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   kgBarRate: numeric("kg_bar_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   customDescriptions: text("custom_descriptions").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -23,6 +24,7 @@ export const pricesTable = pgTable("prices", {
   preLiveGoldJewelryRate: numeric("pre_live_gold_jewelry_rate", { precision: 12, scale: 4 }),
   preLiveGoldBullionRate: numeric("pre_live_gold_bullion_rate", { precision: 12, scale: 4 }),
   preLiveTtBarRate: numeric("pre_live_tt_bar_rate", { precision: 12, scale: 4 }),
+  preLiveTtBar24kRate: numeric("pre_live_tt_bar_24k_rate", { precision: 12, scale: 4 }),
   preLiveKgBarRate: numeric("pre_live_kg_bar_rate", { precision: 12, scale: 4 }),
   preLiveSilverPricePerGram: numeric("pre_live_silver_price_per_gram", { precision: 12, scale: 4 }),
 });

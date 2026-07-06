@@ -8,9 +8,12 @@ const router: IRouter = Router();
 // troy ounce. AED is pegged to USD at this fixed rate.
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
-// 995 purity (TT. BAR / KG BAR) is 99.5% pure gold, versus the 999.9 (24K)
-// spot rate which is ~99.99% pure. Scale the raw 24K rate down accordingly.
+// 995 purity (TT. BAR 995 / KG BAR 995) is 99.5% pure gold, versus the 999.9
+// (24K) spot rate which is ~99.99% pure. Scale the raw 24K rate down accordingly.
 const PURITY_995_FACTOR = 0.995;
+// TT. BAR 24K is a strict 999.0 purity bullion bar — scale the raw 24K spot
+// rate by 0.999 (distinct from the 995-purity bars above).
+const PURITY_999_FACTOR = 0.999;
 
 type ApiProvider = "goldapi" | "metalpriceapi";
 
@@ -46,6 +49,7 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     goldJewelryRate: Number(p.goldJewelryRate),
     goldBullionRate: Number(p.goldBullionRate),
     ttBarRate: Number(p.ttBarRate),
+    ttBar24kRate: Number(p.ttBar24kRate),
     kgBarRate: Number(p.kgBarRate),
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
@@ -148,6 +152,7 @@ router.put("/prices", async (req, res): Promise<void> => {
     goldJewelryRate?: number;
     goldBullionRate?: number;
     ttBarRate?: number;
+    ttBar24kRate?: number;
     kgBarRate?: number;
     customDescriptions?: { name: string; rate: number }[];
   };
@@ -160,6 +165,7 @@ router.put("/prices", async (req, res): Promise<void> => {
   if (body.goldJewelryRate != null) updates.goldJewelryRate = String(body.goldJewelryRate);
   if (body.goldBullionRate != null) updates.goldBullionRate = String(body.goldBullionRate);
   if (body.ttBarRate != null) updates.ttBarRate = String(body.ttBarRate);
+  if (body.ttBar24kRate != null) updates.ttBar24kRate = String(body.ttBar24kRate);
   if (body.kgBarRate != null) updates.kgBarRate = String(body.kgBarRate);
   if (body.customDescriptions != null) updates.customDescriptions = JSON.stringify(body.customDescriptions);
 
@@ -210,9 +216,11 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
   const gold24kAed = Math.round(gold24kUsd * USD_TO_AED * 100) / 100;
   const gold22kAed = Math.round(gold22kUsd * USD_TO_AED * 100) / 100;
   const silverAed = Math.round(silverUsd * USD_TO_AED * 100) / 100;
-  // TT. BAR and KG BAR are 995-purity bars, so their per-gram rate is the raw
-  // 24K spot rate scaled by the purity factor, not the raw 24K rate itself.
+  // TT. BAR 995 and KG BAR 995 are 995-purity bars, so their per-gram rate is
+  // the raw 24K spot rate scaled by the purity factor, not the raw 24K rate.
   const gold995Aed = Math.round(gold24kAed * PURITY_995_FACTOR * 100) / 100;
+  // TT. BAR 24K is a strict 999.0 purity bullion bar.
+  const gold999Aed = Math.round(gold24kAed * PURITY_999_FACTOR * 100) / 100;
 
   const wasConnected = current.liveModeConnected;
 
@@ -232,6 +240,7 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
         preLiveGoldJewelryRate: current.goldJewelryRate,
         preLiveGoldBullionRate: current.goldBullionRate,
         preLiveTtBarRate: current.ttBarRate,
+        preLiveTtBar24kRate: current.ttBar24kRate,
         preLiveKgBarRate: current.kgBarRate,
         preLiveSilverPricePerGram: current.silverPricePerGram,
       }),
@@ -239,6 +248,7 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
       goldJewelryRate: String(gold22kAed),
       goldBullionRate: String(gold24kAed),
       ttBarRate: String(gold995Aed),
+      ttBar24kRate: String(gold999Aed),
       kgBarRate: String(gold995Aed),
       silverPricePerGram: String(silverAed),
       updatedAt: new Date(),
@@ -262,12 +272,14 @@ router.post("/prices/live/disconnect", async (req, res): Promise<void> => {
       goldJewelryRate: current.preLiveGoldJewelryRate ?? current.goldJewelryRate,
       goldBullionRate: current.preLiveGoldBullionRate ?? current.goldBullionRate,
       ttBarRate: current.preLiveTtBarRate ?? current.ttBarRate,
+      ttBar24kRate: current.preLiveTtBar24kRate ?? current.ttBar24kRate,
       kgBarRate: current.preLiveKgBarRate ?? current.kgBarRate,
       silverPricePerGram: current.preLiveSilverPricePerGram ?? current.silverPricePerGram,
       goldPricePerGram: current.preLiveGoldBullionRate ?? current.goldPricePerGram,
       preLiveGoldJewelryRate: null,
       preLiveGoldBullionRate: null,
       preLiveTtBarRate: null,
+      preLiveTtBar24kRate: null,
       preLiveKgBarRate: null,
       preLiveSilverPricePerGram: null,
       updatedAt: new Date(),

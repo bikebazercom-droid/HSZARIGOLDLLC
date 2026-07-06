@@ -70,29 +70,49 @@ interface PricesData {
   goldJewelryRate: number;
   goldBullionRate: number;
   ttBarRate: number;
+  ttBar24kRate: number;
   kgBarRate: number;
   liveModeConnected?: boolean;
 }
 
-// The 5 core "live-priced" asset descriptions, kept in sync with the asset
+// The core "live-priced" asset descriptions, kept in sync with the asset
 // cards on the Live Prices page. Selecting one of these in an invoice row
 // auto-fills that row's rate from whichever source (live API or manual
 // fallback) is currently active for the underlying per-gram field.
 const LIVE_ASSET_DESCRIPTIONS = [
-  "Gold Jewelry",
-  "GOLD",
-  "TT. BAR",
-  "KG BAR",
-  "Silver",
+  "TT. BAR 995",
+  "TT. BAR 24K",
+  "Gold Jewelry 22k",
+  "Gold Jewelry 21k",
+  "Gold Jewelry 18k",
+  "GOLD 999.99",
+  "KG BAR 995",
+  "Silver 999",
 ] as const;
 
+// A Ten Tola bar's standard gross weight is fixed at 116.640 grams, regardless
+// of whether it's a 995 or 24K (999.0) purity bar.
+const TT_BAR_GROSS_WEIGHT = 116.640;
+const AUTO_GROSS_WEIGHT: Record<string, number> = {
+  "TT. BAR 995": TT_BAR_GROSS_WEIGHT,
+  "TT. BAR 24K": TT_BAR_GROSS_WEIGHT,
+};
+
 const DESC_TO_PURITY: Record<string, string> = {
+  "TT. BAR 995": "24K (995.0)",
+  "TT. BAR 24K": "24K_999",
+  "Gold Jewelry 22k": "22K (916.0)",
+  "Gold Jewelry 21k": "21K (875.0)",
+  "Gold Jewelry 18k": "18K (750.0)",
+  "GOLD 999.99": "24K (999.9)",
+  "KG BAR 995": "24K (995.0)",
+  "Silver 999": "",
+  // Legacy descriptions kept for backward compatibility with existing invoices.
   "Gold Jewelry": "22K (916.0)",
   "GOLD": "24K (999.9)",
   "TT. BAR": "24K (995.0)",
   "KG BAR": "24K (995.0)",
   "Silver": "",
-  // Legacy descriptions kept for backward compatibility with existing invoices.
   "22K Gold Jewelry": "22K (916.0)",
   "24K GOLD": "24K (995.0)",
   "KG. BAR": "24K (995.0)",
@@ -104,22 +124,23 @@ const DESC_TO_PURITY: Record<string, string> = {
 };
 
 function descToCategory(desc: string): string {
-  if (desc === "Gold Jewelry" || desc === "22K Gold Jewelry" || desc === "Jewellery 22K 1GM") return "gold_jewelry";
-  if (desc === "GOLD" || desc === "24K GOLD" || desc === "Gold 9999 1GM") return "gold";
-  if (desc === "TT. BAR" || desc === "Ten Tola Bar TTB") return "tt_bar";
-  if (desc === "KG BAR" || desc === "KG. BAR" || desc === "Gold 9999 1KG" || desc === "Kilo Bar 995 1KG") return "kg_bar";
-  if (desc === "Silver") return "silver";
+  if (desc === "Gold Jewelry 22k" || desc === "Gold Jewelry 21k" || desc === "Gold Jewelry 18k" || desc === "Gold Jewelry" || desc === "22K Gold Jewelry" || desc === "Jewellery 22K 1GM") return "gold_jewelry";
+  if (desc === "GOLD 999.99" || desc === "GOLD" || desc === "24K GOLD" || desc === "Gold 9999 1GM") return "gold";
+  if (desc === "TT. BAR 995" || desc === "TT. BAR 24K" || desc === "TT. BAR" || desc === "Ten Tola Bar TTB") return "tt_bar";
+  if (desc === "KG BAR 995" || desc === "KG BAR" || desc === "KG. BAR" || desc === "Gold 9999 1KG" || desc === "Kilo Bar 995 1KG") return "kg_bar";
+  if (desc === "Silver 999" || desc === "Silver") return "silver";
   // Anything else (custom-typed description, saved custom price, or a Product) is Custom
   return "custom";
 }
 
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
   if (!prices) return fallback;
-  if (description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.goldJewelryRate;
-  if (description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM") return prices.goldBullionRate;
-  if (description === "TT. BAR" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
-  if (description === "KG BAR" || description === "KG. BAR" || description === "Gold 9999 1KG" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
-  if (description === "Silver") return prices.silverPricePerGram;
+  if (description === "Gold Jewelry 22k" || description === "Gold Jewelry 21k" || description === "Gold Jewelry 18k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.goldJewelryRate;
+  if (description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM") return prices.goldBullionRate;
+  if (description === "TT. BAR 995" || description === "TT. BAR" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
+  if (description === "TT. BAR 24K") return prices.ttBar24kRate;
+  if (description === "KG BAR 995" || description === "KG BAR" || description === "KG. BAR" || description === "Gold 9999 1KG" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
+  if (description === "Silver 999" || description === "Silver") return prices.silverPricePerGram;
   // Check custom descriptions
   const custom = (prices as any).customDescriptions as { name: string; rate: number }[] | undefined;
   const found = custom?.find(d => d.name === description);
@@ -270,7 +291,17 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         const suggestedRate = nextGlobalRate ?? (metalRate || goldRate);
-        updated = { ...updated, rate: suggestedRate, category: autoCategory, purity: autoPurity, purityIsCustom: false, makingRate: 0, makingAmt: 0 };
+        const autoGrossWeight = AUTO_GROSS_WEIGHT[value as string];
+        updated = {
+          ...updated,
+          rate: suggestedRate,
+          category: autoCategory,
+          purity: autoPurity,
+          purityIsCustom: false,
+          makingRate: 0,
+          makingAmt: 0,
+          ...(autoGrossWeight != null ? { grossWeight: autoGrossWeight } : {}),
+        };
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {

@@ -29,7 +29,7 @@ import goldBarStackImg from "@/assets/rates/gold-bar-stack.png";
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
 
-type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "kgBarRate" | "silverPricePerGram";
+type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "ttBar24kRate" | "kgBarRate" | "silverPricePerGram";
 interface CustomItem { name: string; rate: number }
 
 const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
@@ -386,10 +386,10 @@ export default function Prices() {
     });
   };
 
-  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "kgBarRate", "silverPricePerGram"];
+  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram"];
 
   const [localRates, setLocalRates] = useState<Record<RateKey, number>>({
-    goldJewelryRate: 0, goldBullionRate: 0, ttBarRate: 0, kgBarRate: 0, silverPricePerGram: 0,
+    goldJewelryRate: 0, goldBullionRate: 0, ttBarRate: 0, ttBar24kRate: 0, kgBarRate: 0, silverPricePerGram: 0,
   });
   const [syncingAll, setSyncingAll] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
@@ -405,6 +405,7 @@ export default function Prices() {
         goldJewelryRate: prices.goldJewelryRate,
         goldBullionRate: prices.goldBullionRate,
         ttBarRate: prices.ttBarRate,
+        ttBar24kRate: prices.ttBar24kRate,
         kgBarRate: prices.kgBarRate,
         silverPricePerGram: prices.silverPricePerGram,
       });
@@ -525,11 +526,12 @@ export default function Prices() {
   }
 
   const assetCards = [
-    { label: "TT. BAR", sublabel: "24K / 995.0 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate" as const },
-    { label: "Gold Jewelry", sublabel: "22K / 916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const },
-    { label: "GOLD", sublabel: "24K / 999.9 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const },
-    { label: "KG BAR", sublabel: "24K / 995.0 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const },
-    { label: "Silver", sublabel: "999.0 Fine — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const },
+    { label: "TT. BAR 995", sublabel: "24K / 995.0 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate" as const },
+    { label: "TT. BAR 24K", sublabel: "24K / 999.0 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate" as const },
+    { label: "Gold Jewelry", sublabel: "22K / 21K / 18K — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const },
+    { label: "GOLD 999.99", sublabel: "24K / 999.9 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const },
+    { label: "KG BAR 995", sublabel: "24K / 995.0 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const },
+    { label: "Silver 999", sublabel: "999.0 Fine — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const },
   ];
 
   return (
