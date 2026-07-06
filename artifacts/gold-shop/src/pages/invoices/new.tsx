@@ -37,30 +37,15 @@ interface LineItem {
   rate: number;
 }
 
-const PURITY_PRESETS = [
-  { label: "TT. BAR (0.995)", value: "TT. BAR (0.995)", decimal: 0.9950 },
-  { label: "TT. BAR (0.999)", value: "TT. BAR (0.999)", decimal: 0.9990 },
-  { label: "KG BAR (0.995)", value: "KG BAR (0.995)", decimal: 0.9950 },
-  { label: "GOLD (0.9999)", value: "GOLD (0.9999)", decimal: 0.9999 },
-  { label: "Gold 22K (0.916)", value: "Gold 22K (0.916)", decimal: 0.9160 },
-  { label: "Gold 21K (0.875)", value: "Gold 21K (0.875)", decimal: 0.8750 },
-  { label: "Gold 18K (0.750)", value: "Gold 18K (0.750)", decimal: 0.7500 },
-  { label: "Silver (0.999)", value: "Silver (0.999)", decimal: 0.9990 },
-];
+// The Purity dropdown shows ONLY raw decimal numbers — no item names or text
+// labels. Deduplicated from the requested set (0.995 appeared twice since both
+// TT. BAR and KG BAR share the same 0.995 fineness): 0.995, 0.999, 0.9999,
+// 0.916, 0.875, 0.750.
+const PURITY_OPTIONS = ["0.995", "0.999", "0.9999", "0.916", "0.875", "0.750"];
 
-// Dropdown presets carry the exact standard gold-market factor (e.g. 22K 916 → 0.9167).
-// Any purity typed by hand (e.g. "0.999", "995") is used LITERALLY, exactly as
-// entered — it must never be silently snapped to a different "standard" factor.
-// This matters: 24K "999.9" fine gold is 0.9999, but a purity of "0.999" is a
-// distinct, valid decimal (0.999) and must multiply by exactly 0.999, not 0.9999.
+// Purity is now always a plain decimal string (e.g. "0.995"), used LITERALLY
+// exactly as entered/selected — never snapped to a different "standard" factor.
 function parsePurity(purity: string): number {
-  const preset = PURITY_PRESETS.find(p => p.value === purity);
-  if (preset) return preset.decimal;
-  const match = purity.match(/\((\d+\.?\d*)\)/);
-  if (match) {
-    const karatValue = parseFloat(match[1]);
-    return karatValue > 1 ? karatValue / 1000 : karatValue;
-  }
   const decimal = parseFloat(purity);
   if (isNaN(decimal)) return 0;
   return decimal > 1 ? decimal / 1000 : decimal;
@@ -92,51 +77,42 @@ const LIVE_ASSET_DESCRIPTIONS = [
   "Silver (0.999)",
 ] as const;
 
-// A Ten Tola bar's standard gross weight is fixed at 116.640 grams, regardless
-// of whether it's a 0.995 or 0.999 purity bar. A Kilo Bar's standard gross
-// weight is fixed at 1000.000 grams. All other items are entered manually.
-const TT_BAR_GROSS_WEIGHT = 116.640;
-const KG_BAR_GROSS_WEIGHT = 1000.000;
-const AUTO_GROSS_WEIGHT: Record<string, number> = {
-  "TT. BAR (0.995)": TT_BAR_GROSS_WEIGHT,
-  "TT. BAR (0.999)": TT_BAR_GROSS_WEIGHT,
-  "KG BAR (0.995)": KG_BAR_GROSS_WEIGHT,
-};
+// Gross Weight is always entered manually — no description ever auto-fills a
+// default weight. The user must type the exact weight for every line item.
 
-// The purity decimal is now embedded directly in each description's name, so
-// the description IS the purity preset value — no separate mapping is needed
-// beyond identity, aside from legacy aliases for older saved invoices.
+// The Purity column shows only raw decimal numbers now, so this maps each
+// Stock Description to the matching raw decimal string (see PURITY_OPTIONS).
 const DESC_TO_PURITY: Record<string, string> = {
-  "TT. BAR (0.995)": "TT. BAR (0.995)",
-  "TT. BAR (0.999)": "TT. BAR (0.999)",
-  "KG BAR (0.995)": "KG BAR (0.995)",
-  "GOLD (0.9999)": "GOLD (0.9999)",
-  "Gold 22K (0.916)": "Gold 22K (0.916)",
-  "Gold 21K (0.875)": "Gold 21K (0.875)",
-  "Gold 18K (0.750)": "Gold 18K (0.750)",
-  "Silver (0.999)": "Silver (0.999)",
+  "TT. BAR (0.995)": "0.995",
+  "TT. BAR (0.999)": "0.999",
+  "KG BAR (0.995)": "0.995",
+  "GOLD (0.9999)": "0.9999",
+  "Gold 22K (0.916)": "0.916",
+  "Gold 21K (0.875)": "0.875",
+  "Gold 18K (0.750)": "0.750",
+  "Silver (0.999)": "0.999",
   // Legacy descriptions kept for backward compatibility with existing invoices.
-  "TT. BAR 995": "TT. BAR (0.995)",
-  "TT. BAR 24K": "TT. BAR (0.999)",
-  "Gold Jewelry 22k": "Gold 22K (0.916)",
-  "Gold Jewelry 21k": "Gold 21K (0.875)",
-  "Gold Jewelry 18k": "Gold 18K (0.750)",
-  "GOLD 999.99": "GOLD (0.9999)",
-  "KG BAR 995": "KG BAR (0.995)",
-  "Silver 999": "Silver (0.999)",
-  "Gold Jewelry": "Gold 22K (0.916)",
-  "GOLD": "GOLD (0.9999)",
-  "TT. BAR": "TT. BAR (0.995)",
-  "KG BAR": "KG BAR (0.995)",
-  "Silver": "Silver (0.999)",
-  "22K Gold Jewelry": "Gold 22K (0.916)",
-  "24K GOLD": "GOLD (0.9999)",
-  "KG. BAR": "KG BAR (0.995)",
-  "Ten Tola Bar TTB": "TT. BAR (0.995)",
-  "Jewellery 22K 1GM": "Gold 22K (0.916)",
-  "Gold 9999 1GM": "GOLD (0.9999)",
-  "Gold 9999 1KG": "GOLD (0.9999)",
-  "Kilo Bar 995 1KG": "KG BAR (0.995)",
+  "TT. BAR 995": "0.995",
+  "TT. BAR 24K": "0.999",
+  "Gold Jewelry 22k": "0.916",
+  "Gold Jewelry 21k": "0.875",
+  "Gold Jewelry 18k": "0.750",
+  "GOLD 999.99": "0.9999",
+  "KG BAR 995": "0.995",
+  "Silver 999": "0.999",
+  "Gold Jewelry": "0.916",
+  "GOLD": "0.9999",
+  "TT. BAR": "0.995",
+  "KG BAR": "0.995",
+  "Silver": "0.999",
+  "22K Gold Jewelry": "0.916",
+  "24K GOLD": "0.9999",
+  "KG. BAR": "0.995",
+  "Ten Tola Bar TTB": "0.995",
+  "Jewellery 22K 1GM": "0.916",
+  "Gold 9999 1GM": "0.9999",
+  "Gold 9999 1KG": "0.9999",
+  "Kilo Bar 995 1KG": "0.995",
 };
 
 function descToCategory(desc: string): string {
@@ -175,15 +151,10 @@ function roundTo(num: number, decimals: number): number {
 }
 
 function calcItem(item: LineItem, globalMetalRate: number): LineItem {
-  // Silver has no karat/purity factor — its full gross weight is priced directly.
-  if (item.category === "silver") {
-    const pureWeight = roundTo(item.grossWeight, 3);
-    const goldValue = roundTo(pureWeight * globalMetalRate, 2);
-    const totalPrice = roundTo(goldValue + item.makingAmt, 2);
-    return { ...item, pureWeight, totalPrice };
-  }
+  // Pure Wt. = Gross Wt. × Purity, always computed by direct multiplication —
+  // no per-category exceptions. Rounded to 3 decimal places, recalculated live
+  // as either value changes (e.g. 92.50 × 0.999 = 92.408).
   const purityFactor = item.purity ? parsePurity(item.purity) : 0;
-  // Pure Wt. = Gross Wt. × Purity Factor, rounded to 3 decimal places (standard gold-market convention)
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
     ? roundTo(item.grossWeight * purityFactor, 3)
     : item.pureWeight;
@@ -307,7 +278,8 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         const suggestedRate = nextGlobalRate ?? (metalRate || goldRate);
-        const autoGrossWeight = AUTO_GROSS_WEIGHT[value as string];
+        // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
+        // for a fresh line item) so every weight is entered manually.
         updated = {
           ...updated,
           rate: suggestedRate,
@@ -316,7 +288,6 @@ export default function NewInvoice() {
           purityIsCustom: false,
           makingRate: 0,
           makingAmt: 0,
-          ...(autoGrossWeight != null ? { grossWeight: autoGrossWeight } : {}),
         };
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
@@ -575,7 +546,7 @@ export default function NewInvoice() {
                       <td className="py-2 px-3 min-w-[130px]">
                         {!item.purityIsCustom ? (
                           <Select
-                            value={PURITY_PRESETS.find(p => p.value === item.purity)?.value ?? ""}
+                            value={PURITY_OPTIONS.includes(item.purity) ? item.purity : ""}
                             onValueChange={val => {
                               if (val === "__custom__") {
                                 updateItem(index, "purityIsCustom" as keyof LineItem, true);
@@ -586,11 +557,11 @@ export default function NewInvoice() {
                             }}
                           >
                             <SelectTrigger className="h-8 text-sm">
-                              <SelectValue placeholder="Select karat" />
+                              <SelectValue placeholder="Select purity" />
                             </SelectTrigger>
                             <SelectContent>
-                              {PURITY_PRESETS.map(p => (
-                                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                              {PURITY_OPTIONS.map(p => (
+                                <SelectItem key={p} value={p}>{p}</SelectItem>
                               ))}
                               <SelectItem value="__custom__">Custom…</SelectItem>
                             </SelectContent>
