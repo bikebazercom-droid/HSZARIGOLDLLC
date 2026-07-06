@@ -405,7 +405,7 @@ export default function SettingsPage() {
             <CardTitle>Showroom TV Logo</CardTitle>
           </div>
           <CardDescription>
-            Upload a custom logo to display at the top of the Showroom Live Price Board (/showroom-board). Leave empty to show the default text header.
+            Upload a custom logo to display at the top of the Showroom Live Price Board (/tv). Leave empty to show the default text header.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

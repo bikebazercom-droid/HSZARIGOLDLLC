@@ -105,8 +105,7 @@ function AuthGate() {
 function PublicRouter() {
   return (
     <Switch>
-      <Route path="/showroom-board" component={ShowroomBoard} />
-      <Route path="/price-display" component={ShowroomBoard} />
+      <Route path="/tv" component={ShowroomBoard} />
       <Route>{() => <AuthGate />}</Route>
     </Switch>
   );
