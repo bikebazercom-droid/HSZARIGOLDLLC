@@ -21,7 +21,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
 import tenTolaBarImg from "@/assets/rates/ten-tola-bar.png";
-import jewelryRingImg from "@/assets/rates/jewelry-ring.png";
 import singleGoldBarImg from "@/assets/rates/single-gold-bar.png";
 import goldKiloBrickImg from "@/assets/rates/gold-kilo-brick.png";
 import goldBarStackImg from "@/assets/rates/gold-bar-stack.png";
@@ -577,7 +576,6 @@ export default function Prices() {
   const assetCards = [
     { label: "TT. BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate" as const },
     { label: "TT. BAR (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate" as const },
-    { label: "Gold Jewelry", sublabel: "0.916 / 0.875 / 0.750 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "goldJewelryRate" as const },
     { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "goldBullionRate" as const },
     { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const },
     { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const },
@@ -622,7 +620,7 @@ export default function Prices() {
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Gold Karat Prices — Per Gram</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          <DerivedKaratCard label="Gold 22K" sublabel="Purity 0.916 — Rate per 1 Gram" multiplier={0.916} spotRate={localRates.goldBullionRate} />
+          <DerivedKaratCard label="Gold Jewelry 22K" sublabel="Purity 0.916 — Rate per 1 Gram" multiplier={0.916} spotRate={localRates.goldBullionRate} />
           <DerivedKaratCard label="Gold 21K" sublabel="Purity 0.875 — Rate per 1 Gram" multiplier={0.875} spotRate={localRates.goldBullionRate} />
           <DerivedKaratCard label="Gold 18K" sublabel="Purity 0.750 — Rate per 1 Gram" multiplier={0.750} spotRate={localRates.goldBullionRate} />
         </div>

@@ -146,9 +146,15 @@ function getRateForPurity(purity: string, category: string, prices: PricesData |
   return roundTo(base * factor, 2);
 }
 
+// Gold Jewelry rate cards (22K/21K/18K) are always derived LIVE from the raw
+// 24K bullion spot rate (goldBullionRate) × karat fineness — never from a
+// manually-entered flat rate — so they stay in sync with the live API feed
+// shown on the Live Prices page.
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
   if (!prices) return fallback;
-  if (description === "Gold Jewelry 22K" || description === "Gold Jewelry 21K" || description === "Gold Jewelry 18K" || description === "Gold 22K (0.916)" || description === "Gold 21K (0.875)" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry 21k" || description === "Gold Jewelry 18k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.goldJewelryRate;
+  if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return roundTo(prices.goldBullionRate * 0.916, 2);
+  if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return roundTo(prices.goldBullionRate * 0.875, 2);
+  if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return roundTo(prices.goldBullionRate * 0.750, 2);
   if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM") return prices.goldBullionRate;
   if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
   if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return prices.ttBar24kRate;
