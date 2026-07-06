@@ -8,6 +8,9 @@ const router: IRouter = Router();
 // troy ounce. AED is pegged to USD at this fixed rate.
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
+// 995 purity (TT. BAR / KG BAR) is 99.5% pure gold, versus the 999.9 (24K)
+// spot rate which is ~99.99% pure. Scale the raw 24K rate down accordingly.
+const PURITY_995_FACTOR = 0.995;
 
 type ApiProvider = "goldapi" | "metalpriceapi";
 
@@ -207,6 +210,9 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
   const gold24kAed = Math.round(gold24kUsd * USD_TO_AED * 100) / 100;
   const gold22kAed = Math.round(gold22kUsd * USD_TO_AED * 100) / 100;
   const silverAed = Math.round(silverUsd * USD_TO_AED * 100) / 100;
+  // TT. BAR and KG BAR are 995-purity bars, so their per-gram rate is the raw
+  // 24K spot rate scaled by the purity factor, not the raw 24K rate itself.
+  const gold995Aed = Math.round(gold24kAed * PURITY_995_FACTOR * 100) / 100;
 
   const wasConnected = current.liveModeConnected;
 
@@ -232,8 +238,8 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
       goldPricePerGram: String(gold24kAed),
       goldJewelryRate: String(gold22kAed),
       goldBullionRate: String(gold24kAed),
-      ttBarRate: String(gold24kAed),
-      kgBarRate: String(gold24kAed),
+      ttBarRate: String(gold995Aed),
+      kgBarRate: String(gold995Aed),
       silverPricePerGram: String(silverAed),
       updatedAt: new Date(),
     })
