@@ -22,6 +22,8 @@ export interface InvoiceItem {
   /** @nullable */
   purity?: string | null;
   /** @nullable */
+  purityMultiplier?: number | null;
+  /** @nullable */
   pureWeight?: number | null;
   /** @nullable */
   makingRate?: number | null;

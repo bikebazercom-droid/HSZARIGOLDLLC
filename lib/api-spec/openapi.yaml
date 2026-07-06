@@ -865,6 +865,8 @@ components:
           type: ["number", "null"]
         purity:
           type: ["string", "null"]
+        purityMultiplier:
+          type: ["number", "null"]
         pureWeight:
           type: ["number", "null"]
         makingRate:
@@ -894,6 +896,8 @@ components:
           type: number
         purity:
           type: string
+        purityMultiplier:
+          type: number
         pureWeight:
           type: number
         makingRate:

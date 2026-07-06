@@ -38,6 +38,8 @@ export interface InvoiceItem {
   /** @nullable */
   purity?: string | null;
   /** @nullable */
+  purityMultiplier?: number | null;
+  /** @nullable */
   pureWeight?: number | null;
   /** @nullable */
   makingRate?: number | null;
@@ -319,6 +321,7 @@ export interface InvoiceItemInput {
   weight?: number;
   grossWeight?: number;
   purity?: string;
+  purityMultiplier?: number;
   pureWeight?: number;
   makingRate?: number;
   makingAmt?: number;

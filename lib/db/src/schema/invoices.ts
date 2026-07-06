@@ -44,9 +44,16 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   weight: numeric("weight", { precision: 12, scale: 4 }),
   grossWeight: numeric("gross_weight", { precision: 12, scale: 4 }),
   purity: text("purity"),
+  // Frozen decimal multiplier (e.g. 0.995) used to compute pureWeight for THIS
+  // item at the moment the invoice was created. Written once at creation and
+  // never recalculated afterward — there is no update route for invoice items,
+  // so this value is permanently immutable ("price locking").
+  purityMultiplier: numeric("purity_multiplier", { precision: 6, scale: 4 }),
   pureWeight: numeric("pure_weight", { precision: 12, scale: 4 }),
   makingRate: numeric("making_rate", { precision: 12, scale: 4 }),
   makingAmt: numeric("making_amt", { precision: 12, scale: 2 }),
+  // Metal rate per gram (AED) applied to THIS line item at time of sale — the
+  // literal frozen snapshot, never re-derived from live prices on read.
   unitPrice: numeric("unit_price", { precision: 12, scale: 4 }).notNull().default("0"),
   totalPrice: numeric("total_price", { precision: 12, scale: 2 }).notNull().default("0"),
 });

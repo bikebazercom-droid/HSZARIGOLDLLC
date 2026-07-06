@@ -382,9 +382,15 @@ export default function NewInvoice() {
           quantity: 1,
           grossWeight: item.grossWeight || undefined,
           purity: item.purity || undefined,
+          // Frozen decimal multiplier applied at the moment this invoice was
+          // created — sent as a literal number, never re-derived server-side.
+          purityMultiplier: item.purity ? parsePurity(item.purity) : undefined,
           pureWeight: item.pureWeight || undefined,
           makingRate: item.makingRate || undefined,
           makingAmt: item.makingAmt || undefined,
+          // Literal frozen metal rate (AED/gram) locked in at sale time — this
+          // exact number is written to the DB and must never be recomputed
+          // from a live price feed when the invoice is viewed/printed later.
           unitPrice: metalRate || goldRate,
           totalPrice: item.totalPrice,
         })),
