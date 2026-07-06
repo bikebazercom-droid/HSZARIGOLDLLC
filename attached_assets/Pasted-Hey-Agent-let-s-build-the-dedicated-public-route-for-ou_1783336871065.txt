@@ -1,0 +1,29 @@
+Hey Agent, let's build the dedicated public route for our "Showroom Live Price Display Board" as we planned earlier. This needs to be a completely standalone page optimized for a large TV screen inside the shop.
+
+Please strictly implement the following frontend page and real-time syncing structure:
+
+1. **Create a Dedicated Standalone Route:**
+   - Create a new public route/page at `/showroom-board` or `/price-display`.
+   - Remove all admin sidebars, top headers, or standard application navigation panels. This must be a clean, immersive, full-screen grid look.
+
+2. **UI/UX Design Inspired by reference images:**
+   - Use a premium deep black or solid charcoal dark-mode background layout.
+   - At the very top, center a sleek gold-accented header reading: "HAZARI GOLD — LIVE MARKET RATES".
+   - Right below the header, place a clean capsule design showing the current live system date and a ticking digital clock (`HH:MM:SS AM/PM`) updating every second.
+
+3. **8 Core Assets Live Pricing Grid (100% Accurate API Sync):**
+   - Design large, high-contrast, bold display cards for our 8 core items arranged in a clean grid layout. The typography must be massive and readable from 10 feet away.
+   - Every card must show the asset name, its exact purity multiplier, and the dynamically calculated Per-Gram Rate in AED based on our strict math rules:
+     * `TT. BAR (0.995)` ➡️ `goldBullionRate * 0.995`
+     * `TT. BAR (0.999)` ➡️ `goldBullionRate * 0.999`
+     * `KG BAR (0.995)` ➡️ `goldBullionRate * 0.995`
+     * `GOLD (0.9999)` ➡️ `goldBullionRate` (Full Spot Rate)
+     * `Silver (0.999)` ➡️ `liveSilverRate`
+     * `Gold Jewelry 22K` ➡️ `goldBullionRate * 0.916`
+     * `Gold Jewelry 21K` ➡️ `goldBullionRate * 0.875`
+     * `Gold Jewelry 18K` ➡️ `goldBullionRate * 0.750`
+
+4. **Smooth Live State Propagation:**
+   - Connect this component to our live API polling state context so that when `goldBullionRate` changes, the prices on the TV screen update instantly and smoothly without reloading the browser.
+
+Please generate this public template, compile the real-time layout, and run a workspace typecheck to deploy the feature!

@@ -40,7 +40,8 @@ import type {
   Prices,
   PricesInput,
   Product,
-  ProductInput
+  ProductInput,
+  PublicPrices
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -741,6 +742,83 @@ export const useDisconnectLiveRate = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDisconnectLiveRateMutationOptions(options));
     }
+
+export const getGetPublicPricesUrl = () => {
+
+
+
+
+  return `/api/prices/public`
+}
+
+/**
+ * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
+ */
+export const getPublicPrices = async ( options?: RequestInit): Promise<PublicPrices> => {
+
+  return customFetch<PublicPrices>(getGetPublicPricesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicPricesQueryKey = () => {
+    return [
+    `/api/prices/public`
+    ] as const;
+    }
+
+
+export const getGetPublicPricesQueryOptions = <TData = Awaited<ReturnType<typeof getPublicPrices>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicPricesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicPrices>>> = ({ signal }) => getPublicPrices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicPrices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicPricesQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicPrices>>>
+export type GetPublicPricesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
+ */
+
+export function useGetPublicPrices<TData = Awaited<ReturnType<typeof getPublicPrices>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicPricesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListCustomersUrl = (params?: ListCustomersParams,) => {
   const normalizedParams = new URLSearchParams();

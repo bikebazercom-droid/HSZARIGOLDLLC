@@ -36,3 +36,4 @@ export * from './pricesInput';
 export * from './pricesLiveApiProvider';
 export * from './product';
 export * from './productInput';
+export * from './publicPrices';

@@ -20,6 +20,7 @@ import NewProduct from "@/pages/products/new";
 import ProductDetail from "@/pages/products/[id]";
 import Prices from "@/pages/prices";
 import SettingsPage from "@/pages/settings";
+import ShowroomBoard from "@/pages/showroom-board";
 import NotFound from "@/pages/not-found";
 
 // A 401 from any query or mutation means the server-side session is gone
@@ -99,13 +100,25 @@ function AuthGate() {
   return <StaffRouter />;
 }
 
+// Public, unauthenticated routes — matched before the auth gate so they never
+// require a login session (e.g. an always-on showroom TV display).
+function PublicRouter() {
+  return (
+    <Switch>
+      <Route path="/showroom-board" component={ShowroomBoard} />
+      <Route path="/price-display" component={ShowroomBoard} />
+      <Route>{() => <AuthGate />}</Route>
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <AuthGate />
+            <PublicRouter />
           </WouterRouter>
         </AuthProvider>
         <Toaster />

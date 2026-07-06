@@ -340,6 +340,24 @@ export const DisconnectLiveRateResponse = zod.object({
 
 
 /**
+ * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
+ */
+export const GetPublicPricesResponse = zod.object({
+  "goldBullionRate": zod.number(),
+  "ttBarRate": zod.number(),
+  "ttBar24kRate": zod.number(),
+  "kgBarRate": zod.number(),
+  "silverPricePerGram": zod.number(),
+  "gold22kRate": zod.number(),
+  "gold21kRate": zod.number(),
+  "gold18kRate": zod.number(),
+  "liveModeConnected": zod.boolean(),
+  "liveSilverRate": zod.number().nullish(),
+  "updatedAt": zod.string()
+}).describe('Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.')
+
+
+/**
  * @summary List all customers
  */
 export const ListCustomersQueryParams = zod.object({

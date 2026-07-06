@@ -215,6 +215,24 @@ export interface Prices {
 }
 
 /**
+ * Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
+ */
+export interface PublicPrices {
+  goldBullionRate: number;
+  ttBarRate: number;
+  ttBar24kRate: number;
+  kgBarRate: number;
+  silverPricePerGram: number;
+  gold22kRate: number;
+  gold21kRate: number;
+  gold18kRate: number;
+  liveModeConnected: boolean;
+  /** @nullable */
+  liveSilverRate?: number | null;
+  updatedAt: string;
+}
+
+/**
  * Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.
  */
 export type ConnectLiveRateInputApiProvider = typeof ConnectLiveRateInputApiProvider[keyof typeof ConnectLiveRateInputApiProvider];

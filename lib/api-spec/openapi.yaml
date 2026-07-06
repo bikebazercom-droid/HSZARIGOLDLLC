@@ -177,6 +177,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/Prices"
 
+  /prices/public:
+    get:
+      operationId: getPublicPrices
+      tags: [prices]
+      summary: Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
+      responses:
+        "200":
+          description: Current public display rates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicPrices"
+
   /customers:
     get:
       operationId: listCustomers
@@ -697,6 +710,34 @@ components:
           type: ["number", "null"]
         liveLastSyncedAt:
           type: ["string", "null"]
+
+    PublicPrices:
+      type: object
+      description: Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
+      required: [goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, silverPricePerGram, gold22kRate, gold21kRate, gold18kRate, liveModeConnected, updatedAt]
+      properties:
+        goldBullionRate:
+          type: number
+        ttBarRate:
+          type: number
+        ttBar24kRate:
+          type: number
+        kgBarRate:
+          type: number
+        silverPricePerGram:
+          type: number
+        gold22kRate:
+          type: number
+        gold21kRate:
+          type: number
+        gold18kRate:
+          type: number
+        liveModeConnected:
+          type: boolean
+        liveSilverRate:
+          type: ["number", "null"]
+        updatedAt:
+          type: string
 
     ConnectLiveRateInput:
       type: object

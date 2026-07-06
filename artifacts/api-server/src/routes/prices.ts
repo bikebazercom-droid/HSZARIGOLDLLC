@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, pricesTable } from "@workspace/db";
-import { GetPricesResponse, UpdatePricesResponse, ConnectLiveRateResponse, DisconnectLiveRateResponse } from "@workspace/api-zod";
+import { GetPricesResponse, UpdatePricesResponse, ConnectLiveRateResponse, DisconnectLiveRateResponse, GetPublicPricesResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -146,6 +146,29 @@ async function getOrCreate() {
 router.get("/prices", async (_req, res): Promise<void> => {
   const prices = await getOrCreate();
   res.json(GetPricesResponse.parse(parsePrices(prices)));
+});
+
+// Public, unauthenticated router — mounted separately, before the requireAuth
+// gate, so the showroom TV price-display board can poll it without a logged
+// in session. Only exposes the handful of per-gram rates needed for display;
+// never leaks API keys or other account/shop settings.
+export const publicPricesRouter: IRouter = Router();
+publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
+  const prices = await getOrCreate();
+  const parsed = parsePrices(prices);
+  res.json(GetPublicPricesResponse.parse({
+    goldBullionRate: parsed.goldBullionRate,
+    ttBarRate: parsed.ttBarRate,
+    ttBar24kRate: parsed.ttBar24kRate,
+    kgBarRate: parsed.kgBarRate,
+    silverPricePerGram: parsed.silverPricePerGram,
+    gold22kRate: parsed.gold22kRate,
+    gold21kRate: parsed.gold21kRate,
+    gold18kRate: parsed.gold18kRate,
+    liveModeConnected: parsed.liveModeConnected,
+    liveSilverRate: parsed.liveSilverRate,
+    updatedAt: parsed.updatedAt,
+  }));
 });
 
 router.put("/prices", async (req, res): Promise<void> => {
