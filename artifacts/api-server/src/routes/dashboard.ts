@@ -129,6 +129,7 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
           quantity: Number(item.quantity),
           weight: item.weight != null ? Number(item.weight) : null,
           grossWeight: item.grossWeight != null ? Number(item.grossWeight) : null,
+          purityMultiplier: item.purityMultiplier != null ? Number(item.purityMultiplier) : null,
           pureWeight: item.pureWeight != null ? Number(item.pureWeight) : null,
           makingRate: item.makingRate != null ? Number(item.makingRate) : null,
           makingAmt: item.makingAmt != null ? Number(item.makingAmt) : null,
