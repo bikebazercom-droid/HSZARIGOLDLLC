@@ -71,6 +71,7 @@ interface PricesData {
 const LIVE_ASSET_DESCRIPTIONS = [
   "TT. BAR",
   "KG BAR",
+  "GOLD",
   "Gold Jewelry 22K",
   "Gold Jewelry 21K",
   "Gold Jewelry 18K",
@@ -128,6 +129,21 @@ function descToCategory(desc: string): string {
   if (desc === "Silver" || desc === "Silver (0.999)" || desc === "Silver 999") return "silver";
   // Anything else (custom-typed description, saved custom price, or a Product) is Custom
   return "custom";
+}
+
+// When the Purity dropdown is changed directly, the Metal Rate AED/g must
+// instantly recompute from the raw 24K spot rate (goldBullionRate) times the
+// selected purity fineness — except for Silver, which always uses the flat
+// silver rate regardless of its purity value, and 0.9999 which IS the raw
+// spot rate itself (no multiplier applied).
+function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number): number {
+  if (!prices) return fallback;
+  if (category === "silver") return prices.silverPricePerGram;
+  const base = prices.goldBullionRate;
+  if (purity === "0.9999") return base;
+  const factor = parsePurity(purity);
+  if (!factor) return fallback;
+  return roundTo(base * factor, 2);
 }
 
 function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
@@ -273,6 +289,13 @@ export default function NewInvoice() {
     let nextGlobalRate: number | null = null;
     if (field === "description" && value) {
       nextGlobalRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || goldRate);
+    }
+    // Changing Purity directly (independent of description) must immediately
+    // recompute the Metal Rate AED/g from the raw spot rate × selected
+    // fineness, so Pure Weight and the line total refresh with it.
+    if (field === "purity" && value) {
+      const currentCategory = items[index]?.category ?? "gold_jewelry";
+      nextGlobalRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || goldRate);
     }
 
     setItems(prev => {
