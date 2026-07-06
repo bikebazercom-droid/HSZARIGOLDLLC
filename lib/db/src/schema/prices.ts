@@ -17,6 +17,10 @@ export const pricesTable = pgTable("prices", {
   gold22kRate: numeric("gold_22k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   gold21kRate: numeric("gold_21k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   gold18kRate: numeric("gold_18k_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  // GOLD 9999 (1GM / 1KG) — same per-gram rate for both weight variants.
+  // Manual-editable/live-syncable parity with the other core assets above:
+  // auto-populated from goldBullionRate * 0.9999 on Connect.
+  gold9999Rate: numeric("gold_9999_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   customDescriptions: text("custom_descriptions").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 
