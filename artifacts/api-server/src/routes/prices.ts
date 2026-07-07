@@ -1,145 +1,101 @@
 import { Router, type IRouter } from "express";
 import { db, pricesTable } from "@workspace/db";
 import { GetPricesResponse, UpdatePricesResponse, GetPublicPricesResponse } from "@workspace/api-zod";
-import axios from "axios";
+import { io as socketIO } from "socket.io-client";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
-// AED is pegged to USD at this fixed rate.
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
 
-// ── Dubai Retail Rate scraper ────────────────────────────────────────────────
-// No in-function cache — always fetches fresh HTML from goldratesindubai.com.
-// Rate-limiting is handled by the spotCache (60-second TTL) so we hit the
-// target site at most once per minute, not once per frontend poll (1s).
+// ── Live Socket.IO feed — livepriceofgold.com ────────────────────────────────
+// Connects to the Socket.IO server that powers livepriceofgold.com's Dubai
+// price page. On every `update` event the payload contains pre-converted
+// AED per gram values (GXAUUSD_AED for 24K, 22GXAUUSD_AED for 22K, etc.)
+// so no manual conversion is needed. No server-side cache — liveSpot always
+// holds the most recent tick pushed by the feed.
+// ─────────────────────────────────────────────────────────────────────────────
 
-async function fetchDubaiRetailRate(): Promise<number> {
-  const { data: html } = await axios.get(
-    "https://goldratesindubai.com/gold-rate-today",
-    {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; GoldShopServer/1.0)",
-        Accept: "text/html,application/xhtml+xml",
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-      },
-      timeout: 10_000,
-      // Prevent axios from parsing HTML as JSON
-      responseType: "text",
-    },
-  );
+interface LiveSpot {
+  aedPerGram: number;  // 24K per gram in AED (GXAUUSD_AED from socket)
+  usdPerOz: number;    // raw XAUUSD for reference
+  receivedAt: Date;
+}
 
-  // Primary: decimal-precise per-gram rates (e.g. "498.10") appear in the
-  // page body in karat order — 24K is always the first match in the range
-  // 300–700 AED/g. This captures DGJG rates before the meta description
-  // rounds them to whole numbers (e.g. "498" vs "498.10").
-  const decimalMatches = [...(html as string).matchAll(/\b(\d{3,4}\.\d{2})\b/g)]
-    .map(m => parseFloat(m[1]))
-    .filter(n => n >= 300 && n <= 700); // plausible 24K AED/gram range
+let liveSpot: LiveSpot | null = null;
+let lastDbWriteAt: Date | null = null;
 
-  if (decimalMatches.length > 0) {
-    const rate = decimalMatches[0]; // first match in range = 24K
-    logger.info({ rate }, "[dubai-scraper] 24K retail rate fetched (decimal precision)");
-    return rate;
-  }
+const liveSocket = socketIO("https://www.livepriceofgold.com", {
+  path: "/sio/p7012/socket.io",
+  transports: ["websocket"],
+  upgrade: false,
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 6000,
+  randomizationFactor: 0.5,
+  timeout: 20_000,
+});
 
-  // Fallback: meta description / og:description "24K: AED NNN/g" (whole number)
-  const metaMatch = (html as string).match(
-    /24K[:\s]+AED\s+(\d+(?:\.\d+)?)\s*\/\s*g/i,
-  );
-  if (metaMatch) {
-    const rate = parseFloat(metaMatch[1]);
-    if (rate >= 100 && rate <= 20_000) {
-      logger.info({ rate }, "[dubai-scraper] 24K retail rate fetched (meta pattern)");
-      return rate;
+liveSocket.on("connect", () => {
+  logger.info("[live-gold] Socket.IO connected to livepriceofgold.com");
+  // Mark live in DB immediately on (re)connect
+  db.update(pricesTable)
+    .set({ liveModeConnected: true, updatedAt: new Date() })
+    .catch(() => {});
+});
+
+liveSocket.on("disconnect", (reason: string) => {
+  logger.warn({ reason }, "[live-gold] Socket.IO disconnected");
+});
+
+liveSocket.on("connect_error", (err: Error) => {
+  logger.warn({ msg: err.message }, "[live-gold] Socket.IO connection error");
+});
+
+liveSocket.on("update", (raw: string) => {
+  try {
+    const data = JSON.parse(raw) as Record<string, string | number>;
+
+    // GXAUUSD_AED is the 24K AED/gram value computed server-side by livepriceofgold.com
+    // (their server converts XAUUSD → AED/g using the live AED/USD fix rate).
+    const aedRaw = parseFloat(String(data["GXAUUSD_AED"]));
+    const usdRaw = parseFloat(String(data["XAUUSD"]));
+
+    const aedPerGram = Number.isFinite(aedRaw) && aedRaw > 300 && aedRaw < 800
+      ? aedRaw
+      : Number.isFinite(usdRaw) && usdRaw > 1000
+        // Fallback: derive from XAUUSD if AED key absent
+        ? (usdRaw / TROY_OUNCE_TO_GRAM) * USD_TO_AED
+        : null;
+
+    if (aedPerGram === null) return;
+
+    const usdPerOz = Number.isFinite(usdRaw) ? usdRaw
+      : (aedPerGram / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
+
+    liveSpot = { aedPerGram, usdPerOz, receivedAt: new Date() };
+
+    // Write to DB at most once every 5 minutes so the admin page stays current.
+    const now = Date.now();
+    if (!lastDbWriteAt || now - lastDbWriteAt.getTime() > 5 * 60 * 1000) {
+      lastDbWriteAt = new Date();
+      db.update(pricesTable)
+        .set({
+          goldBullionRate: String(aedPerGram),
+          goldPricePerGram: String(aedPerGram),
+          liveModeConnected: true,
+          updatedAt: new Date(),
+        })
+        .catch((err: unknown) => logger.warn({ err }, "[live-gold] DB write failed"));
     }
+  } catch (err) {
+    logger.warn({ err }, "[live-gold] Failed to parse socket update");
   }
+});
 
-  throw new Error("Dubai retail rate scrape: no valid 24K rate found in page");
-}
-
-// ── In-memory scraper cache (5-minute interval, writes to DB) ───────────────
-let cachedGoldBullionRate: number | null = null;
-let lastScrapedAt: Date | null = null;
-
-// ── In-memory spot cache (60-second TTL) ────────────────────────────────────
-// Rate-limits outbound requests to goldratesindubai.com to ~1/min while still
-// propagating DGJG rate changes within 60 seconds of them publishing.
-// The frontend polls every 1 second but only triggers a real HTTP fetch when
-// the 60-second window expires.
-interface SpotCache {
-  usdPerOz: number;
-  aedPerGram: number;
-  fetchedAt: Date;
-}
-let spotCache: SpotCache | null = null;
-const SPOT_CACHE_TTL_MS = 60_000;
-
-// Fetch the spot 24K AED/gram rate from Dubai retail (DGJG / goldratesindubai.com).
-// 60-second spotCache: real HTTP fetch at most once/minute; frontend 1s polls are cheap.
-async function fetchSpot(): Promise<SpotCache> {
-  if (
-    spotCache &&
-    Date.now() - spotCache.fetchedAt.getTime() < SPOT_CACHE_TTL_MS
-  ) {
-    return spotCache;
-  }
-
-  const aedPerGram = await fetchDubaiRetailRate();
-  // Back-derive a synthetic usdPerOz for reference only (not displayed on board)
-  const usdPerOz = (aedPerGram / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
-  spotCache = { usdPerOz, aedPerGram, fetchedAt: new Date() };
-  return spotCache;
-}
-
-// ── 5-minute DB-write scraper ────────────────────────────────────────────────
-// Dubai retail (goldratesindubai.com / DGJG) is the sole authority.
-async function scrapeAndCache(): Promise<void> {
-  const goldBullionRate = await fetchDubaiRetailRate();
-  const rawUsdPerOz = (goldBullionRate / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
-
-  cachedGoldBullionRate = goldBullionRate;
-  lastScrapedAt = new Date();
-  // Keep spot cache in sync to avoid a redundant fetch immediately after scrape.
-  spotCache = {
-    usdPerOz: rawUsdPerOz,
-    aedPerGram: goldBullionRate,
-    fetchedAt: new Date(),
-  };
-
-  logger.info(
-    { rawUsdPerOz, goldBullionRate },
-    "[gold-scraper] Gold rate updated",
-  );
-
-  // Write back to DB so the admin /prices page reflects the latest rate.
-  await db.update(pricesTable).set({
-    goldBullionRate: String(goldBullionRate),
-    goldPricePerGram: String(goldBullionRate),
-    liveModeConnected: true,
-    updatedAt: new Date(),
-  });
-}
-
-// ── Scraper interval ────────────────────────────────────────────────────────
-// Runs immediately on server start, then every 5 minutes.
-(function startScraper() {
-  scrapeAndCache().catch((err: unknown) => {
-    logger.warn(
-      { err },
-      "[gold-scraper] Initial scrape failed — will retry in 5 min",
-    );
-  });
-  setInterval(() => {
-    scrapeAndCache().catch((err: unknown) => {
-      logger.warn({ err }, "[gold-scraper] Periodic scrape failed");
-    });
-  }, 5 * 60 * 1000);
-})();
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function toNum(v: string | number | null): number | null {
   if (v == null) return null;
   const n = Number(v);
@@ -198,17 +154,15 @@ router.get("/prices", async (_req, res): Promise<void> => {
 });
 
 // ── POST /prices/spot/refresh ─────────────────────────────────────────────────
-// Admin-only: clears the 60-second spotCache and immediately fetches a fresh
-// rate from goldratesindubai.com. Returns the new rate.
-// Use this when you see DGJG update their page and want instant propagation.
+// Admin-only: returns the current live Socket.IO tick.
+// With the Socket.IO feed the value is already always fresh — this endpoint
+// just surfaces whatever the most recent tick was.
 router.post("/prices/spot/refresh", async (_req, res): Promise<void> => {
-  spotCache = null; // bust the cache unconditionally
-  try {
-    const spot = await fetchSpot();
-    logger.info({ rate: spot.aedPerGram }, "[dubai-scraper] Force-refresh triggered by admin");
-    res.json({ aedPerGram: spot.aedPerGram, updatedAt: spot.fetchedAt.toISOString(), refreshed: true });
-  } catch (err) {
-    res.status(502).json({ error: "Rate fetch failed", detail: String(err) });
+  if (liveSpot) {
+    logger.info({ rate: liveSpot.aedPerGram }, "[live-gold] Spot refresh requested by admin");
+    res.json({ aedPerGram: liveSpot.aedPerGram, updatedAt: liveSpot.receivedAt.toISOString(), refreshed: true });
+  } else {
+    res.status(503).json({ error: "Live feed not yet connected" });
   }
 });
 
@@ -216,37 +170,25 @@ router.post("/prices/spot/refresh", async (_req, res): Promise<void> => {
 // TV board and invoice new-invoice form can poll it without a session.
 export const publicPricesRouter: IRouter = Router();
 
-// ── /prices/spot ─────────────────────────────────────────────────────────────
-// Lightweight real-time endpoint. 60-second server-side cache; no DB read.
-// Frontend polls this every 1 second for smooth TV board streaming.
-// aedPerGram = Dubai Local Retail 24K rate (DGJG via goldratesindubai.com).
-publicPricesRouter.get("/prices/spot", async (_req, res): Promise<void> => {
-  try {
-    const spot = await fetchSpot();
+// ── GET /prices/spot ──────────────────────────────────────────────────────────
+// No cache — returns the latest Socket.IO tick directly.
+// Frontend polls every 1 second; each response is the freshest available tick.
+publicPricesRouter.get("/prices/spot", (_req, res): void => {
+  if (liveSpot) {
     res.json({
-      usdPerOz: spot.usdPerOz,
-      aedPerGram: spot.aedPerGram,
-      updatedAt: spot.fetchedAt.toISOString(),
+      usdPerOz: liveSpot.usdPerOz,
+      aedPerGram: liveSpot.aedPerGram,
+      updatedAt: liveSpot.receivedAt.toISOString(),
     });
-  } catch {
-    // Fall back to the 5-min scraper cache so the endpoint never goes dark
-    if (cachedGoldBullionRate !== null) {
-      res.json({
-        usdPerOz: (cachedGoldBullionRate / USD_TO_AED) * TROY_OUNCE_TO_GRAM,
-        aedPerGram: cachedGoldBullionRate,
-        updatedAt: lastScrapedAt?.toISOString() ?? new Date().toISOString(),
-      });
-      return;
-    }
-    res.status(503).json({ error: "Spot price temporarily unavailable" });
+    return;
   }
+  res.status(503).json({ error: "Live price feed connecting — please wait" });
 });
 
 publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
   const prices = await getOrCreate();
   const parsed = parsePrices(prices);
-  // Prefer the in-memory scraped rate (freshest); fall back to last DB value.
-  const goldBullionRate = cachedGoldBullionRate ?? parsed.goldBullionRate;
+  const goldBullionRate = liveSpot?.aedPerGram ?? parsed.goldBullionRate;
   res.json(
     GetPublicPricesResponse.parse({
       goldBullionRate,
@@ -258,13 +200,13 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
       gold21kRate: parsed.gold21kRate,
       gold18kRate: parsed.gold18kRate,
       gold9999Rate: parsed.gold9999Rate,
-      liveModeConnected: cachedGoldBullionRate !== null,
+      liveModeConnected: liveSpot !== null,
       liveSilverRate: parsed.liveSilverRate,
       liveGoldBid: null,
       liveGoldAsk: null,
       liveGoldHigh: null,
       liveGoldLow: null,
-      updatedAt: lastScrapedAt?.toISOString() ?? parsed.updatedAt,
+      updatedAt: liveSpot?.receivedAt.toISOString() ?? parsed.updatedAt,
     }),
   );
 });
@@ -309,7 +251,6 @@ router.put("/prices", async (req, res): Promise<void> => {
     updates.customDescriptions = JSON.stringify(body.customDescriptions);
 
   const [updated] = await db.update(pricesTable).set(updates).returning();
-
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
 });
 
