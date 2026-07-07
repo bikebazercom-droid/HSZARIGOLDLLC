@@ -10,30 +10,20 @@ const router: IRouter = Router();
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
 
-// ── Dubai Retail Rate scraper cache ─────────────────────────────────────────
-// Primary source: goldratesindubai.com (DGJG official Dubai retail rates).
-// Cached for 5 minutes — DGJG updates once per morning so this is sufficient.
-interface DubaiRateCache {
-  aedPerGram24K: number;
-  fetchedAt: Date;
-}
-let dubaiRateCache: DubaiRateCache | null = null;
-const DUBAI_CACHE_TTL_MS = 5 * 60 * 1000;
+// ── Dubai Retail Rate scraper ────────────────────────────────────────────────
+// No in-function cache — always fetches fresh HTML from goldratesindubai.com.
+// Rate-limiting is handled by the spotCache (60-second TTL) so we hit the
+// target site at most once per minute, not once per frontend poll (1s).
 
 async function fetchDubaiRetailRate(): Promise<number> {
-  if (
-    dubaiRateCache &&
-    Date.now() - dubaiRateCache.fetchedAt.getTime() < DUBAI_CACHE_TTL_MS
-  ) {
-    return dubaiRateCache.aedPerGram24K;
-  }
-
   const { data: html } = await axios.get(
     "https://goldratesindubai.com/gold-rate-today",
     {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; GoldShopServer/1.0)",
         Accept: "text/html,application/xhtml+xml",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
       },
       timeout: 10_000,
       // Prevent axios from parsing HTML as JSON
@@ -41,18 +31,17 @@ async function fetchDubaiRetailRate(): Promise<number> {
     },
   );
 
-  // Primary: decimal-precise per-gram rates (e.g. "501.36") appear in the
+  // Primary: decimal-precise per-gram rates (e.g. "498.10") appear in the
   // page body in karat order — 24K is always the first match in the range
   // 300–700 AED/g. This captures DGJG rates before the meta description
-  // rounds them to whole numbers (e.g. "501" vs "501.36").
+  // rounds them to whole numbers (e.g. "498" vs "498.10").
   const decimalMatches = [...(html as string).matchAll(/\b(\d{3,4}\.\d{2})\b/g)]
     .map(m => parseFloat(m[1]))
     .filter(n => n >= 300 && n <= 700); // plausible 24K AED/gram range
 
   if (decimalMatches.length > 0) {
     const rate = decimalMatches[0]; // first match in range = 24K
-    dubaiRateCache = { aedPerGram24K: rate, fetchedAt: new Date() };
-    logger.info({ rate }, "[dubai-scraper] 24K retail rate updated (decimal precision)");
+    logger.info({ rate }, "[dubai-scraper] 24K retail rate fetched (decimal precision)");
     return rate;
   }
 
@@ -63,8 +52,7 @@ async function fetchDubaiRetailRate(): Promise<number> {
   if (metaMatch) {
     const rate = parseFloat(metaMatch[1]);
     if (rate >= 100 && rate <= 20_000) {
-      dubaiRateCache = { aedPerGram24K: rate, fetchedAt: new Date() };
-      logger.info({ rate }, "[dubai-scraper] 24K retail rate updated (meta pattern)");
+      logger.info({ rate }, "[dubai-scraper] 24K retail rate fetched (meta pattern)");
       return rate;
     }
   }
@@ -76,19 +64,21 @@ async function fetchDubaiRetailRate(): Promise<number> {
 let cachedGoldBullionRate: number | null = null;
 let lastScrapedAt: Date | null = null;
 
-// ── In-memory spot cache (10-second TTL, real-time frontend polling) ────────
-// Separate from the 5-min DB-write scraper so the lightweight /prices/spot
-// endpoint can serve fresh prices every 10 seconds without touching the DB.
+// ── In-memory spot cache (60-second TTL) ────────────────────────────────────
+// Rate-limits outbound requests to goldratesindubai.com to ~1/min while still
+// propagating DGJG rate changes within 60 seconds of them publishing.
+// The frontend polls every 1 second but only triggers a real HTTP fetch when
+// the 60-second window expires.
 interface SpotCache {
   usdPerOz: number;
   aedPerGram: number;
   fetchedAt: Date;
 }
 let spotCache: SpotCache | null = null;
-const SPOT_CACHE_TTL_MS = 10_000;
+const SPOT_CACHE_TTL_MS = 60_000;
 
 // Fetch the spot 24K AED/gram rate from Dubai retail (DGJG / goldratesindubai.com).
-// 10-second in-memory cache so the frontend 1s polling is cheap.
+// 60-second spotCache: real HTTP fetch at most once/minute; frontend 1s polls are cheap.
 async function fetchSpot(): Promise<SpotCache> {
   if (
     spotCache &&
