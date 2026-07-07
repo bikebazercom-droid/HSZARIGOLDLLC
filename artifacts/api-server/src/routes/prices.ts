@@ -87,9 +87,8 @@ interface SpotCache {
 let spotCache: SpotCache | null = null;
 const SPOT_CACHE_TTL_MS = 10_000;
 
-// Fetch the spot 24K AED/gram rate.
-// Primary source: Dubai retail (goldratesindubai.com / DGJG).
-// Fallback:       Yahoo Finance GC=F → converted via (USD/oz ÷ 31.1034768) × 3.6725.
+// Fetch the spot 24K AED/gram rate from Dubai retail (DGJG / goldratesindubai.com).
+// 10-second in-memory cache so the frontend 1s polling is cheap.
 async function fetchSpot(): Promise<SpotCache> {
   if (
     spotCache &&
@@ -98,82 +97,18 @@ async function fetchSpot(): Promise<SpotCache> {
     return spotCache;
   }
 
-  // ── Primary: Dubai Local Retail Rate ──────────────────────────────────────
-  try {
-    const aedPerGram = await fetchDubaiRetailRate();
-    // Back-derive a synthetic usdPerOz for reference (TV board shows it)
-    const usdPerOz = (aedPerGram / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
-    spotCache = { usdPerOz, aedPerGram, fetchedAt: new Date() };
-    return spotCache;
-  } catch (dubaiErr) {
-    logger.warn(
-      { err: dubaiErr },
-      "[dubai-scraper] Dubai rate fetch failed — falling back to Yahoo Finance",
-    );
-  }
-
-  // ── Fallback: Yahoo Finance GC=F ──────────────────────────────────────────
-  const { data } = await axios.get(
-    "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF",
-    {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; GoldShopServer/1.0)",
-        Accept: "application/json",
-      },
-      timeout: 8000,
-    },
-  );
-  const rawUsdPerOz: unknown =
-    data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-  if (
-    typeof rawUsdPerOz !== "number" ||
-    !Number.isFinite(rawUsdPerOz) ||
-    rawUsdPerOz <= 0
-  ) {
-    throw new Error(`Yahoo Finance spot: invalid price (${rawUsdPerOz})`);
-  }
-  const aedPerGram =
-    Math.round(((rawUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED) * 100) / 100;
-  spotCache = {
-    usdPerOz: rawUsdPerOz,
-    aedPerGram,
-    fetchedAt: new Date(),
-  };
+  const aedPerGram = await fetchDubaiRetailRate();
+  // Back-derive a synthetic usdPerOz for reference only (not displayed on board)
+  const usdPerOz = (aedPerGram / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
+  spotCache = { usdPerOz, aedPerGram, fetchedAt: new Date() };
   return spotCache;
 }
 
 // ── 5-minute DB-write scraper ────────────────────────────────────────────────
-// Uses the same Dubai → Yahoo Finance priority chain to keep DB in sync.
+// Dubai retail (goldratesindubai.com / DGJG) is the sole authority.
 async function scrapeAndCache(): Promise<void> {
-  let goldBullionRate: number;
-  let rawUsdPerOz: number;
-
-  // Try Dubai retail rate first
-  try {
-    goldBullionRate = await fetchDubaiRetailRate();
-    rawUsdPerOz = (goldBullionRate / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
-  } catch {
-    // Fall back to Yahoo Finance
-    const { data } = await axios.get(
-      "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF",
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; GoldShopServer/1.0)",
-          Accept: "application/json",
-        },
-        timeout: 15000,
-      },
-    );
-    const raw: unknown = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-      throw new Error(
-        `Yahoo Finance API: unexpected regularMarketPrice value (${raw})`,
-      );
-    }
-    rawUsdPerOz = raw;
-    goldBullionRate =
-      Math.round(((raw / TROY_OUNCE_TO_GRAM) * USD_TO_AED) * 100) / 100;
-  }
+  const goldBullionRate = await fetchDubaiRetailRate();
+  const rawUsdPerOz = (goldBullionRate / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
 
   cachedGoldBullionRate = goldBullionRate;
   lastScrapedAt = new Date();

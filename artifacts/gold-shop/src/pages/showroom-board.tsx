@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLivePrice } from "@/context/live-price";
 import {
   useGetPublicSettings,
@@ -75,86 +75,6 @@ function GoldIngotIcon() {
   );
 }
 
-// TradingView live ticker widget for FX_IDC:XAUUSD (Gold Spot / US Dollar).
-// Displays real-time bid/ask, high/low, and tick-by-tick price movement
-// sourced directly from TradingView's free market data feed.
-function TradingViewWidget() {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    container.innerHTML = "";
-
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src =
-      "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
-    script.async = true;
-    script.textContent = JSON.stringify({
-      symbol: "FX_IDC:XAUUSD",
-      width: "100%",
-      height: "100%",
-      locale: "en",
-      dateRange: "1D",
-      colorTheme: "dark",
-      isTransparent: true,
-      autosize: true,
-      largeChartUrl: "",
-      chartOnly: false,
-      noTimeScale: false,
-      hide_top_toolbar: true,
-      hide_legend: true,
-    });
-    container.appendChild(script);
-
-    return () => {
-      container.innerHTML = "";
-    };
-  }, []);
-
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Widget iframe — pointer events disabled at the container level so
-          clicks never reach the iframe or trigger TradingView navigation. */}
-      <div
-        ref={containerRef}
-        className="tradingview-widget-container"
-        style={{ width: "100%", height: "100%", pointerEvents: "none" }}
-      />
-
-      {/* Full-coverage glass shield — transparent, sits above the iframe,
-          catches every mouse/touch event before it can reach the inner iframe.
-          This is the primary click-intercept layer for the kiosk. */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 10,
-          background: "transparent",
-          cursor: "default",
-        }}
-      />
-
-      {/* Secondary overlay that covers the TradingView branding icon in the
-          top-right corner of the embedded iframe. */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          width: 56,
-          height: 48,
-          background: "#0a0a0a",
-          zIndex: 11,
-          borderRadius: "0 0 0 6px",
-        }}
-      />
-    </div>
-  );
-}
 
 interface AssetRowProps {
   title: string;
@@ -319,22 +239,6 @@ export default function ShowroomBoard() {
               {formatClock(now)}
             </span>
           </div>
-        </div>
-
-        {/* TradingView live chart — shorter on large screens to leave room for 7 rows */}
-        <div
-          className="relative rounded-3xl shrink-0 overflow-hidden"
-          style={{
-            border: "2px solid #D4AF37",
-            background: `linear-gradient(160deg, ${GOLD}12 0%, transparent 60%), #0a0a0a`,
-            boxShadow: `0 0 0 1px ${GOLD}1a inset, 0 20px 50px -20px ${GOLD}40`,
-            padding: "clamp(0.3rem, 0.7vh, 0.75rem)",
-            marginBottom: "clamp(0.3rem, 0.8vh, 0.75rem)",
-            // Reduced from 20vh/160px → 13vh/120px so 7 rows always fit
-            height: "clamp(6rem, 13vh, 120px)",
-          }}
-        >
-          <TradingViewWidget />
         </div>
 
         {/* ── 7 asset rows — flex-1 + min-h-0 lets them share space equally ── */}

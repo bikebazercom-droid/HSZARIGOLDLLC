@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Activity, Zap, Lock } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Zap, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import tenTolaBarImg from "@/assets/rates/ten-tola-bar.png";
 import singleGoldBarImg from "@/assets/rates/single-gold-bar.png";
@@ -93,7 +93,7 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChan
             className="text-[10px] text-center font-bold uppercase tracking-wide py-1.5 rounded-md"
             style={{ color: "#059669", background: "#10b98118", border: "1px solid #10b98140" }}
           >
-            ((●)) Real-time 1s Sync <span className="mx-1">·</span> Raw XAUUSD · No Margins
+            ((●)) Real-time 1s Sync <span className="mx-1">·</span> Dubai Retail Market Rate
           </div>
         ) : (
           <Button className="w-full" style={{ background: changed ? NAVY : undefined }}
@@ -158,99 +158,6 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
   );
 }
 
-/* ── Yahoo Finance auto-scraper status card ──────────────────── */
-interface ScraperStatusCardProps {
-  goldBullionRate: number;
-  updatedAt: string;
-  liveModeConnected: boolean;
-}
-
-function ScraperStatusCard({ goldBullionRate, updatedAt, liveModeConnected }: ScraperStatusCardProps) {
-  const isLive = liveModeConnected;
-  return (
-    <Card
-      className="relative overflow-hidden border-2"
-      style={{ borderColor: isLive ? "#10b98155" : "#e5e7eb" }}
-    >
-      <div
-        style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: "3px",
-          background: isLive ? "#10b981" : NAVY,
-        }}
-      />
-      <CardHeader className="pb-3 pt-5">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{
-                background: isLive ? "#10b98118" : `${NAVY}12`,
-                border: `2px solid ${isLive ? "#10b98155" : `${NAVY}40`}`,
-              }}
-            >
-              <Activity className="w-5 h-5" style={{ color: isLive ? "#059669" : NAVY }} />
-            </div>
-            <div>
-              <CardTitle className="text-base font-bold leading-tight">
-                Free Live Rate — Yahoo Finance Scraper
-              </CardTitle>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                Gold Futures (GC=F) · Auto-refreshes every 5 minutes · No API key required
-              </div>
-            </div>
-          </div>
-          <div
-            className="flex items-center gap-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide px-3 py-1.5 rounded-full"
-            style={{
-              color: isLive ? "#059669" : "#4b5563",
-              background: isLive ? "#10b98118" : "#f3f4f6",
-              border: `1px solid ${isLive ? "#10b98155" : "#d1d5db"}`,
-            }}
-          >
-            {isLive ? "((●)) Live Market Rate — ACTIVE" : "● Awaiting First Scrape"}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-lg border p-3 bg-muted/20">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
-              Gold Bullion Rate (AED/g)
-            </div>
-            <div
-              className="text-2xl font-extrabold"
-              style={{ fontFamily: "monospace", color: isLive ? "#059669" : undefined }}
-            >
-              {goldBullionRate > 0 ? goldBullionRate.toFixed(2) : "—"}
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">
-              Unified global rate · used in all invoices
-            </div>
-          </div>
-          <div className="rounded-lg border p-3 bg-muted/20">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
-              Last Scraped
-            </div>
-            <div className="text-sm font-semibold">
-              {updatedAt
-                ? new Date(updatedAt).toLocaleString("en-AE", {
-                    day: "2-digit", month: "short",
-                    hour: "2-digit", minute: "2-digit", second: "2-digit",
-                  })
-                : "—"}
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">
-              Next refresh in ~5 min
-            </div>
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          Rates are automatically scraped from Yahoo Finance (GC=F) and applied to invoices. No manual key entry required. Manual rate overrides below remain active for other asset types.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 /* ── "Add New Item" card (always visible in grid) ───────────── */
 function AddItemCard({ onClick }: { onClick: () => void }) {
@@ -523,7 +430,7 @@ export default function Prices() {
             <div className="text-xs text-muted-foreground mt-0.5 truncate">
               {localManualMode
                 ? "Manual — new invoices use the fixed rates you set on the cards below"
-                : "Live — new invoices auto-populate from the real-time 1s XAUUSD spot feed"}
+                : "Live — new invoices auto-populate from the real-time Dubai retail market rate"}
             </div>
           </div>
         </div>
@@ -545,13 +452,6 @@ export default function Prices() {
           />
         </div>
       </div>
-
-      {/* Auto-Scraper Status */}
-      <ScraperStatusCard
-        goldBullionRate={prices.goldBullionRate}
-        updatedAt={prices.updatedAt}
-        liveModeConnected={prices.liveModeConnected}
-      />
 
       {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
