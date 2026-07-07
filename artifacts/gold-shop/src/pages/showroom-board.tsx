@@ -109,6 +109,8 @@ function TradingViewWidget() {
       largeChartUrl: "",
       chartOnly: false,
       noTimeScale: false,
+      hide_top_toolbar: true,
+      hide_legend: true,
     });
     container.appendChild(script);
 
@@ -118,11 +120,30 @@ function TradingViewWidget() {
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className="tradingview-widget-container"
-      style={{ width: "100%", height: "100%" }}
-    />
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div
+        ref={containerRef}
+        className="tradingview-widget-container"
+        style={{ width: "100%", height: "100%" }}
+      />
+      {/* Absolute overlay that covers the TradingView branding icon rendered
+          in the top-right corner of the embedded iframe. Colour matches the
+          parent container's dark background so it is visually seamless. */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: 56,
+          height: 48,
+          background: "#0a0a0a",
+          zIndex: 5,
+          pointerEvents: "none",
+          borderRadius: "0 0 0 6px",
+        }}
+      />
+    </div>
   );
 }
 
