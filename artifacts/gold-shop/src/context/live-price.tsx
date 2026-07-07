@@ -4,41 +4,40 @@ import {
   getGetPricesSpotQueryKey,
 } from "@workspace/api-client-react";
 
-// ── Pure Dubai gold calculator — 1-second real-time sync ─────────────────────
-// All 7 display rows are derived exclusively from the live XAUUSD spot price.
-// Zero spreads · Zero premiums · Zero making charges.
+// ── Dubai Local Retail Gold — 1-second real-time sync ────────────────────────
+// The atomic baseline `raw24KPerGram` is the live Dubai 24K retail rate per
+// gram (AED), sourced from goldratesindubai.com (DGJG) via the backend
+// /prices/spot endpoint. This is the real local market price — not the
+// international wholesale spot — so all derived rows match the Dubai Souk
+// boards exactly.
 //
-// Core formula (pure 24K AED/gram):
-//   raw24KPerGram = (XAUUSD / 31.1034768) * 3.6725
-//
-// Row derivations:
+// Row derivations (pure ratio math, zero spreads/premiums beyond what DGJG
+// already includes in the retail rate):
 //   TT. BAR (0.995)  = raw24KPerGram × 116.640 × 0.995
 //   TT. BAR (0.999)  = raw24KPerGram × 116.640 × 0.999
-//   GOLD (0.9999)    = raw24KPerGram
-//   KG BAR (0.995)   = raw24KPerGram × 1000 × 0.995
+//   GOLD (0.9999)    = raw24KPerGram            (exact Dubai 24K retail)
+//   KG BAR (0.995)   = raw24KPerGram × 1000  × 0.995
 //   Gold Jewelry 22K = raw24KPerGram × (22 / 24)
 //   Gold Jewelry 21K = raw24KPerGram × (21 / 24)
 //   Gold Jewelry 18K = raw24KPerGram × (18 / 24)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TROY_OZ_TO_GRAM = 31.1034768;
-const USD_AED_PEG     = 3.6725;
-const TOLA_BAR_GRAMS  = 116.640;
-const PURITY_995      = 0.995;
-const PURITY_999      = 0.999;
-const PURITY_22K      = 22 / 24;
-const PURITY_21K      = 21 / 24;
-const PURITY_18K      = 18 / 24;
+const TOLA_BAR_GRAMS = 116.640;
+const PURITY_995     = 0.995;
+const PURITY_999     = 0.999;
+const PURITY_22K     = 22 / 24;
+const PURITY_21K     = 21 / 24;
+const PURITY_18K     = 18 / 24;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface LiveRates {
   usdPerOz:      number | null;
-  aedPerGram:    number | null;  // pure 24K AED/gram — invoice baseline seed
-  ttBar995Total: number | null;  // TT. BAR (0.995) total
-  ttBar999Total: number | null;  // TT. BAR (0.999) total
+  aedPerGram:    number | null;  // Dubai retail 24K AED/gram — invoice baseline
+  ttBar995Total: number | null;  // TT. BAR (0.995) total price per bar
+  ttBar999Total: number | null;  // TT. BAR (0.999) total price per bar
   gold9999Rate:  number | null;  // GOLD (0.9999) per gram
-  kgBar995Total: number | null;  // KG BAR (0.995) per kg
+  kgBar995Total: number | null;  // KG BAR (0.995) total price per kg
   gold22kRate:   number | null;  // Gold Jewelry 22K per gram
   gold21kRate:   number | null;  // Gold Jewelry 21K per gram
   gold18kRate:   number | null;  // Gold Jewelry 18K per gram
@@ -80,13 +79,17 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
   });
 
   const liveRates = useMemo<LiveRates>(() => {
-    if (!spot?.usdPerOz || spot.usdPerOz <= 0) return EMPTY_RATES;
+    // aedPerGram is the Dubai retail 24K rate per gram (AED), populated by the
+    // backend scraper. Guard on this — not usdPerOz — since the backend may
+    // return usdPerOz=0 when falling back to a pre-cached Dubai rate.
+    if (!spot?.aedPerGram || spot.aedPerGram <= 0) return EMPTY_RATES;
 
-    // Atomic base: pure 24K price in AED per gram
-    const raw = (spot.usdPerOz / TROY_OZ_TO_GRAM) * USD_AED_PEG;
+    // Atomic base: Dubai Local Retail 24K price in AED per gram.
+    // Comes directly from the backend — no USD conversion needed.
+    const raw = spot.aedPerGram;
 
     return {
-      usdPerOz:      spot.usdPerOz,
+      usdPerOz:      spot.usdPerOz ?? null,
       aedPerGram:    round2(raw),
       ttBar995Total: round2(raw * TOLA_BAR_GRAMS * PURITY_995),
       ttBar999Total: round2(raw * TOLA_BAR_GRAMS * PURITY_999),
