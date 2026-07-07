@@ -250,24 +250,26 @@ export default function ShowroomBoard() {
           repeating-linear-gradient(90deg, ${GOLD}0d 0px, ${GOLD}0d 1px, transparent 1px, transparent 64px)
         `,
         backgroundBlendMode: "normal, normal, normal",
-        padding: "clamp(0.75rem, 2vh, 2rem) clamp(0.75rem, 2.5vw, 3rem)",
+        // Tighter vertical padding on large screens so rows get the full real-estate
+        padding: "clamp(0.5rem, 1.2vh, 1.5rem) clamp(0.75rem, 2.5vw, 3rem)",
       }}
     >
       <div
         className="w-full flex flex-col mx-auto lg:h-full"
         style={{ maxWidth: 1400 }}
       >
+        {/* ── Header: logo + date/clock pill ── */}
         <div
           className="flex flex-col items-center shrink-0"
-          style={{ gap: "clamp(0.4rem, 1.2vh, 1.25rem)", paddingBottom: "clamp(0.5rem, 1.6vh, 1.5rem)" }}
+          style={{ gap: "clamp(0.3rem, 0.7vh, 0.75rem)", paddingBottom: "clamp(0.3rem, 0.8vh, 0.75rem)" }}
         >
           {showroomLogoUrl ? (
             <div
               className="flex items-center justify-center"
               style={{
-                height: "clamp(4.5rem, 15vh, 120px)",
-                maxHeight: 120,
-                marginBottom: "clamp(0.5rem, 1.6vh, 1.25rem)",
+                // Cap logo at 80px on large screens (was 120px) so it doesn't crowd the rows
+                height: "clamp(3.5rem, 10vh, 80px)",
+                marginBottom: "clamp(0.2rem, 0.5vh, 0.5rem)",
                 filter: `drop-shadow(0 0 28px ${GOLD}66)`,
               }}
             >
@@ -283,7 +285,7 @@ export default function ShowroomBoard() {
               className="font-black uppercase flex items-center justify-center"
               style={{
                 color: GOLD,
-                fontSize: "clamp(1.15rem, calc(1.6vh + 1.6vw), 2.75rem)",
+                fontSize: "clamp(1.15rem, calc(1.4vh + 1.4vw), 2.4rem)",
                 letterSpacing: "0.14em",
                 textShadow: `0 0 30px ${GOLD}55`,
                 fontFamily: "serif",
@@ -300,46 +302,54 @@ export default function ShowroomBoard() {
               border: `1px solid ${GOLD}66`,
               background: "#111111",
               maxWidth: 560,
-              padding: "clamp(0.4rem, 1vh, 0.75rem) clamp(1rem, 2.5vw, 2.5rem)",
+              padding: "clamp(0.3rem, 0.7vh, 0.65rem) clamp(1rem, 2.5vw, 2.5rem)",
               gap: "clamp(0.75rem, 2vw, 2.5rem)",
             }}
           >
             <span
               className="text-neutral-300 font-semibold truncate"
-              style={{ fontSize: "clamp(0.7rem, calc(0.65vh + 0.6vw), 1.2rem)" }}
+              style={{ fontSize: "clamp(0.65rem, calc(0.55vh + 0.55vw), 1.1rem)" }}
             >
               {formatDate(now)}
             </span>
             <span
               className="font-bold tabular-nums shrink-0"
-              style={{ color: GOLD, fontSize: "clamp(0.8rem, calc(0.75vh + 0.7vw), 1.4rem)", fontFamily: "monospace" }}
+              style={{ color: GOLD, fontSize: "clamp(0.75rem, calc(0.65vh + 0.6vw), 1.25rem)", fontFamily: "monospace" }}
             >
               {formatClock(now)}
             </span>
           </div>
         </div>
 
-        {/* TradingView live chart — FX_IDC:XAUUSD tick-by-tick with High/Low */}
+        {/* TradingView live chart — shorter on large screens to leave room for 7 rows */}
         <div
           className="relative rounded-3xl shrink-0 overflow-hidden"
           style={{
             border: "2px solid #D4AF37",
             background: `linear-gradient(160deg, ${GOLD}12 0%, transparent 60%), #0a0a0a`,
             boxShadow: `0 0 0 1px ${GOLD}1a inset, 0 20px 50px -20px ${GOLD}40`,
-            padding: "clamp(0.4rem, 1vh, 0.85rem)",
-            marginBottom: "clamp(0.5rem, 1.6vh, 1.5rem)",
-            height: "clamp(7rem, 20vh, 160px)",
+            padding: "clamp(0.3rem, 0.7vh, 0.75rem)",
+            marginBottom: "clamp(0.3rem, 0.8vh, 0.75rem)",
+            // Reduced from 20vh/160px → 13vh/120px so 7 rows always fit
+            height: "clamp(6rem, 13vh, 120px)",
           }}
         >
           <TradingViewWidget />
         </div>
 
+        {/* ── 7 asset rows — flex-1 + min-h-0 lets them share space equally ── */}
         <div
           className="flex flex-col w-full lg:flex-1 lg:min-h-0"
-          style={{ gap: "clamp(0.4rem, 1.1vh, 1rem)" }}
+          style={{ gap: "clamp(0.25rem, 0.6vh, 0.6rem)" }}
         >
           {rows.map((row, i) => (
-            <div key={`${row.title}-${row.tag}-${i}`} className="lg:flex-1 lg:min-h-0" style={{ minHeight: "clamp(3.5rem, 9vh, 6rem)" }}>
+            // NO explicit minHeight here — let flex-1 distribute evenly on large screens.
+            // On mobile (no lg: classes) each row falls back to natural content height.
+            <div
+              key={`${row.title}-${row.tag}-${i}`}
+              className="lg:flex-1 lg:min-h-0"
+              style={{ minHeight: "clamp(3rem, 7vh, 5rem)" }}
+            >
               <AssetRow {...row} />
             </div>
           ))}
@@ -347,7 +357,7 @@ export default function ShowroomBoard() {
 
         <div
           className="text-neutral-500 text-center tracking-wide shrink-0"
-          style={{ fontSize: "clamp(0.6rem, calc(0.5vh + 0.4vw), 0.85rem)", paddingTop: "clamp(0.4rem, 1vh, 1rem)" }}
+          style={{ fontSize: "clamp(0.55rem, calc(0.45vh + 0.35vw), 0.8rem)", paddingTop: "clamp(0.25rem, 0.6vh, 0.6rem)" }}
         >
           {liveRates.isLive ? "((●)) Live — Real-time 1s Sync" : "Connecting to live feed…"}
           {liveRates.updatedAt && ` · ${new Date(liveRates.updatedAt).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
