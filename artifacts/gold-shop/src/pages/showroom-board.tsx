@@ -172,7 +172,7 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
 
   return (
     <div
-      className="relative rounded-2xl flex items-center justify-between"
+      className="relative rounded-2xl"
       style={{
         background: "linear-gradient(90deg, #131313 0%, #0a0a0a 100%)",
         border: `1px solid ${GOLD}55`,
@@ -181,9 +181,14 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
         minHeight: 0,
         animation: containerAnim,
         willChange: isTick ? "border-color, box-shadow" : undefined,
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
+        alignItems: "center",
+        gap: "clamp(0.5rem, 1.5vw, 1.5rem)",
       }}
     >
-      <div className="flex items-center min-w-0" style={{ gap: "clamp(0.5rem, 1.5vw, 1.25rem)" }}>
+      {/* ── LEFT: icon + title ── */}
+      <div className="flex items-center min-w-0" style={{ gap: "clamp(0.5rem, 1.2vw, 1.1rem)" }}>
         <div
           className="rounded-full flex items-center justify-center shrink-0"
           style={{
@@ -196,24 +201,35 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
         >
           {icon}
         </div>
-        <div className="min-w-0">
-          <div
-            className="font-bold uppercase text-white truncate"
-            style={{ fontSize: "clamp(0.8rem, calc(0.85vh + 0.7vw), 1.4rem)", letterSpacing: "0.03em" }}
-          >
-            {title}
-          </div>
-          <div
-            className="uppercase font-semibold"
-            style={{ color: GOLD, fontSize: "clamp(0.6rem, calc(0.5vh + 0.45vw), 0.95rem)", letterSpacing: "0.1em" }}
-          >
-            {tag}
-          </div>
+        <div
+          className="font-bold uppercase text-white truncate"
+          style={{ fontSize: "clamp(0.85rem, calc(0.9vh + 0.75vw), 1.5rem)", letterSpacing: "0.03em" }}
+        >
+          {title}
         </div>
       </div>
 
-      {/* Price + direction arrow */}
-      <div className="flex items-center gap-1 shrink-0">
+      {/* ── CENTER: unit tag ── */}
+      <div className="flex items-center justify-center">
+        <div
+          className="uppercase font-black tracking-widest"
+          style={{
+            color: GOLD,
+            fontSize: "clamp(0.85rem, calc(1vh + 0.8vw), 1.6rem)",
+            letterSpacing: "0.18em",
+            background: `${GOLD}14`,
+            border: `1px solid ${GOLD}40`,
+            borderRadius: "0.5rem",
+            padding: "clamp(0.2rem, 0.5vh, 0.4rem) clamp(0.6rem, 1.4vw, 1.1rem)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {tag}
+        </div>
+      </div>
+
+      {/* ── RIGHT: price + arrow ── */}
+      <div className="flex items-center justify-end gap-2 shrink-0">
         {isTick && (
           <span
             style={{
@@ -279,8 +295,8 @@ export default function ShowroomBoard() {
 
   // All 7 rows with their original index (for direction lookup) and visibility flag
   const allRows = [
-    { idx: 0, title: "TT. BAR (0.995)",  tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995 ?? true },
-    { idx: 1, title: "TT. BAR (0.9999)", tag: "TTB", value: fmt(liveRates.ttBar9999Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999 ?? true },
+    { idx: 0, title: "TT. BAR (0.995)",  tag: "TT",  value: fmt(liveRates.ttBar995Total),   icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995  ?? true },
+    { idx: 1, title: "TT. BAR (0.9999)", tag: "TT",  value: fmt(liveRates.ttBar9999Total),  icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999  ?? true },
     { idx: 2, title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGold9999   ?? true },
     { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
     { idx: 4, title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold22k   ?? true },
