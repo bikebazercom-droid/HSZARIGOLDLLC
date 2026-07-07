@@ -146,50 +146,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Prices"
 
-  /prices/live/connect:
-    post:
-      operationId: connectLiveRate
-      tags: [prices]
-      summary: Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConnectLiveRateInput"
-      responses:
-        "200":
-          description: Connected — live rates applied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Prices"
-        "400":
-          description: Missing API key
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: Failed to fetch live rates from GoldAPI.io
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /prices/live/disconnect:
-    post:
-      operationId: disconnectLiveRate
-      tags: [prices]
-      summary: Disconnect live rate sync and restore manual rates
-      responses:
-        "200":
-          description: Disconnected — manual rates restored
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Prices"
-
   /prices/public:
     get:
       operationId: getPublicPrices
@@ -776,12 +732,6 @@ components:
         updatedAt:
           type: string
 
-    ConnectLiveRateInput:
-      type: object
-      properties:
-        apiKey:
-          type: string
-          description: APILayer Metals-API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side APILAYER_KEY env var when omitted.
 
     CustomDescription:
       type: object

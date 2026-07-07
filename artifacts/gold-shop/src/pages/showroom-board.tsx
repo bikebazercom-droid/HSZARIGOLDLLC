@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   useGetPublicPrices,
   getGetPublicPricesQueryKey,
@@ -81,61 +81,48 @@ function GoldIngotIcon() {
   );
 }
 
-interface MetricTileProps {
-  label: string;
-  value: string;
-  arrow?: "up" | "down";
-}
+// TradingView live ticker widget for FX_IDC:XAUUSD (Gold Spot / US Dollar).
+// Displays real-time bid/ask, high/low, and tick-by-tick price movement
+// sourced directly from TradingView's free market data feed.
+function TradingViewWidget() {
+  const containerRef = useRef<HTMLDivElement>(null);
 
-function MetricTile({ label, value, arrow }: MetricTileProps) {
-  const arrowColor = arrow === "down" ? "#ef4444" : "#22c55e";
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.innerHTML = "";
+
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src =
+      "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
+    script.async = true;
+    script.textContent = JSON.stringify({
+      symbol: "FX_IDC:XAUUSD",
+      width: "100%",
+      height: "100%",
+      locale: "en",
+      dateRange: "1D",
+      colorTheme: "dark",
+      isTransparent: true,
+      autosize: true,
+      largeChartUrl: "",
+      chartOnly: false,
+      noTimeScale: false,
+    });
+    container.appendChild(script);
+
+    return () => {
+      container.innerHTML = "";
+    };
+  }, []);
+
   return (
     <div
-      className="relative rounded-2xl flex flex-col items-center justify-center text-center overflow-hidden"
-      style={{
-        background: "linear-gradient(160deg, #171717 0%, #0a0a0a 100%)",
-        border: "2px solid #D4AF37",
-        boxShadow: `0 0 0 1px ${GOLD}22 inset, 0 10px 30px -12px ${GOLD}40`,
-        padding: "clamp(0.4rem, 1.1vh, 0.85rem) clamp(0.6rem, 1.6vw, 1.5rem)",
-        gap: "clamp(0.1rem, 0.4vh, 0.3rem)",
-        height: "100%",
-        maxHeight: "clamp(4rem, 11vh, 6.5rem)",
-      }}
-    >
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: `linear-gradient(180deg, ${GOLD}14 0%, transparent 40%)` }}
-      />
-      <div
-        className="relative uppercase tracking-widest font-bold text-neutral-300"
-        style={{ fontSize: "clamp(0.6rem, calc(0.5vh + 0.45vw), 0.9rem)", letterSpacing: "0.12em", whiteSpace: "nowrap" }}
-      >
-        {label}
-      </div>
-      <div className="relative flex items-center justify-center gap-2">
-        {arrow && (
-          <span
-            style={{ color: arrowColor, fontSize: "clamp(0.9rem, calc(1vh + 0.8vw), 1.75rem)", fontWeight: 900, lineHeight: 1 }}
-          >
-            {arrow === "down" ? "↓" : "↑"}
-          </span>
-        )}
-        <span
-          className="font-extrabold tabular-nums text-white"
-          style={{
-            fontSize: "clamp(1.15rem, calc(1.4vh + 1.3vw), 2.5rem)",
-            lineHeight: 1,
-            fontFamily: "monospace",
-            letterSpacing: "-0.02em",
-            whiteSpace: "nowrap",
-            textShadow: `0 0 30px ${GOLD}33`,
-          }}
-        >
-          {value}
-        </span>
-      </div>
-    </div>
+      ref={containerRef}
+      className="tradingview-widget-container"
+      style={{ width: "100%", height: "100%" }}
+    />
   );
 }
 
@@ -312,25 +299,19 @@ export default function ShowroomBoard() {
           </div>
         </div>
 
+        {/* TradingView live chart — FX_IDC:XAUUSD tick-by-tick with High/Low */}
         <div
-          className="relative rounded-3xl shrink-0"
+          className="relative rounded-3xl shrink-0 overflow-hidden"
           style={{
             border: "2px solid #D4AF37",
             background: `linear-gradient(160deg, ${GOLD}12 0%, transparent 60%), #0a0a0a`,
             boxShadow: `0 0 0 1px ${GOLD}1a inset, 0 20px 50px -20px ${GOLD}40`,
             padding: "clamp(0.4rem, 1vh, 0.85rem)",
             marginBottom: "clamp(0.5rem, 1.6vh, 1.5rem)",
+            height: "clamp(7rem, 20vh, 160px)",
           }}
         >
-          <div
-            className="grid grid-cols-2"
-            style={{ gap: "clamp(0.4rem, 1vh, 0.85rem)" }}
-          >
-            <MetricTile label="BID oz" value={fmt(prices?.liveGoldBid)} />
-            <MetricTile label="ASK oz" value={fmt(prices?.liveGoldAsk)} />
-            <MetricTile label="Low" value={fmt(prices?.liveGoldLow)} arrow="down" />
-            <MetricTile label="High" value={fmt(prices?.liveGoldHigh)} arrow="up" />
-          </div>
+          <TradingViewWidget />
         </div>
 
         <div
@@ -348,7 +329,7 @@ export default function ShowroomBoard() {
           className="text-neutral-500 text-center tracking-wide shrink-0"
           style={{ fontSize: "clamp(0.6rem, calc(0.5vh + 0.4vw), 0.85rem)", paddingTop: "clamp(0.4rem, 1vh, 1rem)" }}
         >
-          {prices?.liveModeConnected ? "Live rates — updating automatically" : "Manual rates"}
+          Live rates via Yahoo Finance · auto-refreshing every 5 min
           {prices?.updatedAt && ` · Last updated ${new Date(prices.updatedAt).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit" })}`}
         </div>
       </div>

@@ -3,8 +3,6 @@ import {
   useGetPrices,
   getGetPricesQueryKey,
   useUpdatePrices,
-  useConnectLiveRate,
-  useDisconnectLiveRate,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -18,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Wifi, WifiOff, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Activity } from "lucide-react";
 import tenTolaBarImg from "@/assets/rates/ten-tola-bar.png";
 import singleGoldBarImg from "@/assets/rates/single-gold-bar.png";
 import goldKiloBrickImg from "@/assets/rates/gold-kilo-brick.png";
@@ -155,146 +153,95 @@ function CustomCard({ item, saved, onRateChange, onSave, onDelete }: CustomCardP
   );
 }
 
-/* ── Live Gold Rate API connection card ─────────────────────── */
-interface LiveRateCardProps {
-  connected: boolean;
-  apiKeyConfigured: boolean;
-  apiKeyMasked: string | null;
-  lastSyncedAt: string | null;
-  liveGoldRate24k: number | null;
-  liveGoldRate22k: number | null;
-  liveSilverRate: number | null;
-  onConnect: (apiKey: string | undefined) => void;
-  onDisconnect: () => void;
-  connecting: boolean;
-  disconnecting: boolean;
+/* ── Yahoo Finance auto-scraper status card ──────────────────── */
+interface ScraperStatusCardProps {
+  goldBullionRate: number;
+  updatedAt: string;
+  liveModeConnected: boolean;
 }
 
-function LiveRateCard({
-  connected, apiKeyConfigured, apiKeyMasked, lastSyncedAt, liveGoldRate24k, liveGoldRate22k, liveSilverRate,
-  onConnect, onDisconnect, connecting, disconnecting,
-}: LiveRateCardProps) {
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [warning, setWarning] = useState<string | null>(null);
-  const busy = connecting || disconnecting;
-
-  const handleConnectClick = () => {
-    if (!apiKeyConfigured && !apiKeyInput.trim()) {
-      setWarning("Please enter a valid APILayer Metals-API key first.");
-      return;
-    }
-    setWarning(null);
-    onConnect(apiKeyInput.trim() || undefined);
-  };
-
+function ScraperStatusCard({ goldBullionRate, updatedAt, liveModeConnected }: ScraperStatusCardProps) {
+  const isLive = liveModeConnected;
   return (
-    <Card className="relative overflow-hidden border-2" style={{ borderColor: connected ? "#10b98155" : "#e5e7eb" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: connected ? "#10b981" : NAVY }} />
+    <Card
+      className="relative overflow-hidden border-2"
+      style={{ borderColor: isLive ? "#10b98155" : "#e5e7eb" }}
+    >
+      <div
+        style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: "3px",
+          background: isLive ? "#10b981" : NAVY,
+        }}
+      />
       <CardHeader className="pb-3 pt-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: connected ? "#10b98118" : `${NAVY}12`, border: `2px solid ${connected ? "#10b98155" : `${NAVY}40`}` }}>
-              {connected ? <Wifi className="w-5 h-5 text-emerald-600" /> : <WifiOff className="w-5 h-5" style={{ color: NAVY }} />}
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{
+                background: isLive ? "#10b98118" : `${NAVY}12`,
+                border: `2px solid ${isLive ? "#10b98155" : `${NAVY}40`}`,
+              }}
+            >
+              <Activity className="w-5 h-5" style={{ color: isLive ? "#059669" : NAVY }} />
             </div>
             <div>
-              <CardTitle className="text-base font-bold leading-tight">Live Gold Rate API Integration</CardTitle>
-              <div className="text-xs text-muted-foreground mt-0.5">Powered by APILayer Metals-API — 24K, 22K & Silver rates in AED</div>
+              <CardTitle className="text-base font-bold leading-tight">
+                Free Live Rate — Yahoo Finance Scraper
+              </CardTitle>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Gold Futures (GC=F) · Auto-refreshes every 5 minutes · No API key required
+              </div>
             </div>
           </div>
           <div
             className="flex items-center gap-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide px-3 py-1.5 rounded-full"
             style={{
-              color: connected ? "#059669" : "#4b5563",
-              background: connected ? "#10b98118" : "#f3f4f6",
-              border: `1px solid ${connected ? "#10b98155" : "#d1d5db"}`,
+              color: isLive ? "#059669" : "#4b5563",
+              background: isLive ? "#10b98118" : "#f3f4f6",
+              border: `1px solid ${isLive ? "#10b98155" : "#d1d5db"}`,
             }}
           >
-            {connected ? "((●)) Live Market Rate (AED) - ACTIVE" : "● Manual Mode (Offline)"}
+            {isLive ? "((●)) Live Market Rate — ACTIVE" : "● Awaiting First Scrape"}
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide sm:w-44 flex-shrink-0">
-            APILayer Token/Key:
-          </div>
-          <div className="relative flex-1 min-w-0">
-            <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type={connected ? "text" : showKey ? "text" : "password"}
-              placeholder={apiKeyMasked ?? "Enter your APILayer Metals-API key here..."}
-              value={connected ? (apiKeyMasked ?? "") : apiKeyInput}
-              disabled={connected}
-              readOnly={connected}
-              onChange={e => { setApiKeyInput(e.target.value); if (warning) setWarning(null); }}
-              className="pl-9 pr-10"
-              style={connected ? { fontFamily: "monospace" } : undefined}
-            />
-            {!connected && (
-              <button
-                type="button"
-                onClick={() => setShowKey(s => !s)}
-                tabIndex={-1}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            )}
-          </div>
-          {connected ? (
-            <Button
-              onClick={onDisconnect}
-              disabled={busy}
-              style={{ background: NAVY }}
-              className="flex items-center gap-2 flex-shrink-0"
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-lg border p-3 bg-muted/20">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
+              Gold Bullion Rate (AED/g)
+            </div>
+            <div
+              className="text-2xl font-extrabold"
+              style={{ fontFamily: "monospace", color: isLive ? "#059669" : undefined }}
             >
-              {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <WifiOff className="w-4 h-4" />}
-              {disconnecting ? "Disconnecting..." : "Disconnect"}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleConnectClick}
-              disabled={busy}
-              style={{ background: NAVY }}
-              className="flex items-center gap-2 flex-shrink-0"
-            >
-              {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-              {connecting ? "Connecting..." : "Connect"}
-            </Button>
-          )}
-        </div>
-        {warning && <p className="text-[11px] text-red-600 font-medium">{warning}</p>}
-        {!connected && apiKeyConfigured && !warning && (
-          <p className="text-[11px] text-muted-foreground">A key is already saved for this shop — leave blank to reuse it, or paste a new one to replace it.</p>
-        )}
-
-        {connected && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg border p-3 text-center bg-muted/20">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">24K Gold</div>
-              <div className="text-lg font-bold" style={{ fontFamily: "monospace" }}>{liveGoldRate24k?.toFixed(2) ?? "—"}</div>
-              <div className="text-[10px] text-muted-foreground">AED/g</div>
+              {goldBullionRate > 0 ? goldBullionRate.toFixed(2) : "—"}
             </div>
-            <div className="rounded-lg border p-3 text-center bg-muted/20">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">22K Gold</div>
-              <div className="text-lg font-bold" style={{ fontFamily: "monospace" }}>{liveGoldRate22k?.toFixed(2) ?? "—"}</div>
-              <div className="text-[10px] text-muted-foreground">AED/g</div>
-            </div>
-            <div className="rounded-lg border p-3 text-center bg-muted/20">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Silver</div>
-              <div className="text-lg font-bold" style={{ fontFamily: "monospace" }}>{liveSilverRate?.toFixed(2) ?? "—"}</div>
-              <div className="text-[10px] text-muted-foreground">AED/g</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              Unified global rate · used in all invoices
             </div>
           </div>
-        )}
-
-        <div className="text-xs text-muted-foreground">
-          {connected && lastSyncedAt
-            ? `Last synced: ${new Date(lastSyncedAt).toLocaleString("en-AE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
-            : "Not connected — rates are entered manually below"}
+          <div className="rounded-lg border p-3 bg-muted/20">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
+              Last Scraped
+            </div>
+            <div className="text-sm font-semibold">
+              {updatedAt
+                ? new Date(updatedAt).toLocaleString("en-AE", {
+                    day: "2-digit", month: "short",
+                    hour: "2-digit", minute: "2-digit", second: "2-digit",
+                  })
+                : "—"}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              Next refresh in ~5 min
+            </div>
+          </div>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          Rates are automatically scraped from Yahoo Finance (GC=F) and applied to invoices. No manual key entry required. Manual rate overrides below remain active for other asset types.
+        </p>
       </CardContent>
     </Card>
   );
@@ -323,32 +270,6 @@ export default function Prices() {
   const queryClient = useQueryClient();
   const { data: prices, isLoading } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
   const updatePrices = useUpdatePrices();
-  const connectLiveRate = useConnectLiveRate();
-  const disconnectLiveRate = useDisconnectLiveRate();
-
-  const handleConnectLiveRate = (apiKey: string | undefined) => {
-    connectLiveRate.mutate({ data: { ...(apiKey ? { apiKey } : {}) } }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-        toast({ title: "✓ Connected to APILayer Metals-API", description: "Live 24K, 22K & Silver rates applied." });
-      },
-      onError: (err: any) => {
-        toast({ title: "Connection failed", description: err?.message ?? "Could not reach APILayer Metals-API", variant: "destructive" });
-      },
-    });
-  };
-
-  const handleDisconnectLiveRate = () => {
-    disconnectLiveRate.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-        toast({ title: "Disconnected", description: "Switched back to manual rate entry." });
-      },
-      onError: (err: any) => {
-        toast({ title: "Failed to disconnect", description: err?.message, variant: "destructive" });
-      },
-    });
-  };
 
   const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram", "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate"];
 
@@ -524,19 +445,11 @@ export default function Prices() {
         </Button>
       </div>
 
-      {/* Live Gold Rate API Integration */}
-      <LiveRateCard
-        connected={prices.liveModeConnected}
-        apiKeyConfigured={prices.liveApiKeyConfigured}
-        apiKeyMasked={prices.liveApiKeyMasked ?? null}
-        lastSyncedAt={prices.liveLastSyncedAt ?? null}
-        liveGoldRate24k={prices.liveGoldRate24k ?? null}
-        liveGoldRate22k={prices.liveGoldRate22k ?? null}
-        liveSilverRate={prices.liveSilverRate ?? null}
-        onConnect={handleConnectLiveRate}
-        onDisconnect={handleDisconnectLiveRate}
-        connecting={connectLiveRate.isPending}
-        disconnecting={disconnectLiveRate.isPending}
+      {/* Auto-Scraper Status */}
+      <ScraperStatusCard
+        goldBullionRate={prices.goldBullionRate}
+        updatedAt={prices.updatedAt}
+        liveModeConnected={prices.liveModeConnected}
       />
 
       {/* All cards in one grid: built-in + custom + always-visible add button */}

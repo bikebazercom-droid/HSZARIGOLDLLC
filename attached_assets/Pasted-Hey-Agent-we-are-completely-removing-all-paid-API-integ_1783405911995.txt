@@ -1,0 +1,21 @@
+Hey Agent, we are completely removing all paid API integrations (like GoldAPI.io and Metals-API) and moving to a 100% FREE live market streaming and background scraping setup. 
+
+Please overhaul the codebase using these precise instructions:
+
+1. **Frontend TradingView Integration (`/tv` component):**
+   - In our standalone `/tv` page, remove any state variables pulling from local endpoints for the top 4 metric cards.
+   - Replace the static grid layouts for BID oz, ASK oz, LOW, and HIGH with the official, free embedded **TradingView Market Overview or Single Ticker Widget** for `FX_IDC:XAUUSD` (Gold Spot / US Dollar).
+   - Style the widget container to fit perfectly inside our luxurious golden frame style, ensuring it displays tick-by-tick real-time changes and high/low data dynamically directly from the live exchange.
+
+2. **Backend Free Web Scraper for Invoice Operations:**
+   - Install `cheerio` if not present (`npm install cheerio`).
+   - Rewrite the public price fetching route (`GET /prices/public`) to act as a web scraper. Use `axios` to fetch the public Yahoo Finance HTML for gold spot (`https://finance.yahoo.com/quote/GC%3DF/` or `https://finance.yahoo.com/quote/XAUUSD%3DX/`).
+   - Extract the current price text node, convert it to a float number, and perform our required AED per Gram calculation: `goldBullionRate = (scrapedPrice / 31.1034768) * 3.6725`.
+   - Setup a backend server interval timer to run this scraping routine safely every 5 minutes and cache the `goldBullionRate` globally in application memory.
+
+3. **Invoice Auto-Injection (`new.tsx`):**
+   - Ensure the global "Payment & Summary" Metal Rate field hooks into this cached `goldBullionRate` endpoint so that invoice totals update seamlessly without getting stuck.
+
+4. **Cleanup & Workspace Typecheck:**
+   - Safely remove all old `access_key` configurations, unused environment variables, and dead service files linked to prior paid API platforms.
+   - Run a full compilation check to ensure the server starts flawlessly.

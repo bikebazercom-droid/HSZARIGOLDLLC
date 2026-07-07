@@ -10,7 +10,6 @@ export * from './categorySummary';
 export * from './categorySummaryRow';
 export * from './companySettings';
 export * from './companySettingsInput';
-export * from './connectLiveRateInput';
 export * from './customDescription';
 export * from './customer';
 export * from './customerInput';

@@ -261,11 +261,6 @@ export interface PublicPrices {
   updatedAt: string;
 }
 
-export interface ConnectLiveRateInput {
-  /** APILayer Metals-API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side APILAYER_KEY env var when omitted. */
-  apiKey?: string;
-}
-
 export interface PricesInput {
   goldPricePerGram?: number;
   silverPricePerGram?: number;
