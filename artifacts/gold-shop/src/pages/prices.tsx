@@ -218,7 +218,7 @@ export default function Prices() {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const liveValueByKey: Partial<Record<RateKey, number | null>> = {
     ttBarRate:           r != null ? round2(r * 0.995) : null,
-    ttBar24kRate:        r != null ? round2(r * 0.999) : null,
+    ttBar24kRate:        r != null ? round2(r * 0.9999) : null,
     gold9999Rate:        r,
     kgBarRate:           r != null ? round2(r * 0.995) : null,
     gold22kRate:         liveRates.gold22kRate,
@@ -451,7 +451,7 @@ export default function Prices() {
     fieldKey: RateKey; tvVisibilityKey?: TvVisibilityKey;
   }> = [
     { label: "TT. BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate", tvVisibilityKey: "tvShowTtBar995" },
-    { label: "TT. BAR (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
+    { label: "TT. BAR (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
     { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate", tvVisibilityKey: "tvShowGold9999" },
     { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate", tvVisibilityKey: "tvShowKgBar995" },
     { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" },

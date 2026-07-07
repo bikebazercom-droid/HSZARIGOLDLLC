@@ -99,6 +99,7 @@ const DESC_TO_PURITY: Record<string, string> = {
   "Silver": "0.999",
   // Legacy descriptions kept for backward compatibility with existing invoices.
   "TT. BAR (0.995)": "0.995",
+  "TT. BAR (0.9999)": "0.9999",
   "TT. BAR (0.999)": "0.999",
   "KG BAR (0.995)": "0.995",
   "GOLD (0.9999)": "0.9999",
@@ -129,7 +130,7 @@ const DESC_TO_PURITY: Record<string, string> = {
 function descToCategory(desc: string): string {
   if (desc === "Gold Jewelry 22K" || desc === "Gold Jewelry 21K" || desc === "Gold Jewelry 18K" || desc === "Gold 22K (0.916)" || desc === "Gold 21K (0.875)" || desc === "Gold 18K (0.750)" || desc === "Gold Jewelry 22k" || desc === "Gold Jewelry 21k" || desc === "Gold Jewelry 18k" || desc === "Gold Jewelry" || desc === "22K Gold Jewelry" || desc === "Jewellery 22K 1GM") return "gold_jewelry";
   if (desc === "GOLD (0.9999)" || desc === "GOLD 999.99" || desc === "GOLD" || desc === "24K GOLD" || desc === "Gold 9999 1GM" || desc === "Gold 9999 1KG") return "gold";
-  if (desc === "TT. BAR" || desc === "TT. BAR (0.995)" || desc === "TT. BAR (0.999)" || desc === "TT. BAR 995" || desc === "TT. BAR 24K" || desc === "Ten Tola Bar TTB") return "tt_bar";
+  if (desc === "TT. BAR" || desc === "TT. BAR (0.995)" || desc === "TT. BAR (0.999)" || desc === "TT. BAR (0.9999)" || desc === "TT. BAR 995" || desc === "TT. BAR 24K" || desc === "Ten Tola Bar TTB") return "tt_bar";
   if (desc === "KG BAR" || desc === "KG BAR (0.995)" || desc === "KG BAR 995" || desc === "KG. BAR" || desc === "Kilo Bar 995 1KG") return "kg_bar";
   if (desc === "Silver" || desc === "Silver (0.999)" || desc === "Silver 999") return "silver";
   // Anything else (custom-typed description, saved custom price, or a Product) is Custom
@@ -179,6 +180,7 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
     if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return roundTo(rawAedPerGram * (18 / 24), 2);
     if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return roundTo(rawAedPerGram, 2);
     if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return roundTo(rawAedPerGram * 0.995, 2);
+    if (description === "TT. BAR (0.9999)") return roundTo(rawAedPerGram * 0.9999, 2);
     if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return roundTo(rawAedPerGram * 0.999, 2);
     if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Kilo Bar 995 1KG") return roundTo(rawAedPerGram * 0.995, 2);
   }
@@ -188,6 +190,7 @@ function getRateForDesc(description: string, prices: PricesData | undefined, fal
   if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return prices.gold18kRate;
   if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return prices.gold9999Rate;
   if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
+  if (description === "TT. BAR (0.9999)") return prices.ttBar24kRate;
   if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return prices.ttBar24kRate;
   if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
   if (description === "Silver" || description === "Silver (0.999)" || description === "Silver 999") return prices.silverPricePerGram;

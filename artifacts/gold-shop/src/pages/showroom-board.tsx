@@ -266,7 +266,7 @@ export default function ShowroomBoard() {
   // Always track all 7 values for direction — stable array length regardless of visibility
   const rowValues: (number | null)[] = [
     liveRates.ttBar995Total,
-    liveRates.ttBar999Total,
+    liveRates.ttBar9999Total,
     liveRates.gold9999Rate,
     liveRates.kgBar995Total,
     liveRates.gold22kRate,
@@ -279,7 +279,7 @@ export default function ShowroomBoard() {
   // All 7 rows with their original index (for direction lookup) and visibility flag
   const allRows = [
     { idx: 0, title: "TT. BAR (0.995)",  tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995 ?? true },
-    { idx: 1, title: "TT. BAR (0.999)",  tag: "TTB", value: fmt(liveRates.ttBar999Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999 ?? true },
+    { idx: 1, title: "TT. BAR (0.9999)", tag: "TTB", value: fmt(liveRates.ttBar9999Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999 ?? true },
     { idx: 2, title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGold9999   ?? true },
     { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
     { idx: 4, title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold22k   ?? true },
