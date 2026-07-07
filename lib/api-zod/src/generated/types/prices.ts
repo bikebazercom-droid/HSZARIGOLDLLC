@@ -27,7 +27,7 @@ export interface Prices {
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;
-  /** Which metal price provider is currently configured/active. */
+  /** Metal price provider currently in use (APILayer Metals-API). */
   liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
@@ -36,22 +36,22 @@ export interface Prices {
   /** @nullable */
   liveSilverRate?: number | null;
   /**
-     * Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldBid?: number | null;
   /**
-     * Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldAsk?: number | null;
   /**
-     * Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldHigh?: number | null;
   /**
-     * Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldLow?: number | null;

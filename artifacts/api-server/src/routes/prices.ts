@@ -4,8 +4,8 @@ import { GetPricesResponse, UpdatePricesResponse, ConnectLiveRateResponse, Disco
 
 const router: IRouter = Router();
 
-// Both GoldAPI.io and MetalpriceAPI.com report metal spot prices in USD per
-// troy ounce. AED is pegged to USD at this fixed rate.
+// AED is pegged to USD at this fixed rate. Metal spot prices are reported in
+// USD per troy ounce by the APILayer Metals-API.
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
 // 995 purity (TT. BAR 995 / KG BAR 995) is 99.5% pure gold, versus the 999.9
@@ -14,17 +14,6 @@ const PURITY_995_FACTOR = 0.995;
 // TT. BAR 24K is a strict 999.0 purity bullion bar — scale the raw 24K spot
 // rate by 0.999 (distinct from the 995-purity bars above).
 const PURITY_999_FACTOR = 0.999;
-
-type ApiProvider = "goldapi" | "metalpriceapi";
-
-function normalizeProvider(v: unknown): ApiProvider {
-  return v === "metalpriceapi" ? "metalpriceapi" : "goldapi";
-}
-
-const PROVIDER_LABELS: Record<ApiProvider, string> = {
-  goldapi: "GoldAPI.io",
-  metalpriceapi: "MetalpriceAPI.com",
-};
 
 function toNum(v: string | number | null): number | null {
   if (v == null) return null;
@@ -58,104 +47,39 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
-    liveApiKeyConfigured: Boolean(p.liveApiKey || process.env.GOLDAPI_KEY),
-    liveApiKeyMasked: p.liveApiKey ? maskApiKey(p.liveApiKey) : (process.env.GOLDAPI_KEY ? maskApiKey(process.env.GOLDAPI_KEY) : null),
-    liveApiProvider: normalizeProvider(p.liveApiProvider),
+    liveApiKeyConfigured: Boolean(p.liveApiKey || process.env.APILAYER_KEY),
+    liveApiKeyMasked: p.liveApiKey ? maskApiKey(p.liveApiKey) : (process.env.APILAYER_KEY ? maskApiKey(process.env.APILAYER_KEY) : null),
+    liveApiProvider: "apilayer" as const,
     liveGoldRate24k: toNum(p.liveGoldRate24k),
     liveGoldRate22k: toNum(p.liveGoldRate22k),
     liveSilverRate: toNum(p.liveSilverRate),
-    liveGoldBid: toNum(p.liveGoldBid),
-    liveGoldAsk: toNum(p.liveGoldAsk),
-    liveGoldHigh: toNum(p.liveGoldHigh),
-    liveGoldLow: toNum(p.liveGoldLow),
+    liveGoldBid: null as null,
+    liveGoldAsk: null as null,
+    liveGoldHigh: null as null,
+    liveGoldLow: null as null,
     liveLastSyncedAt: p.liveLastSyncedAt ? p.liveLastSyncedAt.toISOString() : null,
   };
 }
 
-// A minimal, provider-agnostic result: USD spot price per troy ounce, plus
-// (when the provider supplies them directly) USD-per-gram karat breakdowns.
-interface MetalSpot {
-  usdPerOunce: number;
-  usdPerGram24k?: number;
-  usdPerGram22k?: number;
-  // Raw market metrics (USD per troy ounce) — only supplied by GoldAPI.io, used
-  // for the showroom TV board's BID/ASK/Low/High display tiles.
-  bidUsdPerOunce?: number;
-  askUsdPerOunce?: number;
-  highUsdPerOunce?: number;
-  lowUsdPerOunce?: number;
+// APILayer Metals-API response: { rates: { USDXAU: <USD/oz>, USDXAG: <USD/oz> } }
+interface ApiLayerRatesResponse {
+  rates?: Record<string, number>;
 }
 
-interface GoldApiMetalResponse {
-  price?: number;
-  price_gram_24k?: number;
-  price_gram_22k?: number;
-  bid?: number;
-  ask?: number;
-  high_price?: number;
-  low_price?: number;
-}
-
-async function fetchGoldApiMetal(symbol: "XAU" | "XAG", apiKey: string): Promise<MetalSpot> {
-  const res = await fetch(`https://www.goldapi.io/api/${symbol}/USD`, {
-    headers: { "x-access-token": apiKey, "Content-Type": "application/json" },
+async function fetchApiLayerMetals(apiKey: string): Promise<{ goldUsdPerOunce: number; silverUsdPerOunce: number }> {
+  const res = await fetch("https://api.apilayer.com/metals/latest?base=USD&symbols=XAU,XAG", {
+    headers: { apikey: apiKey },
   });
   if (!res.ok) {
-    throw new Error(`GoldAPI.io request failed (${symbol}): ${res.status} ${res.statusText}`);
+    throw new Error(`APILayer Metals-API request failed: ${res.status} ${res.statusText}`);
   }
-  const data = (await res.json()) as GoldApiMetalResponse;
-  const usdPerOunce = data.price ?? (data.price_gram_24k != null ? data.price_gram_24k * TROY_OUNCE_TO_GRAM : NaN);
-  if (!Number.isFinite(usdPerOunce)) {
-    throw new Error(`GoldAPI.io returned an unexpected response for ${symbol} — missing price.`);
+  const data = (await res.json()) as ApiLayerRatesResponse;
+  const usdXau = data.rates?.USDXAU;
+  const usdXag = data.rates?.USDXAG;
+  if (!Number.isFinite(usdXau) || !Number.isFinite(usdXag)) {
+    throw new Error("APILayer Metals-API returned an unexpected response — missing USDXAU or USDXAG rate.");
   }
-  return {
-    usdPerOunce,
-    usdPerGram24k: data.price_gram_24k,
-    usdPerGram22k: data.price_gram_22k,
-    bidUsdPerOunce: data.bid,
-    askUsdPerOunce: data.ask,
-    highUsdPerOunce: data.high_price,
-    lowUsdPerOunce: data.low_price,
-  };
-}
-
-interface MetalpriceApiResponse {
-  success?: boolean;
-  rates?: Record<string, number>;
-  error?: { code?: number; type?: string; info?: string };
-}
-
-async function fetchMetalpriceApiMetals(apiKey: string): Promise<{ xau: MetalSpot; xag: MetalSpot }> {
-  const url = `https://api.metalpriceapi.com/v1/latest?api_key=${encodeURIComponent(apiKey)}&base=USD&currencies=XAU,XAG`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`MetalpriceAPI.com request failed: ${res.status} ${res.statusText}`);
-  }
-  const data = (await res.json()) as MetalpriceApiResponse;
-  if (!data.success || !data.rates) {
-    throw new Error(`MetalpriceAPI.com request failed: ${data.error?.info ?? "unknown error"}`);
-  }
-  // `USDXAU`/`USDXAG` are the reciprocal convenience fields already expressed
-  // as USD price per troy ounce. Fall back to inverting the base `XAU`/`XAG`
-  // rate (troy-oz-of-metal per 1 USD) if the convenience fields are missing.
-  const xauUsd = data.rates.USDXAU ?? (data.rates.XAU ? 1 / data.rates.XAU : NaN);
-  const xagUsd = data.rates.USDXAG ?? (data.rates.XAG ? 1 / data.rates.XAG : NaN);
-  if (!Number.isFinite(xauUsd) || !Number.isFinite(xagUsd)) {
-    throw new Error("MetalpriceAPI.com returned an unexpected response — could not determine spot prices.");
-  }
-  return { xau: { usdPerOunce: xauUsd }, xag: { usdPerOunce: xagUsd } };
-}
-
-async function fetchLiveMetalRates(provider: ApiProvider, apiKey: string): Promise<{ gold: MetalSpot; silver: MetalSpot }> {
-  if (provider === "metalpriceapi") {
-    const { xau, xag } = await fetchMetalpriceApiMetals(apiKey);
-    return { gold: xau, silver: xag };
-  }
-  const [gold, silver] = await Promise.all([
-    fetchGoldApiMetal("XAU", apiKey),
-    fetchGoldApiMetal("XAG", apiKey),
-  ]);
-  return { gold, silver };
+  return { goldUsdPerOunce: usdXau!, silverUsdPerOunce: usdXag! };
 }
 
 async function getOrCreate() {
@@ -191,10 +115,10 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
     gold9999Rate: parsed.gold9999Rate,
     liveModeConnected: parsed.liveModeConnected,
     liveSilverRate: parsed.liveSilverRate,
-    liveGoldBid: parsed.liveGoldBid,
-    liveGoldAsk: parsed.liveGoldAsk,
-    liveGoldHigh: parsed.liveGoldHigh,
-    liveGoldLow: parsed.liveGoldLow,
+    liveGoldBid: null,
+    liveGoldAsk: null,
+    liveGoldHigh: null,
+    liveGoldLow: null,
     updatedAt: parsed.updatedAt,
   }));
 });
@@ -240,64 +164,49 @@ router.put("/prices", async (req, res): Promise<void> => {
 });
 
 router.post("/prices/live/connect", async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as { apiKey?: string; apiProvider?: string };
+  const body = (req.body ?? {}) as { apiKey?: string };
   const current = await getOrCreate();
   const providedKey = body.apiKey?.trim();
-  // Switching providers invalidates a previously-saved key for the *other*
-  // provider, so only fall back to the stored key when the provider is
-  // unchanged (or unspecified, i.e. re-syncing with the existing setup).
-  const provider = body.apiProvider != null ? normalizeProvider(body.apiProvider) : normalizeProvider(current.liveApiProvider);
-  const providerChanged = provider !== normalizeProvider(current.liveApiProvider);
-  const fallbackKey = provider === "goldapi" ? process.env.GOLDAPI_KEY : undefined;
-  const apiKey = providedKey || (!providerChanged ? current.liveApiKey ?? undefined : undefined) || fallbackKey || undefined;
+  const apiKey = providedKey || (current.liveApiKey ?? undefined) || process.env.APILAYER_KEY;
 
   if (!apiKey) {
-    res.status(400).json({ error: `Please enter a valid ${PROVIDER_LABELS[provider]} API Key first.` });
+    res.status(400).json({ error: "Please enter a valid APILayer Metals-API key first." });
     return;
   }
 
-  let gold: MetalSpot;
-  let silver: MetalSpot;
+  let goldUsdPerOunce: number;
+  let silverUsdPerOunce: number;
   try {
-    ({ gold, silver } = await fetchLiveMetalRates(provider, apiKey));
+    ({ goldUsdPerOunce, silverUsdPerOunce } = await fetchApiLayerMetals(apiKey));
   } catch (err) {
-    req.log.error({ err, provider }, `Failed to fetch live rates from ${PROVIDER_LABELS[provider]}`);
-    res.status(502).json({ error: err instanceof Error ? err.message : `Failed to fetch live rates from ${PROVIDER_LABELS[provider]}` });
+    req.log.error({ err }, "Failed to fetch live rates from APILayer Metals-API");
+    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to fetch live rates from APILayer Metals-API" });
     return;
   }
 
-  const gold24kUsd = gold.usdPerGram24k ?? gold.usdPerOunce / TROY_OUNCE_TO_GRAM;
-  const gold22kUsd = gold.usdPerGram22k ?? gold24kUsd * (22 / 24);
-  const silverUsd = silver.usdPerGram24k ?? silver.usdPerOunce / TROY_OUNCE_TO_GRAM;
+  // Unified goldBullionRate formula: (USDXAU / troy_oz_per_gram) * USD_to_AED
+  const gold24kUsd = goldUsdPerOunce / TROY_OUNCE_TO_GRAM;
+  const gold22kUsd = gold24kUsd * (22 / 24);
+  const silverUsd = silverUsdPerOunce / TROY_OUNCE_TO_GRAM;
 
   if (!Number.isFinite(gold24kUsd) || !Number.isFinite(gold22kUsd) || !Number.isFinite(silverUsd)) {
-    res.status(502).json({ error: `${PROVIDER_LABELS[provider]} returned an unexpected response — could not determine per-gram rates.` });
+    res.status(502).json({ error: "APILayer Metals-API returned an unexpected response — could not determine per-gram rates." });
     return;
   }
 
   const gold24kAed = Math.round(gold24kUsd * USD_TO_AED * 100) / 100;
   const gold22kAed = Math.round(gold22kUsd * USD_TO_AED * 100) / 100;
   const silverAed = Math.round(silverUsd * USD_TO_AED * 100) / 100;
-  // TT. BAR 995 and KG BAR 995 are 995-purity bars, so their per-gram rate is
-  // the raw 24K spot rate scaled by the purity factor, not the raw 24K rate.
+  // TT. BAR 995 and KG BAR 995 are 995-purity bars.
   const gold995Aed = Math.round(gold24kAed * PURITY_995_FACTOR * 100) / 100;
   // TT. BAR 24K is a strict 999.0 purity bullion bar.
   const gold999Aed = Math.round(gold24kAed * PURITY_999_FACTOR * 100) / 100;
-  // Jewelry karat rates (22K/21K/18K) are first-class core assets, computed
-  // from the raw 24K spot rate the same way as the 995/999 purity bars above.
+  // Jewelry karat rates computed from the raw 24K spot rate.
   const gold916Aed = Math.round(gold24kAed * 0.916 * 100) / 100;
   const gold875Aed = Math.round(gold24kAed * 0.875 * 100) / 100;
   const gold750Aed = Math.round(gold24kAed * 0.750 * 100) / 100;
-  // GOLD 9999 (1GM / 1KG) — same per-gram rate for both weight variants,
-  // scaled from the raw 24K spot rate by the 0.9999 purity factor.
+  // GOLD 9999 (1GM / 1KG) — scaled from the raw 24K spot rate by 0.9999 purity.
   const gold9999Aed = Math.round(gold24kAed * 0.9999 * 100) / 100;
-  // Raw market metrics (AED per troy ounce) for the showroom TV board — only
-  // supplied by GoldAPI.io; left null for MetalpriceAPI.com or when missing.
-  const toAedOrNull = (usd?: number) => (usd != null && Number.isFinite(usd) ? Math.round(usd * USD_TO_AED * 100) / 100 : null);
-  const goldBidAed = toAedOrNull(gold.bidUsdPerOunce);
-  const goldAskAed = toAedOrNull(gold.askUsdPerOunce);
-  const goldHighAed = toAedOrNull(gold.highUsdPerOunce);
-  const goldLowAed = toAedOrNull(gold.lowUsdPerOunce);
 
   const wasConnected = current.liveModeConnected;
 
@@ -305,15 +214,15 @@ router.post("/prices/live/connect", async (req, res): Promise<void> => {
     .update(pricesTable)
     .set({
       liveModeConnected: true,
-      liveApiProvider: provider,
+      liveApiProvider: "apilayer",
       ...(providedKey ? { liveApiKey: providedKey } : {}),
       liveGoldRate24k: String(gold24kAed),
       liveGoldRate22k: String(gold22kAed),
       liveSilverRate: String(silverAed),
-      liveGoldBid: goldBidAed != null ? String(goldBidAed) : null,
-      liveGoldAsk: goldAskAed != null ? String(goldAskAed) : null,
-      liveGoldHigh: goldHighAed != null ? String(goldHighAed) : null,
-      liveGoldLow: goldLowAed != null ? String(goldLowAed) : null,
+      liveGoldBid: null,
+      liveGoldAsk: null,
+      liveGoldHigh: null,
+      liveGoldLow: null,
       liveLastSyncedAt: new Date(),
       // Snapshot the manual rates once, the first time we connect, so
       // disconnecting can restore exactly what the admin had before.

@@ -228,14 +228,14 @@ export const GetPricesResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
-  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
+  "liveApiProvider": zod.enum(['apilayer']).describe('Metal price provider currently in use (APILayer Metals-API).'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldBid": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldAsk": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldHigh": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldLow": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -282,14 +282,14 @@ export const UpdatePricesResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
-  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
+  "liveApiProvider": zod.enum(['apilayer']).describe('Metal price provider currently in use (APILayer Metals-API).'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldBid": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldAsk": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldHigh": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldLow": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -298,8 +298,7 @@ export const UpdatePricesResponse = zod.object({
  * @summary Connect to GoldAPI.io and pull the latest live 24K/22K/Silver AED rates
  */
 export const ConnectLiveRateBody = zod.object({
-  "apiKey": zod.string().optional().describe('API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi.'),
-  "apiProvider": zod.enum(['goldapi', 'metalpriceapi']).optional().describe('Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.')
+  "apiKey": zod.string().optional().describe('APILayer Metals-API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side APILAYER_KEY env var when omitted.')
 })
 
 export const ConnectLiveRateResponse = zod.object({
@@ -323,14 +322,14 @@ export const ConnectLiveRateResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
-  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
+  "liveApiProvider": zod.enum(['apilayer']).describe('Metal price provider currently in use (APILayer Metals-API).'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldBid": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldAsk": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldHigh": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldLow": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 
@@ -359,14 +358,14 @@ export const DisconnectLiveRateResponse = zod.object({
   "liveModeConnected": zod.boolean(),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
-  "liveApiProvider": zod.enum(['goldapi', 'metalpriceapi']).describe('Which metal price provider is currently configured\/active.'),
+  "liveApiProvider": zod.enum(['apilayer']).describe('Metal price provider currently in use (APILayer Metals-API).'),
   "liveGoldRate24k": zod.number().nullish(),
   "liveGoldRate22k": zod.number().nullish(),
   "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish().describe('Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldAsk": zod.number().nullish().describe('Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldHigh": zod.number().nullish().describe('Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
-  "liveGoldLow": zod.number().nullish().describe('Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.'),
+  "liveGoldBid": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldAsk": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldHigh": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
+  "liveGoldLow": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveLastSyncedAt": zod.string().nullish()
 })
 

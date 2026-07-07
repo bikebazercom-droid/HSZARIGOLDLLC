@@ -5,11 +5,8 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ConnectLiveRateInputApiProvider } from './connectLiveRateInputApiProvider';
 
 export interface ConnectLiveRateInput {
-  /** API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi. */
+  /** APILayer Metals-API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side APILAYER_KEY env var when omitted. */
   apiKey?: string;
-  /** Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted. */
-  apiProvider?: ConnectLiveRateInputApiProvider;
 }

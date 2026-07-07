@@ -169,14 +169,13 @@ export interface CategorySummary {
 }
 
 /**
- * Which metal price provider is currently configured/active.
+ * Metal price provider currently in use (APILayer Metals-API).
  */
 export type PricesLiveApiProvider = typeof PricesLiveApiProvider[keyof typeof PricesLiveApiProvider];
 
 
 export const PricesLiveApiProvider = {
-  goldapi: 'goldapi',
-  metalpriceapi: 'metalpriceapi',
+  apilayer: 'apilayer',
 } as const;
 
 export interface CustomDescription {
@@ -203,7 +202,7 @@ export interface Prices {
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;
-  /** Which metal price provider is currently configured/active. */
+  /** Metal price provider currently in use (APILayer Metals-API). */
   liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
@@ -212,22 +211,22 @@ export interface Prices {
   /** @nullable */
   liveSilverRate?: number | null;
   /**
-     * Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldBid?: number | null;
   /**
-     * Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldAsk?: number | null;
   /**
-     * Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldHigh?: number | null;
   /**
-     * Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+     * Not populated by APILayer Metals-API; always null.
      * @nullable
      */
   liveGoldLow?: number | null;
@@ -262,22 +261,9 @@ export interface PublicPrices {
   updatedAt: string;
 }
 
-/**
- * Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.
- */
-export type ConnectLiveRateInputApiProvider = typeof ConnectLiveRateInputApiProvider[keyof typeof ConnectLiveRateInputApiProvider];
-
-
-export const ConnectLiveRateInputApiProvider = {
-  goldapi: 'goldapi',
-  metalpriceapi: 'metalpriceapi',
-} as const;
-
 export interface ConnectLiveRateInput {
-  /** API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi. */
+  /** APILayer Metals-API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side APILAYER_KEY env var when omitted. */
   apiKey?: string;
-  /** Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted. */
-  apiProvider?: ConnectLiveRateInputApiProvider;
 }
 
 export interface PricesInput {

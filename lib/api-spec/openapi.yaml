@@ -715,8 +715,8 @@ components:
           type: ["string", "null"]
         liveApiProvider:
           type: string
-          enum: [goldapi, metalpriceapi]
-          description: Which metal price provider is currently configured/active.
+          enum: [apilayer]
+          description: Metal price provider currently in use (APILayer Metals-API).
         liveGoldRate24k:
           type: ["number", "null"]
         liveGoldRate22k:
@@ -725,16 +725,16 @@ components:
           type: ["number", "null"]
         liveGoldBid:
           type: ["number", "null"]
-          description: Raw live BID rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+          description: Not populated by APILayer Metals-API; always null.
         liveGoldAsk:
           type: ["number", "null"]
-          description: Raw live ASK rate, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+          description: Not populated by APILayer Metals-API; always null.
         liveGoldHigh:
           type: ["number", "null"]
-          description: Raw live daily high, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+          description: Not populated by APILayer Metals-API; always null.
         liveGoldLow:
           type: ["number", "null"]
-          description: Raw live daily low, AED per troy ounce. Only populated by GoldAPI.io; null otherwise.
+          description: Not populated by APILayer Metals-API; always null.
         liveLastSyncedAt:
           type: ["string", "null"]
 
@@ -781,11 +781,7 @@ components:
       properties:
         apiKey:
           type: string
-          description: API key entered by the shop owner for the selected provider. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side GOLDAPI_KEY env var when omitted and provider is goldapi.
-        apiProvider:
-          type: string
-          enum: [goldapi, metalpriceapi]
-          description: Which metal price provider to use for this connection. Defaults to goldapi (or the previously saved provider) when omitted.
+          description: APILayer Metals-API key entered by the shop owner. Saved to the database so the shop does not need to re-enter it on every connect. Falls back to the server-side APILAYER_KEY env var when omitted.
 
     CustomDescription:
       type: object

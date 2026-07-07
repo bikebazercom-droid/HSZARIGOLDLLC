@@ -7,12 +7,11 @@
  */
 
 /**
- * Which metal price provider is currently configured/active.
+ * Metal price provider currently in use (APILayer Metals-API).
  */
 export type PricesLiveApiProvider = typeof PricesLiveApiProvider[keyof typeof PricesLiveApiProvider];
 
 
 export const PricesLiveApiProvider = {
-  goldapi: 'goldapi',
-  metalpriceapi: 'metalpriceapi',
+  apilayer: 'apilayer',
 } as const;
