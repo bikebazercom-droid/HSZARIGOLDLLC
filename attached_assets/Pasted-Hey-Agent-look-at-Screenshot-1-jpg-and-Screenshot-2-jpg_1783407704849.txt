@@ -1,0 +1,22 @@
+Hey Agent, look at Screenshot_1.jpg and Screenshot_2.jpg together. In Screenshot_1, the embedded TradingView widget is successfully updating the gold spot price (XAUUSD) second-by-second in real-time. 
+
+I want to connect this real-time stream directly to the local product listings board shown in Screenshot_2 (TEN TOLA BAR, JEWELLERY 22K, GOLD 9999, KILO BAR 995) so their specific calculations also shift dynamically every second!
+
+Please refactor our code under these requirements:
+
+1. **Establish Frontend Real-Time Bridge:**
+   - If the TradingView iframe widget allows reading the current price via a postMessage listener or custom ticker element, bind to it. 
+   - Alternatively, rewrite the local polling stream ticker hook to pull the raw active ticker state every 1-2 seconds and save it to a global `LivePriceContext`.
+
+2. **Map the Dynamic Formula Matrix for Screenshot_2 Rows:**
+   - On the `/tv` screen rows, replace all static text rates with active dynamic computed values based on the live `XAUUSD` spot rate:
+     * **GOLD 9999 1GM:** Base formula: `(XAUUSD / 31.1034768) * 3.6725` + premium margin spread.
+     * **JEWELLERY 22K 1GM:** Compute 22K equivalent: `(GOLD_9999_1GM * 22 / 24)` + specific making charges.
+     * **TEN TOLA BAR (TTB):** Weight is exactly $116.64$ grams. Compute: `GOLD_9999_1GM * 116.64` + custom bar premium.
+     * **GOLD 9999 1KG / KILO BAR 995:** Weight is $1000$ grams. Compute: `GOLD_9999_1GM * 1000` (adjusting purity ratio for 995 if applicable).
+
+3. **Synchronize Live Base Rate with the Invoice Pipeline (`new.tsx`):**
+   - Ensure this exact real-time calculated 24K per gram price is continually pushed to the backend cache or shared global application state.
+   - When launching the Create Invoice page (`new.tsx`), the global "Payment & Summary" Metal Rate must pull this live value by default, allowing new invoices to be created instantly based on the active market rate.
+
+Please perform a thorough project compilation typecheck and let us know once this automated multi-screen price bridge is fully operational!

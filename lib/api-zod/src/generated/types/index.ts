@@ -36,3 +36,4 @@ export * from './product';
 export * from './productInput';
 export * from './publicPrices';
 export * from './publicSettings';
+export * from './spotPrice';

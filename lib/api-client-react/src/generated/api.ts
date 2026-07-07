@@ -41,7 +41,8 @@ import type {
   Product,
   ProductInput,
   PublicPrices,
-  PublicSettings
+  PublicSettings,
+  SpotPrice
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -679,6 +680,83 @@ export const useUpdatePrices = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdatePricesMutationOptions(options));
     }
+
+export const getGetPricesSpotUrl = () => {
+
+
+
+
+  return `/api/prices/spot`
+}
+
+/**
+ * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
+ */
+export const getPricesSpot = async ( options?: RequestInit): Promise<SpotPrice> => {
+
+  return customFetch<SpotPrice>(getGetPricesSpotUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPricesSpotQueryKey = () => {
+    return [
+    `/api/prices/spot`
+    ] as const;
+    }
+
+
+export const getGetPricesSpotQueryOptions = <TData = Awaited<ReturnType<typeof getPricesSpot>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricesSpot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPricesSpotQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPricesSpot>>> = ({ signal }) => getPricesSpot({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPricesSpot>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPricesSpotQueryResult = NonNullable<Awaited<ReturnType<typeof getPricesSpot>>>
+export type GetPricesSpotQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
+ */
+
+export function useGetPricesSpot<TData = Awaited<ReturnType<typeof getPricesSpot>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricesSpot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPricesSpotQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetPublicPricesUrl = () => {
 

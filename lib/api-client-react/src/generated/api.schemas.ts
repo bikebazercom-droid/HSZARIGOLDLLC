@@ -449,6 +449,15 @@ export interface PublicSettings {
   showroomLogoUrl: string | null;
 }
 
+export interface SpotPrice {
+  /** Gold Futures (GC=F) price in USD per troy ounce from Yahoo Finance. */
+  usdPerOz: number;
+  /** Derived AED per gram — (usdPerOz / 31.1034768) * 3.6725. */
+  aedPerGram: number;
+  /** ISO-8601 timestamp of when this price was fetched. */
+  updatedAt: string;
+}
+
 export interface MonthlySale {
   month: string;
   total: number;

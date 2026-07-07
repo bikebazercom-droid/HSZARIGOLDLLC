@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLivePrice } from "@/context/live-price";
 import { Link, useLocation } from "wouter";
 import {
   useCreateInvoice,
@@ -233,6 +234,7 @@ export default function NewInvoice() {
 
   const isLive = !!(prices as PricesData | undefined)?.liveModeConnected;
   const goldRate = prices?.goldPricePerGram ?? 320;
+  const { liveRates } = useLivePrice();
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");
@@ -269,8 +271,10 @@ export default function NewInvoice() {
   // Baseline/fallback figure used only to seed `metalRate` before any item
   // has a description/purity chosen, and as the `fallback` argument to
   // getRateForDesc/getRateForPurity.
+  // Prefers the live 3-second spot rate so a freshly opened invoice always
+  // starts from the current market price, not the 5-minute-stale DB value.
   const baselineRate = isLive
-    ? (prices?.goldBullionRate ?? goldRate)
+    ? (liveRates.aedPerGram ?? prices?.goldBullionRate ?? goldRate)
     : (prices?.goldPricePerGram ?? goldRate);
 
   const handleCustomerSelect = (id: string) => {

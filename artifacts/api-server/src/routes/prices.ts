@@ -13,10 +13,47 @@ const TROY_OUNCE_TO_GRAM = 31.1034768;
 const PURITY_995_FACTOR = 0.995;
 const PURITY_999_FACTOR = 0.999;
 
-// ── In-memory scraper cache ─────────────────────────────────────────────────
+// ── In-memory scraper cache (5-minute interval, writes to DB) ───────────────
 // goldBullionRate = (scrapedUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED
 let cachedGoldBullionRate: number | null = null;
 let lastScrapedAt: Date | null = null;
+
+// ── In-memory spot cache (10-second TTL, real-time frontend polling) ────────
+// Separate from the 5-min DB-write scraper so the lightweight /prices/spot
+// endpoint can serve fresh prices every 10 seconds without touching the DB.
+interface SpotCache {
+  usdPerOz: number;
+  aedPerGram: number;
+  fetchedAt: Date;
+}
+let spotCache: SpotCache | null = null;
+const SPOT_CACHE_TTL_MS = 10_000;
+
+async function fetchSpot(): Promise<SpotCache> {
+  if (spotCache && Date.now() - spotCache.fetchedAt.getTime() < SPOT_CACHE_TTL_MS) {
+    return spotCache;
+  }
+  const { data } = await axios.get(
+    "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF",
+    {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; GoldShopServer/1.0)",
+        Accept: "application/json",
+      },
+      timeout: 8000,
+    },
+  );
+  const rawUsdPerOz: unknown = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof rawUsdPerOz !== "number" || !Number.isFinite(rawUsdPerOz) || rawUsdPerOz <= 0) {
+    throw new Error(`Yahoo Finance spot: invalid price (${rawUsdPerOz})`);
+  }
+  spotCache = {
+    usdPerOz: rawUsdPerOz,
+    aedPerGram: Math.round(((rawUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED) * 100) / 100,
+    fetchedAt: new Date(),
+  };
+  return spotCache;
+}
 
 // ── Yahoo Finance JSON API ──────────────────────────────────────────────────
 // Uses Yahoo Finance's free /v8/finance/chart endpoint which returns JSON.
@@ -49,6 +86,9 @@ async function scrapeAndCache(): Promise<void> {
 
   cachedGoldBullionRate = goldBullionRate;
   lastScrapedAt = new Date();
+  // Keep spot cache in sync with the main scraper to avoid a redundant fetch
+  // immediately after a 5-minute scraper run.
+  spotCache = { usdPerOz: rawUsdPerOz as number, aedPerGram: goldBullionRate, fetchedAt: new Date() };
 
   logger.info(
     { rawUsdPerOz, goldBullionRate },
@@ -143,6 +183,32 @@ router.get("/prices", async (_req, res): Promise<void> => {
 // Public, unauthenticated router — mounted before requireAuth so the showroom
 // TV board and invoice new-invoice form can poll it without a session.
 export const publicPricesRouter: IRouter = Router();
+
+// ── /prices/spot ─────────────────────────────────────────────────────────────
+// Lightweight real-time endpoint. 10-second server-side cache; no DB read.
+// Frontend polls this every 3 seconds to drive second-by-second rate updates.
+publicPricesRouter.get("/prices/spot", async (_req, res): Promise<void> => {
+  try {
+    const spot = await fetchSpot();
+    res.json({
+      usdPerOz: spot.usdPerOz,
+      aedPerGram: spot.aedPerGram,
+      updatedAt: spot.fetchedAt.toISOString(),
+    });
+  } catch {
+    // Fall back to the 5-min scraper cache so the endpoint never goes dark
+    if (cachedGoldBullionRate !== null) {
+      res.json({
+        usdPerOz: 0,
+        aedPerGram: cachedGoldBullionRate,
+        updatedAt: lastScrapedAt?.toISOString() ?? new Date().toISOString(),
+      });
+      return;
+    }
+    res.status(503).json({ error: "Spot price temporarily unavailable" });
+  }
+});
+
 publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
   const prices = await getOrCreate();
   const parsed = parsePrices(prices);

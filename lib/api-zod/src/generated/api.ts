@@ -295,6 +295,16 @@ export const UpdatePricesResponse = zod.object({
 
 
 /**
+ * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
+ */
+export const GetPricesSpotResponse = zod.object({
+  "usdPerOz": zod.number().describe('Gold Futures (GC=F) price in USD per troy ounce from Yahoo Finance.'),
+  "aedPerGram": zod.number().describe('Derived AED per gram — (usdPerOz \/ 31.1034768) \* 3.6725.'),
+  "updatedAt": zod.string().describe('ISO-8601 timestamp of when this price was fetched.')
+})
+
+
+/**
  * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
  */
 export const GetPublicPricesResponse = zod.object({

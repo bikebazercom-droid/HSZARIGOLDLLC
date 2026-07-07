@@ -1,18 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useLivePrice } from "@/context/live-price";
 import {
-  useGetPublicPrices,
-  getGetPublicPricesQueryKey,
   useGetPublicSettings,
   getGetPublicSettingsQueryKey,
 } from "@workspace/api-client-react";
 
 const GOLD = "#d4af37";
-const TOLA_BAR_GRAMS = 116.638;
-
-function roundTo(num: number, decimals: number): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round((num + Number.EPSILON) * factor) / factor;
-}
 
 function useTicker() {
   const [now, setNow] = useState(() => new Date());
@@ -229,31 +222,21 @@ function AssetRow({ title, tag, value, icon }: AssetRowProps) {
 
 export default function ShowroomBoard() {
   const now = useTicker();
-  const { data: prices } = useGetPublicPrices({
-    query: { queryKey: getGetPublicPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
-  });
+  const { liveRates } = useLivePrice();
   const { data: publicSettings } = useGetPublicSettings({
     query: { queryKey: getGetPublicSettingsQueryKey(), refetchInterval: 60000, refetchIntervalInBackground: true },
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
 
-  // Every asset value here is derived directly from the persisted per-gram
-  // rates returned by /prices/public — the same source of truth the Price
-  // List page reads/edits — so the TV board always matches it exactly,
-  // whether Live Mode is connected (auto-synced every 5s) or a rate was
-  // manually edited while disconnected.
-  const ttBarTotal = prices?.ttBarRate != null ? roundTo(prices.ttBarRate * TOLA_BAR_GRAMS, 2) : null;
-  const jewellery22kPerGram = prices?.gold22kRate ?? null;
-  const gold9999PerGram = prices?.gold9999Rate ?? null;
-  const gold9999PerKg = prices?.gold9999Rate != null ? roundTo(prices.gold9999Rate * 1000, 2) : null;
-  const kiloBar995Total = prices?.kgBarRate != null ? roundTo(prices.kgBarRate * 1000, 2) : null;
-
+  // All row values are live-scaled: derived from the 3-second spot price poll
+  // multiplied by a scale factor that preserves every admin-configured spread
+  // and premium.  Falls back to "—" while the first poll is in flight.
   const rows = [
-    { title: "Ten Tola Bar", tag: "TTB", value: fmt(ttBarTotal), icon: <GoldBarIcon /> },
-    { title: "Jewellery 22K", tag: "1GM", value: fmt(jewellery22kPerGram), icon: <GoldRingIcon /> },
-    { title: "Gold 9999", tag: "1GM", value: fmt(gold9999PerGram), icon: <GoldIngotIcon /> },
-    { title: "Gold 9999", tag: "1KG", value: fmt(gold9999PerKg), icon: <GoldIngotIcon /> },
-    { title: "Kilo Bar 995", tag: "1KG", value: fmt(kiloBar995Total), icon: <GoldBarIcon /> },
+    { title: "Ten Tola Bar",  tag: "TTB", value: fmt(liveRates.ttBarTotal),    icon: <GoldBarIcon /> },
+    { title: "Jewellery 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon /> },
+    { title: "Gold 9999",     tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon /> },
+    { title: "Gold 9999",     tag: "1KG", value: fmt(liveRates.gold9999Total), icon: <GoldIngotIcon /> },
+    { title: "Kilo Bar 995",  tag: "1KG", value: fmt(liveRates.kgBarTotal),    icon: <GoldBarIcon /> },
   ];
 
   return (
@@ -365,8 +348,8 @@ export default function ShowroomBoard() {
           className="text-neutral-500 text-center tracking-wide shrink-0"
           style={{ fontSize: "clamp(0.6rem, calc(0.5vh + 0.4vw), 0.85rem)", paddingTop: "clamp(0.4rem, 1vh, 1rem)" }}
         >
-          Live rates via Yahoo Finance · auto-refreshing every 5 min
-          {prices?.updatedAt && ` · Last updated ${new Date(prices.updatedAt).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit" })}`}
+          {liveRates.isLive ? "((●)) Live — XAUUSD syncing every 3 s" : "Connecting to live feed…"}
+          {liveRates.updatedAt && ` · ${new Date(liveRates.updatedAt).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
         </div>
       </div>
     </div>
