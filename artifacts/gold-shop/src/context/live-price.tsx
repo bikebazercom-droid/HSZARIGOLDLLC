@@ -84,20 +84,24 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
     // return usdPerOz=0 when falling back to a pre-cached Dubai rate.
     if (!spot?.aedPerGram || spot.aedPerGram <= 0) return EMPTY_RATES;
 
-    // Atomic base: Dubai Local Retail 24K price in AED per gram.
-    // Comes directly from the backend — no USD conversion needed.
-    const raw = spot.aedPerGram;
+    // Atomic base: 24K AED/gram from the live Socket.IO feed.
+    // Round to 2dp FIRST so every derived row is exactly verifiable from the
+    // displayed base — i.e. if the board shows 491.86, then
+    //   TT BAR 0.999 = 491.86 × 116.640 × 0.999 = 57,313.18  (pocket-calc match)
+    // Using the unrounded float would give a result that differs from what a
+    // user would compute from the displayed base, causing apparent "errors".
+    const base = round2(spot.aedPerGram);
 
     return {
       usdPerOz:      spot.usdPerOz ?? null,
-      aedPerGram:    round2(raw),
-      ttBar995Total: round2(raw * TOLA_BAR_GRAMS * PURITY_995),
-      ttBar999Total: round2(raw * TOLA_BAR_GRAMS * PURITY_999),
-      gold9999Rate:  round2(raw),
-      kgBar995Total: round2(raw * 1000 * PURITY_995),
-      gold22kRate:   round2(raw * PURITY_22K),
-      gold21kRate:   round2(raw * PURITY_21K),
-      gold18kRate:   round2(raw * PURITY_18K),
+      aedPerGram:    base,
+      ttBar995Total: round2(base * TOLA_BAR_GRAMS * PURITY_995),
+      ttBar999Total: round2(base * TOLA_BAR_GRAMS * PURITY_999),
+      gold9999Rate:  base,
+      kgBar995Total: round2(base * 1000 * PURITY_995),
+      gold22kRate:   round2(base * PURITY_22K),
+      gold21kRate:   round2(base * PURITY_21K),
+      gold18kRate:   round2(base * PURITY_18K),
       isLive:        true,
       updatedAt:     spot.updatedAt,
     };
