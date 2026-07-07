@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLivePrice } from "@/context/live-price";
 import {
   useGetPublicSettings,
@@ -6,7 +6,10 @@ import {
 } from "@workspace/api-client-react";
 
 const GOLD = "#d4af37";
+const GREEN_TICK = "#22c55e";
+const RED_TICK   = "#ef4444";
 
+// ── Ticker clock ─────────────────────────────────────────────────────────────
 function useTicker() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -19,7 +22,6 @@ function useTicker() {
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-AE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 }
-
 function formatClock(d: Date) {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
 }
@@ -29,6 +31,42 @@ function fmt(n: number | null | undefined) {
   return n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// ── Direction tracking ────────────────────────────────────────────────────────
+type Direction = "up" | "down" | "neutral";
+
+function useDirections(values: (number | null)[]) {
+  const prevRef = useRef<(number | null)[]>(values.map(() => null));
+  const [dirs, setDirs] = useState<Direction[]>(values.map(() => "neutral"));
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    const next: Direction[] = values.map((v, i) => {
+      const p = prev[i];
+      if (v == null || p == null) return "neutral";
+      if (v > p) return "up";
+      if (v < p) return "down";
+      return "neutral";
+    });
+
+    const changed = next.some((d, i) => d !== "neutral" && d !== dirs[i]);
+    if (changed) {
+      setDirs(next);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      // Reset to neutral after animation completes (1.8 s)
+      timerRef.current = setTimeout(() => setDirs(values.map(() => "neutral")), 1800);
+    }
+
+    prevRef.current = [...values];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values]);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  return dirs;
+}
+
+// ── Icons ─────────────────────────────────────────────────────────────────────
 function GoldBarIcon() {
   return (
     <svg width="100%" height="100%" viewBox="0 0 40 40" fill="none">
@@ -75,15 +113,61 @@ function GoldIngotIcon() {
   );
 }
 
+// ── Keyframe injection ────────────────────────────────────────────────────────
+const STYLE_ID = "tick-animations";
+function ensureKeyframes() {
+  if (document.getElementById(STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = `
+    @keyframes tickUp {
+      0%   { color: ${GREEN_TICK}; text-shadow: 0 0 16px ${GREEN_TICK}cc, 0 0 40px ${GREEN_TICK}66; }
+      40%  { color: ${GREEN_TICK}; text-shadow: 0 0 24px ${GREEN_TICK}ff, 0 0 60px ${GREEN_TICK}88; }
+      100% { color: ${GOLD};       text-shadow: 0 0 24px ${GOLD}33; }
+    }
+    @keyframes tickDown {
+      0%   { color: ${RED_TICK}; text-shadow: 0 0 16px ${RED_TICK}cc, 0 0 40px ${RED_TICK}66; }
+      40%  { color: ${RED_TICK}; text-shadow: 0 0 24px ${RED_TICK}ff, 0 0 60px ${RED_TICK}88; }
+      100% { color: ${GOLD};     text-shadow: 0 0 24px ${GOLD}33; }
+    }
+    @keyframes borderUp {
+      0%   { border-color: ${GREEN_TICK}99; box-shadow: 0 0 0 1px ${GREEN_TICK}22 inset, 0 0 18px -4px ${GREEN_TICK}44; }
+      100% { border-color: ${GOLD}55;      box-shadow: none; }
+    }
+    @keyframes borderDown {
+      0%   { border-color: ${RED_TICK}99; box-shadow: 0 0 0 1px ${RED_TICK}22 inset, 0 0 18px -4px ${RED_TICK}44; }
+      100% { border-color: ${GOLD}55;     box-shadow: none; }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
+// ── AssetRow ──────────────────────────────────────────────────────────────────
 interface AssetRowProps {
   title: string;
   tag: string;
   value: string;
   icon: React.ReactNode;
+  direction: Direction;
 }
 
-function AssetRow({ title, tag, value, icon }: AssetRowProps) {
+function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
+  useEffect(() => { ensureKeyframes(); }, []);
+
+  const isUp   = direction === "up";
+  const isDown = direction === "down";
+  const isTick = isUp || isDown;
+
+  const tickColor = isUp ? GREEN_TICK : isDown ? RED_TICK : GOLD;
+
+  const containerAnim = isTick
+    ? `${isUp ? "borderUp" : "borderDown"} 1.8s ease-out forwards`
+    : undefined;
+
+  const priceAnim = isTick
+    ? `${isUp ? "tickUp" : "tickDown"} 1.8s ease-out forwards`
+    : undefined;
+
   return (
     <div
       className="relative rounded-2xl flex items-center justify-between"
@@ -93,6 +177,8 @@ function AssetRow({ title, tag, value, icon }: AssetRowProps) {
         padding: "clamp(0.5rem, 1.6vh, 1.5rem) clamp(0.75rem, 2.2vw, 2rem)",
         height: "100%",
         minHeight: 0,
+        animation: containerAnim,
+        willChange: isTick ? "border-color, box-shadow" : undefined,
       }}
     >
       <div className="flex items-center min-w-0" style={{ gap: "clamp(0.5rem, 1.5vw, 1.25rem)" }}>
@@ -123,24 +209,46 @@ function AssetRow({ title, tag, value, icon }: AssetRowProps) {
           </div>
         </div>
       </div>
-      <div
-        className="font-extrabold tabular-nums shrink-0"
-        style={{
-          color: GOLD,
-          fontSize: "clamp(1.15rem, calc(1.8vh + 1.6vw), 3rem)",
-          lineHeight: 1,
-          fontFamily: "monospace",
-          letterSpacing: "-0.02em",
-          textShadow: `0 0 24px ${GOLD}33`,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {value}
+
+      {/* Price + direction arrow */}
+      <div className="flex items-center gap-1 shrink-0">
+        {isTick && (
+          <span
+            style={{
+              color: tickColor,
+              fontSize: "clamp(1rem, calc(1.5vh + 1.3vw), 2.6rem)",
+              fontWeight: 900,
+              lineHeight: 1,
+              animation: priceAnim,
+              willChange: "color",
+              userSelect: "none",
+            }}
+          >
+            {isUp ? "↑" : "↓"}
+          </span>
+        )}
+        <div
+          className="font-extrabold tabular-nums"
+          style={{
+            color: GOLD,
+            fontSize: "clamp(1.15rem, calc(1.8vh + 1.6vw), 3rem)",
+            lineHeight: 1,
+            fontFamily: "monospace",
+            letterSpacing: "-0.02em",
+            textShadow: `0 0 24px ${GOLD}33`,
+            whiteSpace: "nowrap",
+            animation: priceAnim,
+            willChange: isTick ? "color, text-shadow" : undefined,
+          }}
+        >
+          {value}
+        </div>
       </div>
     </div>
   );
 }
 
+// ── ShowroomBoard ─────────────────────────────────────────────────────────────
 export default function ShowroomBoard() {
   const now = useTicker();
   const { liveRates } = useLivePrice();
@@ -149,15 +257,27 @@ export default function ShowroomBoard() {
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
 
-  // 7 rows — all pure raw math from live 1-second XAUUSD spot, zero spreads.
+  // 7 row values in stable order — used for direction tracking
+  const rowValues: (number | null)[] = [
+    liveRates.ttBar995Total,
+    liveRates.ttBar999Total,
+    liveRates.gold9999Rate,
+    liveRates.kgBar995Total,
+    liveRates.gold22kRate,
+    liveRates.gold21kRate,
+    liveRates.gold18kRate,
+  ];
+
+  const directions = useDirections(rowValues);
+
   const rows = [
-    { title: "TT. BAR (0.995)",   tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon /> },
-    { title: "TT. BAR (0.999)",   tag: "TTB", value: fmt(liveRates.ttBar999Total), icon: <GoldBarIcon /> },
-    { title: "GOLD (0.9999)",     tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon /> },
-    { title: "KG BAR (0.995)",    tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon /> },
-    { title: "Gold Jewelry 22K",  tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon /> },
-    { title: "Gold Jewelry 21K",  tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon /> },
-    { title: "Gold Jewelry 18K",  tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon /> },
+    { title: "TT. BAR (0.995)",  tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon /> },
+    { title: "TT. BAR (0.999)",  tag: "TTB", value: fmt(liveRates.ttBar999Total), icon: <GoldBarIcon /> },
+    { title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon /> },
+    { title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon /> },
+    { title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon /> },
+    { title: "Gold Jewelry 21K", tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon /> },
+    { title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon /> },
   ];
 
   return (
@@ -170,14 +290,11 @@ export default function ShowroomBoard() {
           repeating-linear-gradient(90deg, ${GOLD}0d 0px, ${GOLD}0d 1px, transparent 1px, transparent 64px)
         `,
         backgroundBlendMode: "normal, normal, normal",
-        // Tighter vertical padding on large screens so rows get the full real-estate
         padding: "clamp(0.5rem, 1.2vh, 1.5rem) clamp(0.75rem, 2.5vw, 3rem)",
       }}
     >
-      <div
-        className="w-full flex flex-col mx-auto lg:h-full"
-        style={{ maxWidth: 1400 }}
-      >
+      <div className="w-full flex flex-col mx-auto lg:h-full" style={{ maxWidth: 1400 }}>
+
         {/* ── Header: logo + date/clock pill ── */}
         <div
           className="flex flex-col items-center shrink-0"
@@ -187,7 +304,6 @@ export default function ShowroomBoard() {
             <div
               className="flex items-center justify-center"
               style={{
-                // Cap logo at 80px on large screens (was 120px) so it doesn't crowd the rows
                 height: "clamp(3.5rem, 10vh, 80px)",
                 marginBottom: "clamp(0.2rem, 0.5vh, 0.5rem)",
                 filter: `drop-shadow(0 0 28px ${GOLD}66)`,
@@ -216,6 +332,7 @@ export default function ShowroomBoard() {
               Hazari Gold <span style={{ color: "#f5f5f5", fontSize: "0.65em" }}>✦</span>
             </div>
           )}
+
           <div
             className="flex items-center justify-between rounded-full w-full"
             style={{
@@ -241,20 +358,18 @@ export default function ShowroomBoard() {
           </div>
         </div>
 
-        {/* ── 7 asset rows — flex-1 + min-h-0 lets them share space equally ── */}
+        {/* ── 7 asset rows ── */}
         <div
           className="flex flex-col w-full lg:flex-1 lg:min-h-0"
           style={{ gap: "clamp(0.25rem, 0.6vh, 0.6rem)" }}
         >
           {rows.map((row, i) => (
-            // NO explicit minHeight here — let flex-1 distribute evenly on large screens.
-            // On mobile (no lg: classes) each row falls back to natural content height.
             <div
-              key={`${row.title}-${row.tag}-${i}`}
+              key={`${row.title}-${i}`}
               className="lg:flex-1 lg:min-h-0"
               style={{ minHeight: "clamp(3rem, 7vh, 5rem)" }}
             >
-              <AssetRow {...row} />
+              <AssetRow {...row} direction={directions[i]} />
             </div>
           ))}
         </div>
