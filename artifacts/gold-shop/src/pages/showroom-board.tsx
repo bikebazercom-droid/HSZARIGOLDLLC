@@ -121,14 +121,30 @@ function TradingViewWidget() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Widget iframe — pointer events disabled at the container level so
+          clicks never reach the iframe or trigger TradingView navigation. */}
       <div
         ref={containerRef}
         className="tradingview-widget-container"
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", pointerEvents: "none" }}
       />
-      {/* Absolute overlay that covers the TradingView branding icon rendered
-          in the top-right corner of the embedded iframe. Colour matches the
-          parent container's dark background so it is visually seamless. */}
+
+      {/* Full-coverage glass shield — transparent, sits above the iframe,
+          catches every mouse/touch event before it can reach the inner iframe.
+          This is the primary click-intercept layer for the kiosk. */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 10,
+          background: "transparent",
+          cursor: "default",
+        }}
+      />
+
+      {/* Secondary overlay that covers the TradingView branding icon in the
+          top-right corner of the embedded iframe. */}
       <div
         aria-hidden
         style={{
@@ -138,8 +154,7 @@ function TradingViewWidget() {
           width: 56,
           height: 48,
           background: "#0a0a0a",
-          zIndex: 5,
-          pointerEvents: "none",
+          zIndex: 11,
           borderRadius: "0 0 0 6px",
         }}
       />
