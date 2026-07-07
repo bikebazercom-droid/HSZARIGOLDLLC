@@ -272,6 +272,7 @@ export default function ShowroomBoard() {
     liveRates.gold22kRate,
     liveRates.gold21kRate,
     liveRates.gold18kRate,
+    liveRates.goldKg9999Total,
   ];
 
   const directions = useDirections(rowValues);
@@ -284,7 +285,8 @@ export default function ShowroomBoard() {
     { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
     { idx: 4, title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold22k   ?? true },
     { idx: 5, title: "Gold Jewelry 21K", tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold21k   ?? true },
-    { idx: 6, title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold18k   ?? true },
+    { idx: 6, title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold18k    ?? true },
+    { idx: 7, title: "GOLD KG (0.9999)", tag: "1KG", value: fmt(liveRates.goldKg9999Total), icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGoldKg9999 ?? true },
   ];
 
   // Only render rows toggled ON; direction tracked by original idx (stable)

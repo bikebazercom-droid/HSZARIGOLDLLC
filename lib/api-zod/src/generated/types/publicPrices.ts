@@ -19,6 +19,7 @@ export interface PublicPrices {
   gold21kRate: number;
   gold18kRate: number;
   gold9999Rate: number;
+  goldKg9999Rate: number;
   liveModeConnected: boolean;
   /** @nullable */
   liveSilverRate?: number | null;
@@ -38,4 +39,5 @@ export interface PublicPrices {
   tvShowGold22k: boolean;
   tvShowGold21k: boolean;
   tvShowGold18k: boolean;
+  tvShowGoldKg9999: boolean;
 }

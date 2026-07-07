@@ -21,6 +21,8 @@ export const pricesTable = pgTable("prices", {
   // Manual-editable/live-syncable parity with the other core assets above:
   // auto-populated from goldBullionRate * 0.9999 on Connect.
   gold9999Rate: numeric("gold_9999_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  // GOLD KG (0.9999) — per-gram rate for invoice/admin; TV board shows 1KG total.
+  goldKg9999Rate: numeric("gold_kg_9999_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   customDescriptions: text("custom_descriptions").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 
@@ -57,6 +59,7 @@ export const pricesTable = pgTable("prices", {
   tvShowGold22k:  boolean("tv_show_gold_22k").notNull().default(true),
   tvShowGold21k:  boolean("tv_show_gold_21k").notNull().default(true),
   tvShowGold18k:  boolean("tv_show_gold_18k").notNull().default(true),
+  tvShowGoldKg9999: boolean("tv_show_gold_kg_9999").notNull().default(true),
 });
 
 export const insertPricesSchema = createInsertSchema(pricesTable).omit({ id: true, updatedAt: true });

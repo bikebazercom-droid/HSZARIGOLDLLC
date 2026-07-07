@@ -650,7 +650,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider, manualInvoiceMode, tvShowTtBar995, tvShowTtBar999, tvShowGold9999, tvShowKgBar995, tvShowGold22k, tvShowGold21k, tvShowGold18k]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, goldKg9999Rate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider, manualInvoiceMode, tvShowTtBar995, tvShowTtBar999, tvShowGold9999, tvShowKgBar995, tvShowGold22k, tvShowGold21k, tvShowGold18k, tvShowGoldKg9999]
       properties:
         id:
           type: integer
@@ -676,6 +676,9 @@ components:
           type: number
         gold9999Rate:
           type: number
+        goldKg9999Rate:
+          type: number
+          description: GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.
         customDescriptions:
           type: array
           items:
@@ -736,11 +739,14 @@ components:
         tvShowGold18k:
           type: boolean
           description: Whether the Gold Jewelry 18K row is visible on the showroom TV board.
+        tvShowGoldKg9999:
+          type: boolean
+          description: Whether the GOLD KG (0.9999) row is visible on the showroom TV board.
 
     PublicPrices:
       type: object
       description: Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
-      required: [goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, silverPricePerGram, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, liveModeConnected, updatedAt, tvShowTtBar995, tvShowTtBar999, tvShowGold9999, tvShowKgBar995, tvShowGold22k, tvShowGold21k, tvShowGold18k]
+      required: [goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, silverPricePerGram, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, goldKg9999Rate, liveModeConnected, updatedAt, tvShowTtBar995, tvShowTtBar999, tvShowGold9999, tvShowKgBar995, tvShowGold22k, tvShowGold21k, tvShowGold18k, tvShowGoldKg9999]
       properties:
         goldBullionRate:
           type: number
@@ -759,6 +765,8 @@ components:
         gold18kRate:
           type: number
         gold9999Rate:
+          type: number
+        goldKg9999Rate:
           type: number
         liveModeConnected:
           type: boolean
@@ -787,6 +795,8 @@ components:
         tvShowGold21k:
           type: boolean
         tvShowGold18k:
+          type: boolean
+        tvShowGoldKg9999:
           type: boolean
 
 
@@ -824,6 +834,8 @@ components:
           type: number
         gold9999Rate:
           type: number
+        goldKg9999Rate:
+          type: number
         customDescriptions:
           type: array
           items:
@@ -844,6 +856,8 @@ components:
         tvShowGold21k:
           type: boolean
         tvShowGold18k:
+          type: boolean
+        tvShowGoldKg9999:
           type: boolean
 
     Customer:

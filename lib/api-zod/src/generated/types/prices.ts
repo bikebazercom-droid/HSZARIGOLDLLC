@@ -21,6 +21,8 @@ export interface Prices {
   gold21kRate: number;
   gold18kRate: number;
   gold9999Rate: number;
+  /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
+  goldKg9999Rate: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;
@@ -73,4 +75,6 @@ export interface Prices {
   tvShowGold21k: boolean;
   /** Whether the Gold Jewelry 18K row is visible on the showroom TV board. */
   tvShowGold18k: boolean;
+  /** Whether the GOLD KG (0.9999) row is visible on the showroom TV board. */
+  tvShowGoldKg9999: boolean;
 }

@@ -120,6 +120,7 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     gold21kRate: Number(p.gold21kRate),
     gold18kRate: Number(p.gold18kRate),
     gold9999Rate: Number(p.gold9999Rate),
+    goldKg9999Rate: Number(p.goldKg9999Rate),
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
@@ -143,6 +144,7 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     tvShowGold22k:  p.tvShowGold22k,
     tvShowGold21k:  p.tvShowGold21k,
     tvShowGold18k:  p.tvShowGold18k,
+    tvShowGoldKg9999: p.tvShowGoldKg9999,
   };
 }
 
@@ -207,6 +209,7 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
       gold21kRate: parsed.gold21kRate,
       gold18kRate: parsed.gold18kRate,
       gold9999Rate: parsed.gold9999Rate,
+      goldKg9999Rate: parsed.goldKg9999Rate,
       liveModeConnected: liveSpot !== null,
       liveSilverRate: parsed.liveSilverRate,
       liveGoldBid: null,
@@ -221,6 +224,7 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
       tvShowGold22k:  parsed.tvShowGold22k,
       tvShowGold21k:  parsed.tvShowGold21k,
       tvShowGold18k:  parsed.tvShowGold18k,
+      tvShowGoldKg9999: parsed.tvShowGoldKg9999,
     }),
   );
 });
@@ -235,7 +239,7 @@ router.put("/prices", async (req, res): Promise<void> => {
   const numFields = [
     "goldPricePerGram", "silverPricePerGram", "goldJewelryRate",
     "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate",
-    "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate",
+    "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate", "goldKg9999Rate",
   ];
   for (const f of numFields) {
     if (body[f] != null) updates[f] = String(body[f]);
@@ -248,7 +252,7 @@ router.put("/prices", async (req, res): Promise<void> => {
   const boolFields = [
     "manualInvoiceMode",
     "tvShowTtBar995", "tvShowTtBar999", "tvShowGold9999", "tvShowKgBar995",
-    "tvShowGold22k", "tvShowGold21k", "tvShowGold18k",
+    "tvShowGold22k", "tvShowGold21k", "tvShowGold18k", "tvShowGoldKg9999",
   ] as const;
   for (const f of boolFields) {
     if (typeof body[f] === "boolean") updates[f] = body[f] as boolean;
@@ -279,7 +283,7 @@ router.patch("/prices", async (req, res): Promise<void> => {
   const boolFields = [
     "manualInvoiceMode",
     "tvShowTtBar995", "tvShowTtBar999", "tvShowGold9999", "tvShowKgBar995",
-    "tvShowGold22k", "tvShowGold21k", "tvShowGold18k",
+    "tvShowGold22k", "tvShowGold21k", "tvShowGold18k", "tvShowGoldKg9999",
   ] as const;
   for (const f of boolFields) {
     if (typeof body[f] === "boolean") updates[f] = body[f] as boolean;

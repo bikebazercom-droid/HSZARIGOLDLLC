@@ -27,13 +27,13 @@ import jewelryRingImg from "@/assets/rates/jewelry-ring.png";
 
 const NAVY = "#1e3a5f";
 
-type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "ttBar24kRate" | "kgBarRate" | "silverPricePerGram" | "gold22kRate" | "gold21kRate" | "gold18kRate" | "gold9999Rate";
+type RateKey = "goldJewelryRate" | "goldBullionRate" | "ttBarRate" | "ttBar24kRate" | "kgBarRate" | "silverPricePerGram" | "gold22kRate" | "gold21kRate" | "gold18kRate" | "gold9999Rate" | "goldKg9999Rate";
 interface CustomItem { name: string; rate: number }
 
 const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
 
 /* ── Luxury asset rate card ───────────────────────────────────── */
-type TvVisibilityKey = "tvShowTtBar995" | "tvShowTtBar999" | "tvShowGold9999" | "tvShowKgBar995" | "tvShowGold22k" | "tvShowGold21k" | "tvShowGold18k";
+type TvVisibilityKey = "tvShowTtBar995" | "tvShowTtBar999" | "tvShowGold9999" | "tvShowKgBar995" | "tvShowGold22k" | "tvShowGold21k" | "tvShowGold18k" | "tvShowGoldKg9999";
 
 interface AssetCardProps {
   label: string; sublabel: string; image: string;
@@ -220,24 +220,25 @@ export default function Prices() {
     ttBarRate:           r != null ? round2(r * 0.995) : null,
     ttBar24kRate:        r != null ? round2(r * 0.9999) : null,
     gold9999Rate:        r,
+    goldKg9999Rate:      r != null ? round2(r * 0.9999) : null,
     kgBarRate:           r != null ? round2(r * 0.995) : null,
     gold22kRate:         liveRates.gold22kRate,
     gold21kRate:         liveRates.gold21kRate,
     gold18kRate:         liveRates.gold18kRate,
   };
 
-  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram", "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate"];
+  const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram", "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate", "goldKg9999Rate"];
 
   const [localRates, setLocalRates] = useState<Record<RateKey, number>>({
     goldJewelryRate: 0, goldBullionRate: 0, ttBarRate: 0, ttBar24kRate: 0, kgBarRate: 0, silverPricePerGram: 0,
-    gold22kRate: 0, gold21kRate: 0, gold18kRate: 0, gold9999Rate: 0,
+    gold22kRate: 0, gold21kRate: 0, gold18kRate: 0, gold9999Rate: 0, goldKg9999Rate: 0,
   });
   const [localManualMode, setLocalManualMode] = useState(false);
   const [togglingMode, setTogglingMode] = useState(false);
 
   const [tvVisibility, setTvVisibility] = useState<Record<TvVisibilityKey, boolean>>({
     tvShowTtBar995: true, tvShowTtBar999: true, tvShowGold9999: true, tvShowKgBar995: true,
-    tvShowGold22k: true, tvShowGold21k: true, tvShowGold18k: true,
+    tvShowGold22k: true, tvShowGold21k: true, tvShowGold18k: true, tvShowGoldKg9999: true,
   });
 
   // Sync manual-mode flag and TV visibility from DB whenever prices load/refresh
@@ -249,9 +250,10 @@ export default function Prices() {
         tvShowTtBar999: prices.tvShowTtBar999 ?? true,
         tvShowGold9999: prices.tvShowGold9999 ?? true,
         tvShowKgBar995: prices.tvShowKgBar995 ?? true,
-        tvShowGold22k:  prices.tvShowGold22k  ?? true,
-        tvShowGold21k:  prices.tvShowGold21k  ?? true,
-        tvShowGold18k:  prices.tvShowGold18k  ?? true,
+        tvShowGold22k:    prices.tvShowGold22k    ?? true,
+        tvShowGold21k:    prices.tvShowGold21k    ?? true,
+        tvShowGold18k:    prices.tvShowGold18k    ?? true,
+        tvShowGoldKg9999: prices.tvShowGoldKg9999 ?? true,
       });
     }
   }, [prices]);
@@ -328,7 +330,8 @@ export default function Prices() {
         gold22kRate: prices.gold22kRate,
         gold21kRate: prices.gold21kRate,
         gold18kRate: prices.gold18kRate,
-        gold9999Rate: prices.gold9999Rate,
+        gold9999Rate:    prices.gold9999Rate,
+        goldKg9999Rate:  prices.goldKg9999Rate,
       });
       const items = (prices.customDescriptions ?? []) as CustomItem[];
       setCustomItems(items);
@@ -453,6 +456,7 @@ export default function Prices() {
     { label: "TT. BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate", tvVisibilityKey: "tvShowTtBar995" },
     { label: "TT. BAR (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
     { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate", tvVisibilityKey: "tvShowGold9999" },
+    { label: "GOLD KG (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram (TV shows 1KG total)", image: singleGoldBarImg, fieldKey: "goldKg9999Rate", tvVisibilityKey: "tvShowGoldKg9999" },
     { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate", tvVisibilityKey: "tvShowKgBar995" },
     { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" },
     { label: "Gold Jewelry 22K", sublabel: "Purity 0.916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold22kRate", tvVisibilityKey: "tvShowGold22k" },

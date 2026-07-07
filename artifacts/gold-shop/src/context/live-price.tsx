@@ -37,6 +37,8 @@ export interface LiveRates {
   ttBar995Total: number | null;  // TT. BAR (0.995) total price per bar
   ttBar9999Total: number | null;  // TT. BAR (0.9999) total price per bar
   gold9999Rate:  number | null;  // GOLD (0.9999) per gram
+  goldKg9999Total: number | null; // GOLD KG (0.9999) total price per 1KG bar (TV)
+  goldKg9999Rate:  number | null; // GOLD KG (0.9999) per gram (admin / invoice)
   kgBar995Total: number | null;  // KG BAR (0.995) total price per kg
   gold22kRate:   number | null;  // Gold Jewelry 22K per gram
   gold21kRate:   number | null;  // Gold Jewelry 21K per gram
@@ -55,6 +57,8 @@ const EMPTY_RATES: LiveRates = {
   ttBar995Total: null,
   ttBar9999Total: null,
   gold9999Rate:  null,
+  goldKg9999Total: null,
+  goldKg9999Rate:  null,
   kgBar995Total: null,
   gold22kRate:   null,
   gold21kRate:   null,
@@ -98,6 +102,8 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       ttBar995Total: round2(base * TOLA_BAR_GRAMS * PURITY_995),
       ttBar9999Total: round2(base * TOLA_BAR_GRAMS * PURITY_9999),
       gold9999Rate:  base,
+      goldKg9999Total: round2(base * 1000 * PURITY_9999),
+      goldKg9999Rate:  round2(base * PURITY_9999),
       kgBar995Total: round2(base * 1000 * PURITY_995),
       gold22kRate:   round2(base * PURITY_22K),
       gold21kRate:   round2(base * PURITY_21K),

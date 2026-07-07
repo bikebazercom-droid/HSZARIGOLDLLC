@@ -19,6 +19,7 @@ export interface PricesInput {
   gold21kRate?: number;
   gold18kRate?: number;
   gold9999Rate?: number;
+  goldKg9999Rate?: number;
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
@@ -29,4 +30,5 @@ export interface PricesInput {
   tvShowGold22k?: boolean;
   tvShowGold21k?: boolean;
   tvShowGold18k?: boolean;
+  tvShowGoldKg9999?: boolean;
 }

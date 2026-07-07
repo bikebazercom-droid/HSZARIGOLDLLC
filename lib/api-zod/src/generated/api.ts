@@ -220,6 +220,7 @@ export const GetPricesResponse = zod.object({
   "gold21kRate": zod.number(),
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
+  "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -244,7 +245,8 @@ export const GetPricesResponse = zod.object({
   "tvShowKgBar995": zod.boolean().describe('Whether the KG BAR (0.995) row is visible on the showroom TV board.'),
   "tvShowGold22k": zod.boolean().describe('Whether the Gold Jewelry 22K row is visible on the showroom TV board.'),
   "tvShowGold21k": zod.boolean().describe('Whether the Gold Jewelry 21K row is visible on the showroom TV board.'),
-  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.')
+  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.'),
+  "tvShowGoldKg9999": zod.boolean().describe('Whether the GOLD KG (0.9999) row is visible on the showroom TV board.')
 })
 
 
@@ -263,6 +265,7 @@ export const UpdatePricesBody = zod.object({
   "gold21kRate": zod.number().optional(),
   "gold18kRate": zod.number().optional(),
   "gold9999Rate": zod.number().optional(),
+  "goldKg9999Rate": zod.number().optional(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -274,7 +277,8 @@ export const UpdatePricesBody = zod.object({
   "tvShowKgBar995": zod.boolean().optional(),
   "tvShowGold22k": zod.boolean().optional(),
   "tvShowGold21k": zod.boolean().optional(),
-  "tvShowGold18k": zod.boolean().optional()
+  "tvShowGold18k": zod.boolean().optional(),
+  "tvShowGoldKg9999": zod.boolean().optional()
 })
 
 export const UpdatePricesResponse = zod.object({
@@ -290,6 +294,7 @@ export const UpdatePricesResponse = zod.object({
   "gold21kRate": zod.number(),
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
+  "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -314,7 +319,8 @@ export const UpdatePricesResponse = zod.object({
   "tvShowKgBar995": zod.boolean().describe('Whether the KG BAR (0.995) row is visible on the showroom TV board.'),
   "tvShowGold22k": zod.boolean().describe('Whether the Gold Jewelry 22K row is visible on the showroom TV board.'),
   "tvShowGold21k": zod.boolean().describe('Whether the Gold Jewelry 21K row is visible on the showroom TV board.'),
-  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.')
+  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.'),
+  "tvShowGoldKg9999": zod.boolean().describe('Whether the GOLD KG (0.9999) row is visible on the showroom TV board.')
 })
 
 
@@ -341,6 +347,7 @@ export const GetPublicPricesResponse = zod.object({
   "gold21kRate": zod.number(),
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
+  "goldKg9999Rate": zod.number(),
   "liveModeConnected": zod.boolean(),
   "liveSilverRate": zod.number().nullish(),
   "liveGoldBid": zod.number().nullish(),
@@ -354,7 +361,8 @@ export const GetPublicPricesResponse = zod.object({
   "tvShowKgBar995": zod.boolean(),
   "tvShowGold22k": zod.boolean(),
   "tvShowGold21k": zod.boolean(),
-  "tvShowGold18k": zod.boolean()
+  "tvShowGold18k": zod.boolean(),
+  "tvShowGoldKg9999": zod.boolean()
 }).describe('Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.')
 
 
