@@ -33,20 +33,24 @@ interface CustomItem { name: string; rate: number }
 const TODAY = new Date().toLocaleDateString("en-AE", { day: "2-digit", month: "short", year: "numeric" });
 
 /* ── Luxury asset rate card ───────────────────────────────────── */
+type TvVisibilityKey = "tvShowTtBar995" | "tvShowTtBar999" | "tvShowGold9999" | "tvShowKgBar995" | "tvShowGold22k" | "tvShowGold21k" | "tvShowGold18k";
+
 interface AssetCardProps {
   label: string; sublabel: string; image: string;
   fieldKey: RateKey; savedValue: number; value: number;
   onChange: (field: RateKey, value: number) => void;
   onSave: (field: RateKey, value: number) => Promise<void>;
   liveLocked?: boolean;
-  liveValue?: number | null;  // real-time value from LivePriceContext (overrides DB value when liveLocked)
+  liveValue?: number | null;
+  tvVisibilityKey?: TvVisibilityKey;
+  tvVisible?: boolean;
+  onToggleTvVisible?: (key: TvVisibilityKey, value: boolean) => void;
 }
 
-function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChange, onSave, liveLocked, liveValue }: AssetCardProps) {
+function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChange, onSave, liveLocked, liveValue, tvVisibilityKey, tvVisible, onToggleTvVisible }: AssetCardProps) {
   const [saving, setSaving] = useState(false);
   const changed = value !== savedValue;
   const handleSave = async () => { setSaving(true); await onSave(fieldKey, value); setSaving(false); };
-  // When live-locked, prefer the 1-second context value; fall back to DB value only while context is warming up
   const displayValue = liveLocked && liveValue != null ? liveValue : value;
   return (
     <Card
@@ -100,6 +104,30 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChan
             onClick={handleSave} disabled={saving || !changed} size="sm">
             {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
           </Button>
+        )}
+        {tvVisibilityKey && onToggleTvVisible && (
+          <div
+            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 mt-1"
+            style={{
+              background: tvVisible ? "#f0fdf4" : "#fafafa",
+              border: `1px solid ${tvVisible ? "#10b98144" : "#e5e7eb"}`,
+            }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm" aria-hidden>📺</span>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-foreground leading-tight">Show on TV Screen</div>
+                <div className="text-[10px] text-muted-foreground leading-tight truncate">
+                  {tvVisible ? "Visible on showroom board" : "Hidden from showroom board"}
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={tvVisible ?? true}
+              onCheckedChange={v => onToggleTvVisible(tvVisibilityKey, v)}
+              className="flex-shrink-0"
+            />
+          </div>
         )}
       </CardContent>
     </Card>
@@ -207,10 +235,26 @@ export default function Prices() {
   const [localManualMode, setLocalManualMode] = useState(false);
   const [togglingMode, setTogglingMode] = useState(false);
 
-  // Sync manual-mode flag from DB whenever prices load/refresh
+  const [tvVisibility, setTvVisibility] = useState<Record<TvVisibilityKey, boolean>>({
+    tvShowTtBar995: true, tvShowTtBar999: true, tvShowGold9999: true, tvShowKgBar995: true,
+    tvShowGold22k: true, tvShowGold21k: true, tvShowGold18k: true,
+  });
+
+  // Sync manual-mode flag and TV visibility from DB whenever prices load/refresh
   useEffect(() => {
-    if (prices) setLocalManualMode(prices.manualInvoiceMode ?? false);
-  }, [prices?.manualInvoiceMode]);
+    if (prices) {
+      setLocalManualMode(prices.manualInvoiceMode ?? false);
+      setTvVisibility({
+        tvShowTtBar995: prices.tvShowTtBar995 ?? true,
+        tvShowTtBar999: prices.tvShowTtBar999 ?? true,
+        tvShowGold9999: prices.tvShowGold9999 ?? true,
+        tvShowKgBar995: prices.tvShowKgBar995 ?? true,
+        tvShowGold22k:  prices.tvShowGold22k  ?? true,
+        tvShowGold21k:  prices.tvShowGold21k  ?? true,
+        tvShowGold18k:  prices.tvShowGold18k  ?? true,
+      });
+    }
+  }, [prices]);
 
   const handleToggleManualMode = () => {
     const next = !localManualMode;
@@ -231,6 +275,17 @@ export default function Prices() {
         toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
       },
       onSettled: () => setTogglingMode(false),
+    });
+  };
+
+  const handleToggleTvVisible = (key: TvVisibilityKey, value: boolean) => {
+    setTvVisibility(prev => ({ ...prev, [key]: value }));
+    updatePrices.mutate({ data: { [key]: value } as any }, {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() }),
+      onError: (err: any) => {
+        setTvVisibility(prev => ({ ...prev, [key]: !value }));
+        toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
+      },
     });
   };
 
@@ -391,15 +446,18 @@ export default function Prices() {
     );
   }
 
-  const assetCards = [
-    { label: "TT. BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate" as const },
-    { label: "TT. BAR (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate" as const },
-    { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate" as const },
-    { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate" as const },
-    { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" as const },
-    { label: "Gold Jewelry 22K", sublabel: "Purity 0.916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold22kRate" as const },
-    { label: "Gold Jewelry 21K", sublabel: "Purity 0.875 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold21kRate" as const },
-    { label: "Gold Jewelry 18K", sublabel: "Purity 0.750 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold18kRate" as const },
+  const assetCards: Array<{
+    label: string; sublabel: string; image: string;
+    fieldKey: RateKey; tvVisibilityKey?: TvVisibilityKey;
+  }> = [
+    { label: "TT. BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate", tvVisibilityKey: "tvShowTtBar995" },
+    { label: "TT. BAR (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
+    { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate", tvVisibilityKey: "tvShowGold9999" },
+    { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate", tvVisibilityKey: "tvShowKgBar995" },
+    { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" },
+    { label: "Gold Jewelry 22K", sublabel: "Purity 0.916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold22kRate", tvVisibilityKey: "tvShowGold22k" },
+    { label: "Gold Jewelry 21K", sublabel: "Purity 0.875 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold21kRate", tvVisibilityKey: "tvShowGold21k" },
+    { label: "Gold Jewelry 18K", sublabel: "Purity 0.750 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold18kRate", tvVisibilityKey: "tvShowGold18k" },
   ];
 
   return (
@@ -488,7 +546,9 @@ export default function Prices() {
             value={localRates[asset.fieldKey]}
             onChange={handleChange} onSave={handleSaveOne}
             liveLocked={prices.liveModeConnected && !localManualMode}
-            liveValue={liveValueByKey[asset.fieldKey]} />
+            liveValue={liveValueByKey[asset.fieldKey]}
+            tvVisible={asset.tvVisibilityKey ? tvVisibility[asset.tvVisibilityKey] : undefined}
+            onToggleTvVisible={handleToggleTvVisible} />
         ))}
 
         {customItems.map(item => (

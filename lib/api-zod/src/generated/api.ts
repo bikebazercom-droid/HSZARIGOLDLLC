@@ -237,7 +237,14 @@ export const GetPricesResponse = zod.object({
   "liveGoldAsk": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveGoldHigh": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveGoldLow": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
-  "liveLastSyncedAt": zod.string().nullish()
+  "liveLastSyncedAt": zod.string().nullish(),
+  "tvShowTtBar995": zod.boolean().describe('Whether the TT. BAR (0.995) row is visible on the showroom TV board.'),
+  "tvShowTtBar999": zod.boolean().describe('Whether the TT. BAR (0.999) row is visible on the showroom TV board.'),
+  "tvShowGold9999": zod.boolean().describe('Whether the GOLD (0.9999) row is visible on the showroom TV board.'),
+  "tvShowKgBar995": zod.boolean().describe('Whether the KG BAR (0.995) row is visible on the showroom TV board.'),
+  "tvShowGold22k": zod.boolean().describe('Whether the Gold Jewelry 22K row is visible on the showroom TV board.'),
+  "tvShowGold21k": zod.boolean().describe('Whether the Gold Jewelry 21K row is visible on the showroom TV board.'),
+  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.')
 })
 
 
@@ -260,7 +267,14 @@ export const UpdatePricesBody = zod.object({
   "name": zod.string(),
   "rate": zod.number()
 })).optional(),
-  "manualInvoiceMode": zod.boolean().optional().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.')
+  "manualInvoiceMode": zod.boolean().optional().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.'),
+  "tvShowTtBar995": zod.boolean().optional(),
+  "tvShowTtBar999": zod.boolean().optional(),
+  "tvShowGold9999": zod.boolean().optional(),
+  "tvShowKgBar995": zod.boolean().optional(),
+  "tvShowGold22k": zod.boolean().optional(),
+  "tvShowGold21k": zod.boolean().optional(),
+  "tvShowGold18k": zod.boolean().optional()
 })
 
 export const UpdatePricesResponse = zod.object({
@@ -293,7 +307,14 @@ export const UpdatePricesResponse = zod.object({
   "liveGoldAsk": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveGoldHigh": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
   "liveGoldLow": zod.number().nullish().describe('Not populated by APILayer Metals-API; always null.'),
-  "liveLastSyncedAt": zod.string().nullish()
+  "liveLastSyncedAt": zod.string().nullish(),
+  "tvShowTtBar995": zod.boolean().describe('Whether the TT. BAR (0.995) row is visible on the showroom TV board.'),
+  "tvShowTtBar999": zod.boolean().describe('Whether the TT. BAR (0.999) row is visible on the showroom TV board.'),
+  "tvShowGold9999": zod.boolean().describe('Whether the GOLD (0.9999) row is visible on the showroom TV board.'),
+  "tvShowKgBar995": zod.boolean().describe('Whether the KG BAR (0.995) row is visible on the showroom TV board.'),
+  "tvShowGold22k": zod.boolean().describe('Whether the Gold Jewelry 22K row is visible on the showroom TV board.'),
+  "tvShowGold21k": zod.boolean().describe('Whether the Gold Jewelry 21K row is visible on the showroom TV board.'),
+  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.')
 })
 
 
@@ -326,7 +347,14 @@ export const GetPublicPricesResponse = zod.object({
   "liveGoldAsk": zod.number().nullish(),
   "liveGoldHigh": zod.number().nullish(),
   "liveGoldLow": zod.number().nullish(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "tvShowTtBar995": zod.boolean(),
+  "tvShowTtBar999": zod.boolean(),
+  "tvShowGold9999": zod.boolean(),
+  "tvShowKgBar995": zod.boolean(),
+  "tvShowGold22k": zod.boolean(),
+  "tvShowGold21k": zod.boolean(),
+  "tvShowGold18k": zod.boolean()
 }).describe('Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.')
 
 

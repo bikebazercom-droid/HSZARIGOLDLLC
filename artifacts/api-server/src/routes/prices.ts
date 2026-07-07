@@ -136,6 +136,13 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     liveLastSyncedAt: p.liveLastSyncedAt
       ? p.liveLastSyncedAt.toISOString()
       : null,
+    tvShowTtBar995: p.tvShowTtBar995,
+    tvShowTtBar999: p.tvShowTtBar999,
+    tvShowGold9999: p.tvShowGold9999,
+    tvShowKgBar995: p.tvShowKgBar995,
+    tvShowGold22k:  p.tvShowGold22k,
+    tvShowGold21k:  p.tvShowGold21k,
+    tvShowGold18k:  p.tvShowGold18k,
   };
 }
 
@@ -207,6 +214,13 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
       liveGoldHigh: null,
       liveGoldLow: null,
       updatedAt: liveSpot?.receivedAt.toISOString() ?? parsed.updatedAt,
+      tvShowTtBar995: parsed.tvShowTtBar995,
+      tvShowTtBar999: parsed.tvShowTtBar999,
+      tvShowGold9999: parsed.tvShowGold9999,
+      tvShowKgBar995: parsed.tvShowKgBar995,
+      tvShowGold22k:  parsed.tvShowGold22k,
+      tvShowGold21k:  parsed.tvShowGold21k,
+      tvShowGold18k:  parsed.tvShowGold18k,
     }),
   );
 });
@@ -272,8 +286,14 @@ router.patch("/prices", async (req, res): Promise<void> => {
   }
   if (body.customDescriptions != null)
     updates.customDescriptions = JSON.stringify(body.customDescriptions);
-  if (typeof body.manualInvoiceMode === "boolean")
-    updates.manualInvoiceMode = body.manualInvoiceMode;
+  const boolFields = [
+    "manualInvoiceMode",
+    "tvShowTtBar995", "tvShowTtBar999", "tvShowGold9999", "tvShowKgBar995",
+    "tvShowGold22k", "tvShowGold21k", "tvShowGold18k",
+  ] as const;
+  for (const f of boolFields) {
+    if (typeof body[f] === "boolean") updates[f] = body[f] as boolean;
+  }
 
   const [updated] = await db.update(pricesTable).set(updates).returning();
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));

@@ -49,6 +49,14 @@ export const pricesTable = pgTable("prices", {
   preLiveGold21kRate: numeric("pre_live_gold_21k_rate", { precision: 12, scale: 4 }),
   preLiveGold18kRate: numeric("pre_live_gold_18k_rate", { precision: 12, scale: 4 }),
   preLiveGold9999Rate: numeric("pre_live_gold_9999_rate", { precision: 12, scale: 4 }),
+  // TV board row visibility — admin can hide individual rows from the showroom TV
+  tvShowTtBar995: boolean("tv_show_tt_bar_995").notNull().default(true),
+  tvShowTtBar999: boolean("tv_show_tt_bar_999").notNull().default(true),
+  tvShowGold9999: boolean("tv_show_gold_9999").notNull().default(true),
+  tvShowKgBar995: boolean("tv_show_kg_bar_995").notNull().default(true),
+  tvShowGold22k:  boolean("tv_show_gold_22k").notNull().default(true),
+  tvShowGold21k:  boolean("tv_show_gold_21k").notNull().default(true),
+  tvShowGold18k:  boolean("tv_show_gold_18k").notNull().default(true),
 });
 
 export const insertPricesSchema = createInsertSchema(pricesTable).omit({ id: true, updatedAt: true });

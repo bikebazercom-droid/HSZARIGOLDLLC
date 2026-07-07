@@ -59,4 +59,18 @@ export interface Prices {
   liveGoldLow?: number | null;
   /** @nullable */
   liveLastSyncedAt?: string | null;
+  /** Whether the TT. BAR (0.995) row is visible on the showroom TV board. */
+  tvShowTtBar995: boolean;
+  /** Whether the TT. BAR (0.999) row is visible on the showroom TV board. */
+  tvShowTtBar999: boolean;
+  /** Whether the GOLD (0.9999) row is visible on the showroom TV board. */
+  tvShowGold9999: boolean;
+  /** Whether the KG BAR (0.995) row is visible on the showroom TV board. */
+  tvShowKgBar995: boolean;
+  /** Whether the Gold Jewelry 22K row is visible on the showroom TV board. */
+  tvShowGold22k: boolean;
+  /** Whether the Gold Jewelry 21K row is visible on the showroom TV board. */
+  tvShowGold21k: boolean;
+  /** Whether the Gold Jewelry 18K row is visible on the showroom TV board. */
+  tvShowGold18k: boolean;
 }

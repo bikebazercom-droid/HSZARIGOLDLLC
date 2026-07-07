@@ -31,4 +31,11 @@ export interface PublicPrices {
   /** @nullable */
   liveGoldLow?: number | null;
   updatedAt: string;
+  tvShowTtBar995: boolean;
+  tvShowTtBar999: boolean;
+  tvShowGold9999: boolean;
+  tvShowKgBar995: boolean;
+  tvShowGold22k: boolean;
+  tvShowGold21k: boolean;
+  tvShowGold18k: boolean;
 }

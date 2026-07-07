@@ -3,6 +3,8 @@ import { useLivePrice } from "@/context/live-price";
 import {
   useGetPublicSettings,
   getGetPublicSettingsQueryKey,
+  useGetPublicPrices,
+  getGetPublicPricesQueryKey,
 } from "@workspace/api-client-react";
 
 const GOLD = "#d4af37";
@@ -255,9 +257,13 @@ export default function ShowroomBoard() {
   const { data: publicSettings } = useGetPublicSettings({
     query: { queryKey: getGetPublicSettingsQueryKey(), refetchInterval: 60000, refetchIntervalInBackground: true },
   });
+  // Poll visibility every 5 s — no auth needed, changes from admin appear quickly
+  const { data: publicPrices } = useGetPublicPrices({
+    query: { queryKey: getGetPublicPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
+  });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
 
-  // 7 row values in stable order — used for direction tracking
+  // Always track all 7 values for direction — stable array length regardless of visibility
   const rowValues: (number | null)[] = [
     liveRates.ttBar995Total,
     liveRates.ttBar999Total,
@@ -270,15 +276,19 @@ export default function ShowroomBoard() {
 
   const directions = useDirections(rowValues);
 
-  const rows = [
-    { title: "TT. BAR (0.995)",  tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon /> },
-    { title: "TT. BAR (0.999)",  tag: "TTB", value: fmt(liveRates.ttBar999Total), icon: <GoldBarIcon /> },
-    { title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon /> },
-    { title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon /> },
-    { title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon /> },
-    { title: "Gold Jewelry 21K", tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon /> },
-    { title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon /> },
+  // All 7 rows with their original index (for direction lookup) and visibility flag
+  const allRows = [
+    { idx: 0, title: "TT. BAR (0.995)",  tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995 ?? true },
+    { idx: 1, title: "TT. BAR (0.999)",  tag: "TTB", value: fmt(liveRates.ttBar999Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999 ?? true },
+    { idx: 2, title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGold9999   ?? true },
+    { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
+    { idx: 4, title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold22k   ?? true },
+    { idx: 5, title: "Gold Jewelry 21K", tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold21k   ?? true },
+    { idx: 6, title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold18k   ?? true },
   ];
+
+  // Only render rows toggled ON; direction tracked by original idx (stable)
+  const rows = allRows.filter(r => r.visible);
 
   return (
     <div
@@ -363,13 +373,13 @@ export default function ShowroomBoard() {
           className="flex flex-col w-full lg:flex-1 lg:min-h-0"
           style={{ gap: "clamp(0.25rem, 0.6vh, 0.6rem)" }}
         >
-          {rows.map((row, i) => (
+          {rows.map(row => (
             <div
-              key={`${row.title}-${i}`}
+              key={row.title}
               className="lg:flex-1 lg:min-h-0"
               style={{ minHeight: "clamp(3rem, 7vh, 5rem)" }}
             >
-              <AssetRow {...row} direction={directions[i]} />
+              <AssetRow {...row} direction={directions[row.idx]} />
             </div>
           ))}
         </div>

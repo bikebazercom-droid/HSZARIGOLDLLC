@@ -234,6 +234,20 @@ export interface Prices {
   liveGoldLow?: number | null;
   /** @nullable */
   liveLastSyncedAt?: string | null;
+  /** Whether the TT. BAR (0.995) row is visible on the showroom TV board. */
+  tvShowTtBar995: boolean;
+  /** Whether the TT. BAR (0.999) row is visible on the showroom TV board. */
+  tvShowTtBar999: boolean;
+  /** Whether the GOLD (0.9999) row is visible on the showroom TV board. */
+  tvShowGold9999: boolean;
+  /** Whether the KG BAR (0.995) row is visible on the showroom TV board. */
+  tvShowKgBar995: boolean;
+  /** Whether the Gold Jewelry 22K row is visible on the showroom TV board. */
+  tvShowGold22k: boolean;
+  /** Whether the Gold Jewelry 21K row is visible on the showroom TV board. */
+  tvShowGold21k: boolean;
+  /** Whether the Gold Jewelry 18K row is visible on the showroom TV board. */
+  tvShowGold18k: boolean;
 }
 
 /**
@@ -261,6 +275,13 @@ export interface PublicPrices {
   /** @nullable */
   liveGoldLow?: number | null;
   updatedAt: string;
+  tvShowTtBar995: boolean;
+  tvShowTtBar999: boolean;
+  tvShowGold9999: boolean;
+  tvShowKgBar995: boolean;
+  tvShowGold22k: boolean;
+  tvShowGold21k: boolean;
+  tvShowGold18k: boolean;
 }
 
 export interface PricesInput {
@@ -278,6 +299,13 @@ export interface PricesInput {
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
+  tvShowTtBar995?: boolean;
+  tvShowTtBar999?: boolean;
+  tvShowGold9999?: boolean;
+  tvShowKgBar995?: boolean;
+  tvShowGold22k?: boolean;
+  tvShowGold21k?: boolean;
+  tvShowGold18k?: boolean;
 }
 
 export interface Customer {
