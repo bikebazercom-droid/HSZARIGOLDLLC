@@ -226,6 +226,7 @@ export const GetPricesResponse = zod.object({
 })),
   "updatedAt": zod.string(),
   "liveModeConnected": zod.boolean(),
+  "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.'),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
   "liveApiProvider": zod.enum(['apilayer']).describe('Metal price provider currently in use (APILayer Metals-API).'),
@@ -258,7 +259,8 @@ export const UpdatePricesBody = zod.object({
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
-})).optional()
+})).optional(),
+  "manualInvoiceMode": zod.boolean().optional().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.')
 })
 
 export const UpdatePricesResponse = zod.object({
@@ -280,6 +282,7 @@ export const UpdatePricesResponse = zod.object({
 })),
   "updatedAt": zod.string(),
   "liveModeConnected": zod.boolean(),
+  "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.'),
   "liveApiKeyConfigured": zod.boolean(),
   "liveApiKeyMasked": zod.string().nullish(),
   "liveApiProvider": zod.enum(['apilayer']).describe('Metal price provider currently in use (APILayer Metals-API).'),

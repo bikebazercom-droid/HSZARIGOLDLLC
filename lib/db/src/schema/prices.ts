@@ -25,6 +25,7 @@ export const pricesTable = pgTable("prices", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 
   liveModeConnected: boolean("live_mode_connected").notNull().default(false),
+  manualInvoiceMode: boolean("manual_invoice_mode").notNull().default(false),
   liveApiKey: text("live_api_key"),
   liveApiProvider: text("live_api_provider").notNull().default("goldapi"),
   liveGoldRate24k: numeric("live_gold_rate_24k", { precision: 12, scale: 4 }),

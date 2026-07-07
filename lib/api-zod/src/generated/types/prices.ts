@@ -24,6 +24,8 @@ export interface Prices {
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;
+  /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
+  manualInvoiceMode: boolean;
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;

@@ -650,7 +650,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, customDescriptions, updatedAt, liveModeConnected, liveApiKeyConfigured, liveApiProvider, manualInvoiceMode]
       properties:
         id:
           type: integer
@@ -684,6 +684,9 @@ components:
           type: string
         liveModeConnected:
           type: boolean
+        manualInvoiceMode:
+          type: boolean
+          description: When true, invoice creation uses admin-set manual rates instead of the live spot feed.
         liveApiKeyConfigured:
           type: boolean
         liveApiKeyMasked:
@@ -790,6 +793,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CustomDescription"
+        manualInvoiceMode:
+          type: boolean
+          description: When true, invoice creation uses admin-set manual rates instead of the live spot feed.
 
     Customer:
       type: object

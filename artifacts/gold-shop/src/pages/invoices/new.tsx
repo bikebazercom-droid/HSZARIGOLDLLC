@@ -64,6 +64,7 @@ interface PricesData {
   gold18kRate: number;
   gold9999Rate: number;
   liveModeConnected?: boolean;
+  manualInvoiceMode?: boolean;
 }
 
 // The core "live-priced" asset descriptions, kept in sync with the asset
@@ -255,8 +256,11 @@ export default function NewInvoice() {
   const { data: products } = useListProducts({}, { query: { queryKey: getListProductsQueryKey({}) } });
 
   const isLive = !!(prices as PricesData | undefined)?.liveModeConnected;
+  const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
   const { liveRates } = useLivePrice();
+  // When manual mode is ON, pass undefined so rate helpers fall back to DB values.
+  const liveAed = isManualMode ? undefined : liveRates.aedPerGram;
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");
@@ -295,9 +299,14 @@ export default function NewInvoice() {
   // getRateForDesc/getRateForPurity.
   // Prefers the live 3-second spot rate so a freshly opened invoice always
   // starts from the current market price, not the 5-minute-stale DB value.
-  const baselineRate = isLive
-    ? (liveRates.aedPerGram ?? prices?.goldBullionRate ?? goldRate)
-    : (prices?.goldPricePerGram ?? goldRate);
+  // Manual mode: use the admin-set gold9999Rate from the DB (frozen baseline).
+  // Live mode: use the real-time 1s XAUUSD spot.
+  // Offline (no scraper): fall back to goldPricePerGram.
+  const baselineRate = (!isManualMode && isLive)
+    ? (liveAed ?? prices?.goldBullionRate ?? goldRate)
+    : isManualMode
+      ? (prices?.gold9999Rate ?? prices?.goldBullionRate ?? goldRate)
+      : (prices?.goldPricePerGram ?? goldRate);
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -354,7 +363,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveRates.aedPerGram);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
@@ -369,7 +378,7 @@ export default function NewInvoice() {
       }
       if (field === "purity" && value) {
         const currentCategory = updated.category ?? "gold_jewelry";
-        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveRates.aedPerGram);
+        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveAed);
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {
@@ -397,10 +406,11 @@ export default function NewInvoice() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const itemSignature = items.map(i => `${i.description}|${i.purity}|${i.category}`).join("~");
   useEffect(() => {
-    if (!isLive) return;
-    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveRates.aedPerGram));
+    // In manual mode the live 1s tick must NOT override admin-set rates.
+    if (!isLive || isManualMode) return;
+    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, prices, itemSignature]);
+  }, [isLive, isManualMode, prices, itemSignature]);
 
   // Seed the global Metal Rate with a sensible baseline the moment prices
   // first load (covers page load / Live Mode toggling before any item has a

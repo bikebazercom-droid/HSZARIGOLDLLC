@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Activity } from "lucide-react";
+import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Activity, Zap, Lock } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import tenTolaBarImg from "@/assets/rates/ten-tola-bar.png";
 import singleGoldBarImg from "@/assets/rates/single-gold-bar.png";
 import goldKiloBrickImg from "@/assets/rates/gold-kilo-brick.png";
@@ -296,6 +297,36 @@ export default function Prices() {
     goldJewelryRate: 0, goldBullionRate: 0, ttBarRate: 0, ttBar24kRate: 0, kgBarRate: 0, silverPricePerGram: 0,
     gold22kRate: 0, gold21kRate: 0, gold18kRate: 0, gold9999Rate: 0,
   });
+  const [localManualMode, setLocalManualMode] = useState(false);
+  const [togglingMode, setTogglingMode] = useState(false);
+
+  // Sync manual-mode flag from DB whenever prices load/refresh
+  useEffect(() => {
+    if (prices) setLocalManualMode(prices.manualInvoiceMode ?? false);
+  }, [prices?.manualInvoiceMode]);
+
+  const handleToggleManualMode = () => {
+    const next = !localManualMode;
+    setLocalManualMode(next);          // optimistic flip
+    setTogglingMode(true);
+    updatePrices.mutate({ data: { manualInvoiceMode: next } as any }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+        toast({
+          title: next ? "Switched to Manual Mode" : "Switched to Live Mode",
+          description: next
+            ? "Invoice baseline will use the rates you set on the cards below."
+            : "Invoice baseline is back on the real-time 1s XAUUSD spot feed.",
+        });
+      },
+      onError: (err: any) => {
+        setLocalManualMode(!next);     // revert on error
+        toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
+      },
+      onSettled: () => setTogglingMode(false),
+    });
+  };
+
   const [syncingAll, setSyncingAll] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
@@ -464,6 +495,57 @@ export default function Prices() {
         </Button>
       </div>
 
+      {/* ── Invoice Rate Mode Toggle ─────────────────────────────────── */}
+      <div
+        className="flex items-center justify-between gap-4 rounded-xl border-2 p-4 transition-all"
+        style={{
+          borderColor: localManualMode ? "#f59e0b66" : "#10b98166",
+          background: localManualMode ? "#fffbeb" : "#f0fdf4",
+          boxShadow: localManualMode
+            ? "0 0 0 1px #f59e0b22 inset, 0 4px 16px -6px #f59e0b33"
+            : "0 0 0 1px #10b98122 inset, 0 4px 16px -6px #10b98133",
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{
+              background: localManualMode ? "#f59e0b18" : "#10b98118",
+              border: `2px solid ${localManualMode ? "#f59e0b55" : "#10b98155"}`,
+            }}
+          >
+            {localManualMode
+              ? <Lock className="w-5 h-5" style={{ color: "#d97706" }} />
+              : <Zap className="w-5 h-5" style={{ color: "#059669" }} />}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-foreground">Invoice Rate Mode</div>
+            <div className="text-xs text-muted-foreground mt-0.5 truncate">
+              {localManualMode
+                ? "Manual — new invoices use the fixed rates you set on the cards below"
+                : "Live — new invoices auto-populate from the real-time 1s XAUUSD spot feed"}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <span
+            className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full"
+            style={{
+              color: localManualMode ? "#92400e" : "#065f46",
+              background: localManualMode ? "#fef3c7" : "#d1fae5",
+              border: `1px solid ${localManualMode ? "#fcd34d" : "#6ee7b7"}`,
+            }}
+          >
+            {localManualMode ? "Manual" : "Live"}
+          </span>
+          <Switch
+            checked={localManualMode}
+            onCheckedChange={handleToggleManualMode}
+            disabled={togglingMode}
+          />
+        </div>
+      </div>
+
       {/* Auto-Scraper Status */}
       <ScraperStatusCard
         goldBullionRate={prices.goldBullionRate}
@@ -478,7 +560,7 @@ export default function Prices() {
             savedValue={(prices as any)[asset.fieldKey]}
             value={localRates[asset.fieldKey]}
             onChange={handleChange} onSave={handleSaveOne}
-            liveLocked={prices.liveModeConnected}
+            liveLocked={prices.liveModeConnected && !localManualMode}
             liveValue={liveValueByKey[asset.fieldKey]} />
         ))}
 
