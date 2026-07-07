@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useLivePrice } from "@/context/live-price";
 import {
   useGetPrices,
   getGetPricesQueryKey,
@@ -37,12 +38,15 @@ interface AssetCardProps {
   onChange: (field: RateKey, value: number) => void;
   onSave: (field: RateKey, value: number) => Promise<void>;
   liveLocked?: boolean;
+  liveValue?: number | null;  // real-time value from LivePriceContext (overrides DB value when liveLocked)
 }
 
-function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChange, onSave, liveLocked }: AssetCardProps) {
+function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChange, onSave, liveLocked, liveValue }: AssetCardProps) {
   const [saving, setSaving] = useState(false);
   const changed = value !== savedValue;
   const handleSave = async () => { setSaving(true); await onSave(fieldKey, value); setSaving(false); };
+  // When live-locked, prefer the 1-second context value; fall back to DB value only while context is warming up
+  const displayValue = liveLocked && liveValue != null ? liveValue : value;
   return (
     <Card
       className="relative overflow-hidden transition-shadow"
@@ -73,7 +77,7 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChan
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
             {liveLocked ? (
               <div className="pl-14 text-xl font-bold h-12 flex items-center rounded-md border bg-emerald-50/50" style={{ fontFamily: "monospace", borderColor: "#10b98155" }}>
-                {value.toFixed(2)}
+                {displayValue > 0 ? displayValue.toFixed(2) : "—"}
               </div>
             ) : (
               <Input type="number" step="0.01" min="0" value={value}
@@ -88,7 +92,7 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChan
             className="text-[10px] text-center font-bold uppercase tracking-wide py-1.5 rounded-md"
             style={{ color: "#059669", background: "#10b98118", border: "1px solid #10b98140" }}
           >
-            Read-Only — API Synced <span className="mx-1">·</span> Auto-Populated by Live API
+            ((●)) Real-time 1s Sync <span className="mx-1">·</span> Raw XAUUSD · No Margins
           </div>
         ) : (
           <Button className="w-full" style={{ background: changed ? NAVY : undefined }}
@@ -270,6 +274,21 @@ export default function Prices() {
   const queryClient = useQueryClient();
   const { data: prices, isLoading } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
   const updatePrices = useUpdatePrices();
+  const { liveRates } = useLivePrice();
+
+  // Live values for each card — computed from raw 1-second XAUUSD spot, no DB spread.
+  // Silver has no live feed so it stays as manual-editable (liveValue: undefined).
+  const r = liveRates.gold9999Rate;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const liveValueByKey: Partial<Record<RateKey, number | null>> = {
+    ttBarRate:           r != null ? round2(r * 0.995) : null,
+    ttBar24kRate:        r != null ? round2(r * 0.999) : null,
+    gold9999Rate:        r,
+    kgBarRate:           r != null ? round2(r * 0.995) : null,
+    gold22kRate:         liveRates.gold22kRate,
+    gold21kRate:         liveRates.gold21kRate,
+    gold18kRate:         liveRates.gold18kRate,
+  };
 
   const RATE_KEYS: RateKey[] = ["goldJewelryRate", "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate", "silverPricePerGram", "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate"];
 
@@ -459,7 +478,8 @@ export default function Prices() {
             savedValue={(prices as any)[asset.fieldKey]}
             value={localRates[asset.fieldKey]}
             onChange={handleChange} onSave={handleSaveOne}
-            liveLocked={prices.liveModeConnected} />
+            liveLocked={prices.liveModeConnected}
+            liveValue={liveValueByKey[asset.fieldKey]} />
         ))}
 
         {customItems.map(item => (
