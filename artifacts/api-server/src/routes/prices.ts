@@ -226,43 +226,33 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
 });
 
 router.put("/prices", async (req, res): Promise<void> => {
-  const body = req.body as {
-    goldPricePerGram?: number;
-    silverPricePerGram?: number;
-    goldJewelryRate?: number;
-    goldBullionRate?: number;
-    ttBarRate?: number;
-    ttBar24kRate?: number;
-    kgBarRate?: number;
-    gold22kRate?: number;
-    gold21kRate?: number;
-    gold18kRate?: number;
-    gold9999Rate?: number;
-    customDescriptions?: { name: string; rate: number }[];
-  };
+  const body = req.body as Record<string, unknown>;
 
   await getOrCreate();
 
-  const updates: Record<string, string | Date> = { updatedAt: new Date() };
-  if (body.goldPricePerGram != null)
-    updates.goldPricePerGram = String(body.goldPricePerGram);
-  if (body.silverPricePerGram != null)
-    updates.silverPricePerGram = String(body.silverPricePerGram);
-  if (body.goldJewelryRate != null)
-    updates.goldJewelryRate = String(body.goldJewelryRate);
-  if (body.goldBullionRate != null)
-    updates.goldBullionRate = String(body.goldBullionRate);
-  if (body.ttBarRate != null) updates.ttBarRate = String(body.ttBarRate);
-  if (body.ttBar24kRate != null)
-    updates.ttBar24kRate = String(body.ttBar24kRate);
-  if (body.kgBarRate != null) updates.kgBarRate = String(body.kgBarRate);
-  if (body.gold22kRate != null) updates.gold22kRate = String(body.gold22kRate);
-  if (body.gold21kRate != null) updates.gold21kRate = String(body.gold21kRate);
-  if (body.gold18kRate != null) updates.gold18kRate = String(body.gold18kRate);
-  if (body.gold9999Rate != null)
-    updates.gold9999Rate = String(body.gold9999Rate);
+  const updates: Record<string, string | boolean | Date> = { updatedAt: new Date() };
+
+  const numFields = [
+    "goldPricePerGram", "silverPricePerGram", "goldJewelryRate",
+    "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate",
+    "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate",
+  ];
+  for (const f of numFields) {
+    if (body[f] != null) updates[f] = String(body[f]);
+  }
+
   if (body.customDescriptions != null)
     updates.customDescriptions = JSON.stringify(body.customDescriptions);
+
+  // Boolean fields — handled identically to the PATCH alias
+  const boolFields = [
+    "manualInvoiceMode",
+    "tvShowTtBar995", "tvShowTtBar999", "tvShowGold9999", "tvShowKgBar995",
+    "tvShowGold22k", "tvShowGold21k", "tvShowGold18k",
+  ] as const;
+  for (const f of boolFields) {
+    if (typeof body[f] === "boolean") updates[f] = body[f] as boolean;
+  }
 
   const [updated] = await db.update(pricesTable).set(updates).returning();
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
