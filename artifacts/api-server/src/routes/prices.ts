@@ -197,12 +197,27 @@ router.get("/prices", async (_req, res): Promise<void> => {
   res.json(GetPricesResponse.parse(parsePrices(prices)));
 });
 
+// ── POST /prices/spot/refresh ─────────────────────────────────────────────────
+// Admin-only: clears the 60-second spotCache and immediately fetches a fresh
+// rate from goldratesindubai.com. Returns the new rate.
+// Use this when you see DGJG update their page and want instant propagation.
+router.post("/prices/spot/refresh", async (_req, res): Promise<void> => {
+  spotCache = null; // bust the cache unconditionally
+  try {
+    const spot = await fetchSpot();
+    logger.info({ rate: spot.aedPerGram }, "[dubai-scraper] Force-refresh triggered by admin");
+    res.json({ aedPerGram: spot.aedPerGram, updatedAt: spot.fetchedAt.toISOString(), refreshed: true });
+  } catch (err) {
+    res.status(502).json({ error: "Rate fetch failed", detail: String(err) });
+  }
+});
+
 // Public, unauthenticated router — mounted before requireAuth so the showroom
 // TV board and invoice new-invoice form can poll it without a session.
 export const publicPricesRouter: IRouter = Router();
 
 // ── /prices/spot ─────────────────────────────────────────────────────────────
-// Lightweight real-time endpoint. 10-second server-side cache; no DB read.
+// Lightweight real-time endpoint. 60-second server-side cache; no DB read.
 // Frontend polls this every 1 second for smooth TV board streaming.
 // aedPerGram = Dubai Local Retail 24K rate (DGJG via goldratesindubai.com).
 publicPricesRouter.get("/prices/spot", async (_req, res): Promise<void> => {

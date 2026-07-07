@@ -234,6 +234,25 @@ export default function Prices() {
     });
   };
 
+  const [forcingRefresh, setForcingRefresh] = useState(false);
+  const handleForceRefresh = async () => {
+    setForcingRefresh(true);
+    try {
+      const res = await fetch("/api/prices/spot/refresh", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: `Rate refreshed — AED ${data.aedPerGram?.toFixed(2)} / g`, description: "TV board will update within 1 second." });
+        queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+      } else {
+        toast({ title: "Refresh failed", description: data.error, variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
+    } finally {
+      setForcingRefresh(false);
+    }
+  };
+
   const [syncingAll, setSyncingAll] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
@@ -386,7 +405,7 @@ export default function Prices() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <TrendingUp className="w-8 h-8 text-primary" />
           <div>
@@ -394,12 +413,20 @@ export default function Prices() {
             <p className="text-sm text-muted-foreground mt-0.5">Daily Rates — update each metal independently</p>
           </div>
         </div>
-        <Button onClick={handleSyncAll} disabled={syncingAll || !hasAnyChange}
-          className="flex items-center gap-2 px-5 h-11 text-sm font-semibold shadow-md"
-          style={{ background: hasAnyChange ? NAVY : undefined, minWidth: 200 }}>
-          <RefreshCw className={`w-4 h-4 ${syncingAll ? "animate-spin" : ""}`} />
-          {syncingAll ? "Syncing..." : hasAnyChange ? "Save All & Apply to Invoices" : "All Rates Synced ✓"}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button onClick={handleForceRefresh} disabled={forcingRefresh} variant="outline"
+            className="flex items-center gap-2 px-4 h-11 text-sm font-semibold"
+            title="Immediately fetch the latest rate from DGJG / goldratesindubai.com, bypassing the 60-second cache">
+            <RefreshCw className={`w-4 h-4 ${forcingRefresh ? "animate-spin" : ""}`} style={{ color: "#059669" }} />
+            {forcingRefresh ? "Fetching..." : "Sync Dubai Rate Now"}
+          </Button>
+          <Button onClick={handleSyncAll} disabled={syncingAll || !hasAnyChange}
+            className="flex items-center gap-2 px-5 h-11 text-sm font-semibold shadow-md"
+            style={{ background: hasAnyChange ? NAVY : undefined, minWidth: 200 }}>
+            <RefreshCw className={`w-4 h-4 ${syncingAll ? "animate-spin" : ""}`} />
+            {syncingAll ? "Syncing..." : hasAnyChange ? "Save All & Apply to Invoices" : "All Rates Synced ✓"}
+          </Button>
+        </div>
       </div>
 
       {/* ── Invoice Rate Mode Toggle ─────────────────────────────────── */}
