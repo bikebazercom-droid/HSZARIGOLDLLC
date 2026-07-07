@@ -41,8 +41,22 @@ async function fetchDubaiRetailRate(): Promise<number> {
     },
   );
 
-  // Primary pattern: meta description / og:description always contains
-  // "24K: AED NNN/g" — the most reliable signal on this page.
+  // Primary: decimal-precise per-gram rates (e.g. "501.36") appear in the
+  // page body in karat order — 24K is always the first match in the range
+  // 300–700 AED/g. This captures DGJG rates before the meta description
+  // rounds them to whole numbers (e.g. "501" vs "501.36").
+  const decimalMatches = [...(html as string).matchAll(/\b(\d{3,4}\.\d{2})\b/g)]
+    .map(m => parseFloat(m[1]))
+    .filter(n => n >= 300 && n <= 700); // plausible 24K AED/gram range
+
+  if (decimalMatches.length > 0) {
+    const rate = decimalMatches[0]; // first match in range = 24K
+    dubaiRateCache = { aedPerGram24K: rate, fetchedAt: new Date() };
+    logger.info({ rate }, "[dubai-scraper] 24K retail rate updated (decimal precision)");
+    return rate;
+  }
+
+  // Fallback: meta description / og:description "24K: AED NNN/g" (whole number)
   const metaMatch = (html as string).match(
     /24K[:\s]+AED\s+(\d+(?:\.\d+)?)\s*\/\s*g/i,
   );
@@ -50,21 +64,7 @@ async function fetchDubaiRetailRate(): Promise<number> {
     const rate = parseFloat(metaMatch[1]);
     if (rate >= 100 && rate <= 20_000) {
       dubaiRateCache = { aedPerGram24K: rate, fetchedAt: new Date() };
-      logger.info({ rate }, "[dubai-scraper] 24K retail rate updated");
-      return rate;
-    }
-  }
-
-  // Fallback: first "AED NNN/g" pattern on the page (24K is always first)
-  const firstMatch = (html as string).match(/AED\s+(\d+(?:\.\d+)?)\s*\/\s*g/i);
-  if (firstMatch) {
-    const rate = parseFloat(firstMatch[1]);
-    if (rate >= 100 && rate <= 20_000) {
-      dubaiRateCache = { aedPerGram24K: rate, fetchedAt: new Date() };
-      logger.info(
-        { rate },
-        "[dubai-scraper] 24K retail rate updated (fallback pattern)",
-      );
+      logger.info({ rate }, "[dubai-scraper] 24K retail rate updated (meta pattern)");
       return rate;
     }
   }
