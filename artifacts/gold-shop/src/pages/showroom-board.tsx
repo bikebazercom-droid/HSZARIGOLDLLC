@@ -25,7 +25,8 @@ function formatClock(d: Date) {
 }
 
 function fmt(n: number | null | undefined) {
-  return n != null && Number.isFinite(n) ? n.toFixed(2) : "—";
+  if (n == null || !Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function GoldBarIcon() {
@@ -228,15 +229,15 @@ export default function ShowroomBoard() {
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
 
-  // All row values are live-scaled: derived from the 3-second spot price poll
-  // multiplied by a scale factor that preserves every admin-configured spread
-  // and premium.  Falls back to "—" while the first poll is in flight.
+  // 7 rows — all pure raw math from live 1-second XAUUSD spot, zero spreads.
   const rows = [
-    { title: "Ten Tola Bar",  tag: "TTB", value: fmt(liveRates.ttBarTotal),    icon: <GoldBarIcon /> },
-    { title: "Jewellery 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon /> },
-    { title: "Gold 9999",     tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon /> },
-    { title: "Gold 9999",     tag: "1KG", value: fmt(liveRates.gold9999Total), icon: <GoldIngotIcon /> },
-    { title: "Kilo Bar 995",  tag: "1KG", value: fmt(liveRates.kgBarTotal),    icon: <GoldBarIcon /> },
+    { title: "TT. BAR (0.995)",   tag: "TTB", value: fmt(liveRates.ttBar995Total), icon: <GoldBarIcon /> },
+    { title: "TT. BAR (0.999)",   tag: "TTB", value: fmt(liveRates.ttBar999Total), icon: <GoldBarIcon /> },
+    { title: "GOLD (0.9999)",     tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon /> },
+    { title: "KG BAR (0.995)",    tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon /> },
+    { title: "Gold Jewelry 22K",  tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon /> },
+    { title: "Gold Jewelry 21K",  tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon /> },
+    { title: "Gold Jewelry 18K",  tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon /> },
   ];
 
   return (
@@ -348,7 +349,7 @@ export default function ShowroomBoard() {
           className="text-neutral-500 text-center tracking-wide shrink-0"
           style={{ fontSize: "clamp(0.6rem, calc(0.5vh + 0.4vw), 0.85rem)", paddingTop: "clamp(0.4rem, 1vh, 1rem)" }}
         >
-          {liveRates.isLive ? "((●)) Live — XAUUSD syncing every 3 s" : "Connecting to live feed…"}
+          {liveRates.isLive ? "((●)) Live — Real-time 1s Sync" : "Connecting to live feed…"}
           {liveRates.updatedAt && ` · ${new Date(liveRates.updatedAt).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
         </div>
       </div>

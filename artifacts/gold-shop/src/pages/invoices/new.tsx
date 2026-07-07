@@ -140,9 +140,21 @@ function descToCategory(desc: string): string {
 // (22K/21K/18K each have their own manually-editable & live-syncable rate,
 // exactly like TT. BAR/KG BAR/GOLD) — except for Silver, which always uses
 // the flat silver rate regardless of its purity value.
-function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number): number {
+function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
+  if (category === "silver") return prices?.silverPricePerGram ?? fallback;
+  // Prefer live math when raw spot rate is available — pure ratio, no DB spread
+  if (rawAedPerGram && rawAedPerGram > 0) {
+    if (purity === "0.9999") return roundTo(rawAedPerGram, 2);
+    if (purity === "0.916")  return roundTo(rawAedPerGram * (22 / 24), 2);
+    if (purity === "0.875")  return roundTo(rawAedPerGram * (21 / 24), 2);
+    if (purity === "0.750")  return roundTo(rawAedPerGram * (18 / 24), 2);
+    if (purity === "0.995")  return roundTo(rawAedPerGram * 0.995, 2);
+    if (purity === "0.999")  return roundTo(rawAedPerGram * 0.999, 2);
+    const factor = parsePurity(purity);
+    if (factor > 0) return roundTo(rawAedPerGram * factor, 2);
+    return fallback;
+  }
   if (!prices) return fallback;
-  if (category === "silver") return prices.silverPricePerGram;
   if (purity === "0.9999") return prices.gold9999Rate;
   if (purity === "0.916") return prices.gold22kRate;
   if (purity === "0.875") return prices.gold21kRate;
@@ -158,7 +170,17 @@ function getRateForPurity(purity: string, category: string, prices: PricesData |
 // their own manually-editable & live-syncable rate fields — identical in
 // behavior to TT. BAR/KG BAR/GOLD — so their rate is read directly from the
 // saved DB field, never recomputed inline from the raw spot rate.
-function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number): number {
+function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
+  // Prefer live math for all gold products when raw spot is available
+  if (rawAedPerGram && rawAedPerGram > 0) {
+    if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return roundTo(rawAedPerGram * (22 / 24), 2);
+    if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return roundTo(rawAedPerGram * (21 / 24), 2);
+    if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return roundTo(rawAedPerGram * (18 / 24), 2);
+    if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return roundTo(rawAedPerGram, 2);
+    if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return roundTo(rawAedPerGram * 0.995, 2);
+    if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return roundTo(rawAedPerGram * 0.999, 2);
+    if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Kilo Bar 995 1KG") return roundTo(rawAedPerGram * 0.995, 2);
+  }
   if (!prices) return fallback;
   if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.gold22kRate;
   if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return prices.gold21kRate;
@@ -208,11 +230,11 @@ function calcItem(item: LineItem, metalRate: number): LineItem {
 // into the global Metal Rate field — resolved from the invoice's primary
 // item (the first row that has a description or purity chosen). Falls back
 // to the raw live spot rate when no item has been specified yet.
-function resolvePrimaryRate(currentItems: LineItem[], prices: PricesData | undefined, fallback: number): number {
+function resolvePrimaryRate(currentItems: LineItem[], prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
   const primary = currentItems.find(i => i.description || i.purity);
   if (!primary) return fallback;
-  if (primary.description) return getRateForDesc(primary.description, prices, fallback);
-  return getRateForPurity(primary.purity, primary.category, prices, fallback);
+  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram);
+  return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram);
 }
 
 export default function NewInvoice() {
@@ -332,7 +354,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveRates.aedPerGram);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
@@ -347,7 +369,7 @@ export default function NewInvoice() {
       }
       if (field === "purity" && value) {
         const currentCategory = updated.category ?? "gold_jewelry";
-        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate);
+        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveRates.aedPerGram);
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {
@@ -376,7 +398,7 @@ export default function NewInvoice() {
   const itemSignature = items.map(i => `${i.description}|${i.purity}|${i.category}`).join("~");
   useEffect(() => {
     if (!isLive) return;
-    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate));
+    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveRates.aedPerGram));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive, prices, itemSignature]);
 

@@ -1,0 +1,26 @@
+Hey Agent, let's lock in our final real-time production requirements. The client wants the `/tv` screen to update dynamically SECOND-BY-SECOND (real-time tick streaming) with ZERO delays, and the invoice sheet to instantly grab the absolute latest last-updated second rate.
+
+Please overhaul the context and page rows to use exactly these 7 specific items with pure raw calculations (no manual margins/spreads):
+
+1. **Configure 1-Second Ultra-Fast Polling/Streaming:**
+   - In `context/live-price.tsx`, change the React Query `refetchInterval` or polling loop timer for `/prices/spot` to exactly 1000ms (1 second). This ensures tick-by-tick real-time changes on the screen.
+   - Set the baseline atomic variable `raw24KPerGram = (XAUUSD / 31.1034768) * 3.6725`.
+
+2. **Render Exactly These 7 Rows on `/tv` Dashboard:**
+   - Clear all previous configurations and display exactly these 7 items using the live 1-second `raw24KPerGram`:
+     * **TT. BAR (0.995):** Formula: `raw24KPerGram * 116.640 * 0.995`
+     * **TT. BAR (0.999):** Formula: `raw24KPerGram * 116.640 * 0.999`
+     * **GOLD (0.9999):** Formula: `raw24KPerGram` (Pure 24K Gram Rate)
+     * **KG BAR (0.995):** Formula: `raw24KPerGram * 1000 * 0.995`
+     * **Gold Jewelry 22K:** Formula: `raw24KPerGram * (22 / 24)`
+     * **Gold Jewelry 21K:** Formula: `raw24KPerGram * (21 / 24)`
+     * **Gold Jewelry 18K:** Formula: `raw24KPerGram * (18 / 24)`
+
+3. **Auto-Inject Absolute Last Update into Invoice (`new.tsx`):**
+   - Ensure that the instant a user opens the Create Invoice page, the global "Metal Rate" grabs the most recent 1-second cached value from the live context hook (`liveRates.aedPerGram`). 
+   - When a specific purity (like 22K or 21K) is selected in the invoice items, it must map automatically to these precise raw ratios instantly.
+
+4. **Formatting & UI Pass:**
+   - Format all values beautifully with proper commas and 2 decimal points. Update the screen footer text to: `((●)) Live — Real-time 1s Sync`.
+
+Run a full workspace typecheck to ensure zero errors and push this live!

@@ -4,40 +4,46 @@ import {
   getGetPricesSpotQueryKey,
 } from "@workspace/api-client-react";
 
-// ── Pure Dubai gold calculator ────────────────────────────────────────────────
-// All values are derived exclusively from the live XAUUSD spot price.
-// Zero spreads, zero premiums, zero making charges — raw international gold
-// converted to UAE Dirham using the fixed AED/USD peg.
+// ── Pure Dubai gold calculator — 1-second real-time sync ─────────────────────
+// All 7 display rows are derived exclusively from the live XAUUSD spot price.
+// Zero spreads · Zero premiums · Zero making charges.
 //
-// Core formula (24K AED/gram):
-//   rawAedPerGram = (XAUUSD / TROY_OZ_TO_GRAM) * USD_AED_PEG
+// Core formula (pure 24K AED/gram):
+//   raw24KPerGram = (XAUUSD / 31.1034768) * 3.6725
 //
 // Row derivations:
-//   Gold 9999 1GM  = rawAedPerGram
-//   Jewellery 22K  = rawAedPerGram × (22 / 24)
-//   Ten Tola Bar   = rawAedPerGram × 116.640
-//   Gold 9999 1KG  = rawAedPerGram × 1000
-//   Kilo Bar 995   = rawAedPerGram × 1000 × 0.995
+//   TT. BAR (0.995)  = raw24KPerGram × 116.640 × 0.995
+//   TT. BAR (0.999)  = raw24KPerGram × 116.640 × 0.999
+//   GOLD (0.9999)    = raw24KPerGram
+//   KG BAR (0.995)   = raw24KPerGram × 1000 × 0.995
+//   Gold Jewelry 22K = raw24KPerGram × (22 / 24)
+//   Gold Jewelry 21K = raw24KPerGram × (21 / 24)
+//   Gold Jewelry 18K = raw24KPerGram × (18 / 24)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TROY_OZ_TO_GRAM = 31.1034768;
 const USD_AED_PEG     = 3.6725;
 const TOLA_BAR_GRAMS  = 116.640;
-const PURITY_22K      = 22 / 24;
 const PURITY_995      = 0.995;
+const PURITY_999      = 0.999;
+const PURITY_22K      = 22 / 24;
+const PURITY_21K      = 21 / 24;
+const PURITY_18K      = 18 / 24;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface LiveRates {
-  usdPerOz:     number | null;
-  aedPerGram:   number | null;   // raw 24K per gram — invoice baseline seed
-  gold9999Rate: number | null;   // Gold 9999  1GM
-  gold22kRate:  number | null;   // Jewellery 22K 1GM
-  ttBarTotal:   number | null;   // Ten Tola Bar total
-  gold9999Total: number | null;  // Gold 9999  1KG
-  kgBarTotal:   number | null;   // Kilo Bar 995 1KG
-  isLive:       boolean;
-  updatedAt:    string | null;
+  usdPerOz:      number | null;
+  aedPerGram:    number | null;  // pure 24K AED/gram — invoice baseline seed
+  ttBar995Total: number | null;  // TT. BAR (0.995) total
+  ttBar999Total: number | null;  // TT. BAR (0.999) total
+  gold9999Rate:  number | null;  // GOLD (0.9999) per gram
+  kgBar995Total: number | null;  // KG BAR (0.995) per kg
+  gold22kRate:   number | null;  // Gold Jewelry 22K per gram
+  gold21kRate:   number | null;  // Gold Jewelry 21K per gram
+  gold18kRate:   number | null;  // Gold Jewelry 18K per gram
+  isLive:        boolean;
+  updatedAt:     string | null;
 }
 
 interface LivePriceContextValue {
@@ -45,15 +51,17 @@ interface LivePriceContextValue {
 }
 
 const EMPTY_RATES: LiveRates = {
-  usdPerOz:     null,
-  aedPerGram:   null,
-  gold9999Rate: null,
-  gold22kRate:  null,
-  ttBarTotal:   null,
-  gold9999Total: null,
-  kgBarTotal:   null,
-  isLive:       false,
-  updatedAt:    null,
+  usdPerOz:      null,
+  aedPerGram:    null,
+  ttBar995Total: null,
+  ttBar999Total: null,
+  gold9999Rate:  null,
+  kgBar995Total: null,
+  gold22kRate:   null,
+  gold21kRate:   null,
+  gold18kRate:   null,
+  isLive:        false,
+  updatedAt:     null,
 };
 
 const LivePriceContext = createContext<LivePriceContextValue>({
@@ -61,12 +69,12 @@ const LivePriceContext = createContext<LivePriceContextValue>({
 });
 
 export function LivePriceProvider({ children }: { children: React.ReactNode }) {
-  // Lightweight spot endpoint — 10-second server-side cache, polled every 3s.
-  // No DB rates are fetched — all calculations are pure maths from XAUUSD.
+  // /prices/spot — 10-second server-side cache, polled every 1 second for
+  // tick-by-tick real-time updates on the TV board and invoice seed.
   const { data: spot } = useGetPricesSpot({
     query: {
       queryKey: getGetPricesSpotQueryKey(),
-      refetchInterval: 3000,
+      refetchInterval: 1000,
       refetchIntervalInBackground: true,
     },
   });
@@ -74,17 +82,19 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
   const liveRates = useMemo<LiveRates>(() => {
     if (!spot?.usdPerOz || spot.usdPerOz <= 0) return EMPTY_RATES;
 
-    // Step 1: derive the pure 24K AED/gram from the live XAUUSD spot
+    // Atomic base: pure 24K price in AED per gram
     const raw = (spot.usdPerOz / TROY_OZ_TO_GRAM) * USD_AED_PEG;
 
     return {
       usdPerOz:      spot.usdPerOz,
       aedPerGram:    round2(raw),
+      ttBar995Total: round2(raw * TOLA_BAR_GRAMS * PURITY_995),
+      ttBar999Total: round2(raw * TOLA_BAR_GRAMS * PURITY_999),
       gold9999Rate:  round2(raw),
+      kgBar995Total: round2(raw * 1000 * PURITY_995),
       gold22kRate:   round2(raw * PURITY_22K),
-      ttBarTotal:    round2(raw * TOLA_BAR_GRAMS),
-      gold9999Total: round2(raw * 1000),
-      kgBarTotal:    round2(raw * 1000 * PURITY_995),
+      gold21kRate:   round2(raw * PURITY_21K),
+      gold18kRate:   round2(raw * PURITY_18K),
       isLive:        true,
       updatedAt:     spot.updatedAt,
     };
