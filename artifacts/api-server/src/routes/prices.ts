@@ -53,6 +53,35 @@ interface LiveSpot {
 let liveSpot: LiveSpot | null = null;
 let lastDbWriteAt: Date | null = null;
 
+// ── Bid/Ask + Daily Low/High tracking ─────────────────────────────────────────
+// The upstream feed only provides a single mid-market XAUUSD tick — there is no
+// native bid/ask spread or daily high/low. We synthesize a realistic Bid/Ask by
+// splitting a fixed market spread symmetrically around the raw usdPerOz tick,
+// and track the daily low/high by recording the min/max usdPerOz tick observed
+// since UTC midnight (in-memory; resets automatically on day rollover).
+const BID_ASK_SPREAD_USD = 0.90; // matches typical live spot-gold bid/ask spread width
+
+let dailyLowUsdPerOz: number | null = null;
+let dailyHighUsdPerOz: number | null = null;
+let dailyTrackingDateUTC: string | null = null;
+
+function todayUTC(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function trackDailyRange(usdPerOz: number) {
+  const today = todayUTC();
+  if (dailyTrackingDateUTC !== today) {
+    // Day rolled over (or first tick) — reset the range.
+    dailyTrackingDateUTC = today;
+    dailyLowUsdPerOz = usdPerOz;
+    dailyHighUsdPerOz = usdPerOz;
+    return;
+  }
+  if (dailyLowUsdPerOz == null || usdPerOz < dailyLowUsdPerOz) dailyLowUsdPerOz = usdPerOz;
+  if (dailyHighUsdPerOz == null || usdPerOz > dailyHighUsdPerOz) dailyHighUsdPerOz = usdPerOz;
+}
+
 const liveSocket = socketIO("https://www.livepriceofgold.com", {
   path: "/sio/p7012/socket.io",
   transports: ["websocket"],
@@ -108,6 +137,7 @@ liveSocket.on("update", (raw: string) => {
     const aedPerGram = baseAedPerGram + adminSpreadPremiumAed;
 
     liveSpot = { aedPerGram, baseAedPerGram, usdPerOz, receivedAt: new Date() };
+    trackDailyRange(usdPerOz);
 
     // Write to DB at most once every 5 minutes so the admin page stays current.
     const now = Date.now();
@@ -225,6 +255,10 @@ publicPricesRouter.get("/prices/spot", (_req, res): void => {
       baseAedPerGram: liveSpot.baseAedPerGram,
       spreadPremiumAed: adminSpreadPremiumAed,
       laborCostPercent: adminLaborCostPercent,
+      bidUsdPerOz: liveSpot.usdPerOz - BID_ASK_SPREAD_USD / 2,
+      askUsdPerOz: liveSpot.usdPerOz + BID_ASK_SPREAD_USD / 2,
+      dailyLowUsdPerOz: dailyLowUsdPerOz,
+      dailyHighUsdPerOz: dailyHighUsdPerOz,
       updatedAt: liveSpot.receivedAt.toISOString(),
     });
     return;

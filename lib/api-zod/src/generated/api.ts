@@ -339,6 +339,10 @@ export const GetPricesSpotResponse = zod.object({
   "baseAedPerGram": zod.number().nullish().describe('Raw Base_24K_AED before the admin spread\/premium buffer is applied — (usdPerOz \/ 31.1034768) \* 3.6725.'),
   "spreadPremiumAed": zod.number().nullish().describe('Admin-configured fixed AED buffer currently applied on top of baseAedPerGram to produce aedPerGram (Final_24K).'),
   "laborCostPercent": zod.number().nullish().describe('Admin-configured percentage markup applied only to jewelry rows (22K, 21K, 18K) derived from this spot tick.'),
+  "bidUsdPerOz": zod.number().nullish().describe('Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.'),
+  "askUsdPerOz": zod.number().nullish().describe('Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.'),
+  "dailyLowUsdPerOz": zod.number().nullish().describe('Lowest usdPerOz tick observed since UTC midnight today.'),
+  "dailyHighUsdPerOz": zod.number().nullish().describe('Highest usdPerOz tick observed since UTC midnight today.'),
   "updatedAt": zod.string().describe('ISO-8601 timestamp of when this price was fetched.')
 })
 

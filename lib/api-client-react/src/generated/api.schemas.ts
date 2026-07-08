@@ -515,6 +515,26 @@ export interface SpotPrice {
      * @nullable
      */
   laborCostPercent?: number | null;
+  /**
+     * Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.
+     * @nullable
+     */
+  bidUsdPerOz?: number | null;
+  /**
+     * Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.
+     * @nullable
+     */
+  askUsdPerOz?: number | null;
+  /**
+     * Lowest usdPerOz tick observed since UTC midnight today.
+     * @nullable
+     */
+  dailyLowUsdPerOz?: number | null;
+  /**
+     * Highest usdPerOz tick observed since UTC midnight today.
+     * @nullable
+     */
+  dailyHighUsdPerOz?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

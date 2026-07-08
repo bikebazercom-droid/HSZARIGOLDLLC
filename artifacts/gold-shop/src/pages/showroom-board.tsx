@@ -133,12 +133,12 @@ function ensureKeyframes() {
       100% { color: ${GOLD};     text-shadow: 0 0 24px ${GOLD}33; }
     }
     @keyframes borderUp {
-      0%   { border-color: ${GREEN_TICK}99; box-shadow: 0 0 0 1px ${GREEN_TICK}22 inset, 0 0 18px -4px ${GREEN_TICK}44; }
-      100% { border-color: ${GOLD}55;      box-shadow: none; }
+      0%   { border-color: ${GREEN_TICK}; background: linear-gradient(90deg, ${GREEN_TICK}2e 0%, #0a0a0a 100%); box-shadow: 0 0 0 1px ${GREEN_TICK}44 inset, 0 0 28px -4px ${GREEN_TICK}77; }
+      100% { border-color: ${GOLD}55;      background: linear-gradient(90deg, #131313 0%, #0a0a0a 100%); box-shadow: none; }
     }
     @keyframes borderDown {
-      0%   { border-color: ${RED_TICK}99; box-shadow: 0 0 0 1px ${RED_TICK}22 inset, 0 0 18px -4px ${RED_TICK}44; }
-      100% { border-color: ${GOLD}55;     box-shadow: none; }
+      0%   { border-color: ${RED_TICK}; background: linear-gradient(90deg, ${RED_TICK}2e 0%, #0a0a0a 100%); box-shadow: 0 0 0 1px ${RED_TICK}44 inset, 0 0 28px -4px ${RED_TICK}77; }
+      100% { border-color: ${GOLD}55;     background: linear-gradient(90deg, #131313 0%, #0a0a0a 100%); box-shadow: none; }
     }
   `;
   document.head.appendChild(style);
@@ -180,7 +180,7 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
         height: "100%",
         minHeight: 0,
         animation: containerAnim,
-        willChange: isTick ? "border-color, box-shadow" : undefined,
+        willChange: isTick ? "border-color, box-shadow, background" : undefined,
         display: "grid",
         gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
@@ -249,7 +249,7 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
           className="font-extrabold tabular-nums"
           style={{
             color: GOLD,
-            fontSize: "clamp(1.15rem, calc(1.8vh + 1.6vw), 3rem)",
+            fontSize: "clamp(1.1rem, calc(1.7vh + 1.5vw), 2.9rem)",
             lineHeight: 1,
             fontFamily: "monospace",
             letterSpacing: "-0.02em",
@@ -259,8 +259,64 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
             willChange: isTick ? "color, text-shadow" : undefined,
           }}
         >
-          {value}
+          {value} <span style={{ fontSize: "0.42em", fontFamily: "sans-serif", fontWeight: 700, opacity: 0.75 }}>AED</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── TickerBox: BID / ASK / LOW / HIGH global spot boxes ───────────────────────
+interface TickerBoxProps {
+  label: string;
+  sublabel: string;
+  value: string;
+  arrow?: "up" | "down";
+}
+
+function TickerBox({ label, sublabel, value, arrow }: TickerBoxProps) {
+  const arrowColor = arrow === "up" ? GREEN_TICK : arrow === "down" ? RED_TICK : undefined;
+  return (
+    <div
+      className="rounded-2xl flex flex-col items-center justify-center text-center"
+      style={{
+        background: "linear-gradient(160deg, #161616 0%, #0a0a0a 100%)",
+        border: `1px solid ${GOLD}55`,
+        padding: "clamp(0.5rem, 1.4vh, 1rem) clamp(0.4rem, 1.2vw, 1rem)",
+        boxShadow: `0 0 0 1px #ffffff08 inset, 0 4px 20px -8px #000000cc`,
+        minWidth: 0,
+      }}
+    >
+      <div
+        className="uppercase font-bold"
+        style={{
+          color: GOLD,
+          fontSize: "clamp(0.6rem, calc(0.5vh + 0.5vw), 0.95rem)",
+          letterSpacing: "0.16em",
+          opacity: 0.9,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        className="uppercase text-neutral-500 font-medium"
+        style={{ fontSize: "clamp(0.5rem, calc(0.35vh + 0.35vw), 0.7rem)", letterSpacing: "0.08em", marginTop: 1 }}
+      >
+        {sublabel}
+      </div>
+      <div
+        className="flex items-center justify-center tabular-nums font-extrabold"
+        style={{
+          color: arrowColor ?? "#f5f5f5",
+          fontSize: "clamp(0.95rem, calc(1.2vh + 1.1vw), 1.9rem)",
+          fontFamily: "monospace",
+          marginTop: "clamp(0.15rem, 0.4vh, 0.4rem)",
+          gap: "0.25rem",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {arrow && <span style={{ fontSize: "0.85em", lineHeight: 1 }}>{arrow === "up" ? "▲" : "▼"}</span>}
+        {value}
       </div>
     </div>
   );
@@ -279,7 +335,7 @@ export default function ShowroomBoard() {
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
 
-  // Always track all 7 values for direction — stable array length regardless of visibility
+  // Always track all 8 values for direction — stable array length regardless of visibility
   const rowValues: (number | null)[] = [
     liveRates.ttBar995Total,
     liveRates.ttBar9999Total,
@@ -293,16 +349,17 @@ export default function ShowroomBoard() {
 
   const directions = useDirections(rowValues);
 
-  // All 7 rows with their original index (for direction lookup) and visibility flag
+  // All 8 rows with their original index (for direction lookup) and visibility flag —
+  // ordered to match the requested strict 3-column layout (TT BAR 9999, 22K, GOLD 9999, GOLD KG, KG BAR first).
   const allRows = [
-    { idx: 0, title: "TT. BAR (0.995)",  tag: "TT",  value: fmt(liveRates.ttBar995Total),   icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995  ?? true },
     { idx: 1, title: "TT. BAR (0.9999)", tag: "TT",  value: fmt(liveRates.ttBar9999Total),  icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999  ?? true },
-    { idx: 2, title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGold9999   ?? true },
-    { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
     { idx: 4, title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold22k   ?? true },
+    { idx: 2, title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGold9999   ?? true },
+    { idx: 7, title: "GOLD KG (0.9999)", tag: "1KG", value: fmt(liveRates.goldKg9999Total), icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGoldKg9999 ?? true },
+    { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
+    { idx: 0, title: "TT. BAR (0.995)",  tag: "TT",  value: fmt(liveRates.ttBar995Total),   icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995  ?? true },
     { idx: 5, title: "Gold Jewelry 21K", tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold21k   ?? true },
     { idx: 6, title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold18k    ?? true },
-    { idx: 7, title: "GOLD KG (0.9999)", tag: "1KG", value: fmt(liveRates.goldKg9999Total), icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGoldKg9999 ?? true },
   ];
 
   // Only render rows toggled ON; direction tracked by original idx (stable)
@@ -384,12 +441,23 @@ export default function ShowroomBoard() {
               {formatClock(now)}
             </span>
           </div>
+
+          {/* ── Global Spot Ticker: BID / ASK / LOW / HIGH ── */}
+          <div
+            className="grid grid-cols-4 w-full"
+            style={{ gap: "clamp(0.4rem, 1vw, 0.9rem)", maxWidth: 1200, marginTop: "clamp(0.2rem, 0.5vh, 0.5rem)" }}
+          >
+            <TickerBox label="Bid" sublabel="USD / oz" value={fmt(liveRates.bidUsdPerOz)} />
+            <TickerBox label="Ask" sublabel="USD / oz" value={fmt(liveRates.askUsdPerOz)} />
+            <TickerBox label="Low" sublabel="Today" value={fmt(liveRates.dailyLowUsdPerOz)} arrow="down" />
+            <TickerBox label="High" sublabel="Today" value={fmt(liveRates.dailyHighUsdPerOz)} arrow="up" />
+          </div>
         </div>
 
-        {/* ── 7 asset rows ── */}
+        {/* ── Asset rows ── */}
         <div
           className="flex flex-col w-full lg:flex-1 lg:min-h-0"
-          style={{ gap: "clamp(0.25rem, 0.6vh, 0.6rem)" }}
+          style={{ gap: "clamp(0.25rem, 0.6vh, 0.6rem)", marginTop: "clamp(0.4rem, 1vh, 1rem)" }}
         >
           {rows.map(row => (
             <div

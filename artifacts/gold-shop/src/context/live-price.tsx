@@ -38,6 +38,10 @@ export interface LiveRates {
   baseAedPerGram: number | null; // Base_24K_AED — raw international conversion, no spread
   spreadPremiumAed: number | null; // Admin-configured fixed AED buffer currently applied
   laborCostPercent: number | null; // Admin-configured jewelry labor cost % currently applied
+  bidUsdPerOz:   number | null;  // Synthesized live Bid (USD/oz)
+  askUsdPerOz:   number | null;  // Synthesized live Ask (USD/oz)
+  dailyLowUsdPerOz:  number | null; // Lowest usdPerOz tick since UTC midnight
+  dailyHighUsdPerOz: number | null; // Highest usdPerOz tick since UTC midnight
   ttBar995Total: number | null;  // TT. BAR (0.995) total price per bar
   ttBar9999Total: number | null;  // TT. BAR (0.9999) total price per bar
   gold9999Rate:  number | null;  // GOLD (0.9999) per gram
@@ -61,6 +65,10 @@ const EMPTY_RATES: LiveRates = {
   baseAedPerGram: null,
   spreadPremiumAed: null,
   laborCostPercent: null,
+  bidUsdPerOz:   null,
+  askUsdPerOz:   null,
+  dailyLowUsdPerOz:  null,
+  dailyHighUsdPerOz: null,
   ttBar995Total: null,
   ttBar9999Total: null,
   gold9999Rate:  null,
@@ -112,6 +120,10 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       baseAedPerGram: spot.baseAedPerGram != null ? round2(spot.baseAedPerGram) : null,
       spreadPremiumAed: spot.spreadPremiumAed ?? null,
       laborCostPercent: spot.laborCostPercent ?? null,
+      bidUsdPerOz:   spot.bidUsdPerOz != null ? round2(spot.bidUsdPerOz) : null,
+      askUsdPerOz:   spot.askUsdPerOz != null ? round2(spot.askUsdPerOz) : null,
+      dailyLowUsdPerOz:  spot.dailyLowUsdPerOz != null ? round2(spot.dailyLowUsdPerOz) : null,
+      dailyHighUsdPerOz: spot.dailyHighUsdPerOz != null ? round2(spot.dailyHighUsdPerOz) : null,
       ttBar995Total: round2(base * TOLA_BAR_GRAMS * PURITY_995),
       ttBar9999Total: round2(base * TOLA_BAR_GRAMS * PURITY_9999),
       gold9999Rate:  round2(base * PURITY_9999),

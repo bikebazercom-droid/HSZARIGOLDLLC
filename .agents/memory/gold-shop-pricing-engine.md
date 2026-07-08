@@ -17,3 +17,6 @@ The pricing engine was restructured to derive `Base_24K_AED` from the internatio
   **Why:** avoids two copies of save/validation logic drifting apart; both pages get updates for free.
   **How to apply:** if further pricing-config UI/behavior changes are needed, edit the shared component once; don't re-inline it into a page.
 - "Instant TV sync" is achieved purely via the existing 1s polling (`refetchInterval: 1000` against `/api/prices/spot`) plus the PATCH route updating server in-memory state immediately — no websocket infra was needed or added.
+- The live feed only provides a single XAU/USD spot value (no real bid/ask/high/low). TV board Bid/Ask are synthesized as spot ± a fixed half-spread constant in `prices.ts`; daily Low/High are tracked in-memory since UTC midnight and reset on day rollover (not persisted — restarting the API server resets the day's range).
+  **Why:** no upstream feed exposes real bid/ask/range data; this was a documented approximation made without a reference design image the user never supplied.
+  **How to apply:** if a real bid/ask/range feed is ever added, swap the synthesis/tracking logic in `prices.ts` for the real values and keep the same `/prices/spot` response shape so the frontend needs no changes.
