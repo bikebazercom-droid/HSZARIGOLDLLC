@@ -7,6 +7,12 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Live gold pricing endpoints must never be served from a conditional-GET
+// (ETag) cache — the TV board and dashboard poll every second and require
+// the freshest tick every time, even if the body happens to be byte-identical
+// to the previous response.
+app.disable("etag");
+
 app.use(
   pinoHttp({
     logger,

@@ -6,11 +6,12 @@ import {
 
 // ── International Spot Gold (XAU/USD) pricing engine — 1-second real-time sync ──
 // The atomic baseline `Final_24K` (exposed here as `aedPerGram`) is derived
-// from the live international Gold Spot (XAU/USD) price via the backend
-// /prices/spot endpoint:
+// from the live international Gold Spot ASK price via the backend
+// /prices/spot endpoint (no server-side caching — every poll returns the
+// freshest in-memory tick):
 //
-//   Base_24K_AED = (XAU_USD_Price / 31.1034768) * 3.6725
-//   Final_24K    = Base_24K_AED + admin spreadPremiumAed
+//   Base_24K_AED = (Live_International_Ask_Price / 31.1034768) * 3.6725
+//   Final_24K    = Base_24K_AED + Dashboard_Spread_Input (admin spreadPremiumAed, +/-)
 //
 // Row derivations from Final_24K:
 //   TT. BAR (0.995)  = Final_24K × 116.640 × 0.995
@@ -87,13 +88,17 @@ const LivePriceContext = createContext<LivePriceContextValue>({
 });
 
 export function LivePriceProvider({ children }: { children: React.ReactNode }) {
-  // /prices/spot — 10-second server-side cache, polled every 1 second for
-  // tick-by-tick real-time updates on the TV board and invoice seed.
+  // /prices/spot has NO server-side caching (no ETag, no Cache-Control) and
+  // no client-side staleness window either — every 1s poll always refetches
+  // and is immediately treated as fresh, so the TV board and invoice seed
+  // never render a stale in-memory tick.
   const { data: spot } = useGetPricesSpot({
     query: {
       queryKey: getGetPricesSpotQueryKey(),
       refetchInterval: 1000,
       refetchIntervalInBackground: true,
+      staleTime: 0,
+      gcTime: 0,
     },
   });
 

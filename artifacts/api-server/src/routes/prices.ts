@@ -36,17 +36,21 @@ void loadAdminPricingConfig();
 // price (`XAUUSD`), which is our source of truth for the pricing engine.
 //
 // Pricing architecture (international spot market structure):
-//   Base_24K_AED = (XAU_USD_Price / 31.1034768) * 3.6725
-//   Final_24K    = Base_24K_AED + admin spreadPremiumAed
+//   Ask_USD_Price = XAU_USD_Price (mid) + BID_ASK_SPREAD_USD / 2
+//   Base_24K_AED  = (Ask_USD_Price / 31.1034768) * 3.6725
+//   Final_24K     = Base_24K_AED + admin spreadPremiumAed (Dashboard "Spread" input, +/-)
 // `Final_24K` is what the rest of the app calls `aedPerGram` — the single
 // atomic baseline every derived row (TT BAR, KG BAR, GOLD 9999, jewelry
-// karats) is computed from.
+// karats) is computed from. Base is derived from ASK, not the raw mid tick,
+// because that mirrors the real-world price the shop actually buys/sells at.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface LiveSpot {
   aedPerGram: number;      // Final_24K = Base_24K_AED + spreadPremiumAed
-  baseAedPerGram: number;  // Base_24K_AED — raw international conversion, no spread
-  usdPerOz: number;        // raw XAUUSD international spot
+  baseAedPerGram: number;  // Base_24K_AED — derived from the live ASK price, no spread
+  usdPerOz: number;        // raw mid-market XAUUSD international spot tick
+  bidUsdPerOz: number;     // Live Bid (USD/oz), synthesized at tick time
+  askUsdPerOz: number;     // Live Ask (USD/oz), synthesized at tick time — pricing-engine source of truth
   receivedAt: Date;
 }
 
@@ -122,21 +126,28 @@ liveSocket.on("update", (raw: string) => {
     const aedRawFallback = parseFloat(String(data["GXAUUSD_AED"]));
 
     let usdPerOz: number;
-    let baseAedPerGram: number;
 
     if (Number.isFinite(usdRaw) && usdRaw > 1000) {
       usdPerOz = usdRaw;
-      baseAedPerGram = (usdRaw / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
     } else if (Number.isFinite(aedRawFallback) && aedRawFallback > 300 && aedRawFallback < 800) {
-      baseAedPerGram = aedRawFallback;
       usdPerOz = (aedRawFallback / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
     } else {
       return;
     }
 
+    // Bid/Ask are synthesized symmetrically around the mid-market tick — the
+    // upstream feed only exposes a single mid price, no native bid/ask.
+    const bidUsdPerOz = usdPerOz - BID_ASK_SPREAD_USD / 2;
+    const askUsdPerOz = usdPerOz + BID_ASK_SPREAD_USD / 2;
+
+    // Pricing-engine source of truth per admin spec: the shop buys at the
+    // international ASK price, so Base_24K_AED must be derived from Ask —
+    // NOT the raw mid tick — to match real-world market execution price.
+    //   Final_24K_Base = (Live_International_Ask_Price / 31.1034768) * 3.6725 + Dashboard_Spread_Input
+    const baseAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
     const aedPerGram = baseAedPerGram + adminSpreadPremiumAed;
 
-    liveSpot = { aedPerGram, baseAedPerGram, usdPerOz, receivedAt: new Date() };
+    liveSpot = { aedPerGram, baseAedPerGram, usdPerOz, bidUsdPerOz, askUsdPerOz, receivedAt: new Date() };
     trackDailyRange(usdPerOz);
 
     // Write to DB at most once every 5 minutes so the admin page stays current.
@@ -248,6 +259,11 @@ export const publicPricesRouter: IRouter = Router();
 // international spot pricing engine (Base_24K_AED + admin spread = Final_24K).
 // Frontend polls every 1 second; each response is the freshest available tick.
 publicPricesRouter.get("/prices/spot", (_req, res): void => {
+  // Belt-and-suspenders: app-level `app.disable("etag")` already prevents
+  // conditional-GET 304s, but explicitly forbid any intermediary/browser
+  // caching too — every poll must hit this live in-memory tick, never a
+  // stale cached copy.
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   if (liveSpot) {
     res.json({
       usdPerOz: liveSpot.usdPerOz,
@@ -255,8 +271,8 @@ publicPricesRouter.get("/prices/spot", (_req, res): void => {
       baseAedPerGram: liveSpot.baseAedPerGram,
       spreadPremiumAed: adminSpreadPremiumAed,
       laborCostPercent: adminLaborCostPercent,
-      bidUsdPerOz: liveSpot.usdPerOz - BID_ASK_SPREAD_USD / 2,
-      askUsdPerOz: liveSpot.usdPerOz + BID_ASK_SPREAD_USD / 2,
+      bidUsdPerOz: liveSpot.bidUsdPerOz,
+      askUsdPerOz: liveSpot.askUsdPerOz,
       dailyLowUsdPerOz: dailyLowUsdPerOz,
       dailyHighUsdPerOz: dailyHighUsdPerOz,
       updatedAt: liveSpot.receivedAt.toISOString(),
