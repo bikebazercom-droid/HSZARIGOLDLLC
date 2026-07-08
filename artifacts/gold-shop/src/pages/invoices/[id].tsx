@@ -140,22 +140,26 @@ export default function InvoiceDetail() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 print:p-0 print:m-0" style={{ maxWidth: "210mm" }}>
-      <div className="flex justify-between items-center mb-6 no-print">
-        <div className="flex items-center gap-4">
+    <div className="max-w-4xl mx-auto pb-20 px-2 sm:px-0 print:p-0 print:m-0" style={{ maxWidth: "210mm" }}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6 no-print">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link href="/invoices">
             <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight text-primary">Invoice {invoice.invoiceNumber}</h1>
+          <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-primary truncate">Invoice {invoice.invoiceNumber}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleDownloadPdf}><Download className="w-4 h-4 mr-2" /> Download PDF</Button>
-          <Button onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Print Invoice</Button>
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={handleDownloadPdf}><Download className="w-4 h-4 mr-2" /> Download PDF</Button>
+          <Button className="flex-1 sm:flex-none" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Print Invoice</Button>
         </div>
       </div>
 
-      {/* ─── INVOICE DOCUMENT ─── */}
-      <div ref={invoiceRef} className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}` }}>
+      {/* ─── INVOICE DOCUMENT ───
+          Fixed A4 (210mm) width by design for print/PDF fidelity — on narrow
+          viewports it scrolls horizontally inside this contained wrapper
+          instead of breaking the page's own layout. */}
+      <div className="overflow-x-auto print:overflow-visible">
+      <div ref={invoiceRef} className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", maxWidth: "none", margin: "0 auto" }}>
 
         {/* Gold top border */}
         <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
@@ -433,6 +437,7 @@ export default function InvoiceDetail() {
 
         {/* Gold bottom border */}
         <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
+      </div>
       </div>
 
       {invoice.notes && (

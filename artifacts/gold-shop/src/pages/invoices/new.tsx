@@ -556,15 +556,15 @@ export default function NewInvoice() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-20">
-      <div className="flex items-center gap-4">
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-20 px-1 sm:px-0">
+      <div className="flex items-center gap-3 sm:gap-4">
         <Link href="/invoices">
           <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">New Invoice</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-primary truncate">New Invoice</h1>
           {prices && (
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
               Gold Rate: AED {goldRate}/g &nbsp;|&nbsp; Silver Rate: AED {prices.silverPricePerGram}/g
             </p>
           )}

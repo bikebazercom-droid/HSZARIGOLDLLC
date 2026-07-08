@@ -39,15 +39,15 @@ export default function Invoices() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight text-primary">Invoices</h1>
-        <Link href="/invoices/new">
-          <Button><Plus className="w-4 h-4 mr-2" /> Create Invoice</Button>
+    <div className="space-y-4 sm:space-y-6 max-w-6xl mx-auto">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary">Invoices</h1>
+        <Link href="/invoices/new" className="self-start sm:self-auto">
+          <Button className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" /> Create Invoice</Button>
         </Link>
       </div>
 
-      <div className="flex items-center gap-2 max-w-sm">
+      <div className="flex items-center gap-2 w-full sm:max-w-sm">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <Input 
@@ -59,7 +59,7 @@ export default function Invoices() {
         </div>
       </div>
 
-      <div className="bg-card rounded-md border overflow-hidden">
+      <div className="bg-card rounded-md border overflow-x-auto">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>

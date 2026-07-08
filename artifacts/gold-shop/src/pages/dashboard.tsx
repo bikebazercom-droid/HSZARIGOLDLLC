@@ -83,31 +83,31 @@ function CategorySalesSummary() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
+          <div className="space-y-1 w-[calc(50%-0.375rem)] sm:w-auto">
             <Label className="text-xs text-muted-foreground">From Date</Label>
             <Input
               type="date"
               value={startDate}
               max={endDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-40"
+              className="w-full sm:w-40"
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 w-[calc(50%-0.375rem)] sm:w-auto">
             <Label className="text-xs text-muted-foreground">To Date</Label>
             <Input
               type="date"
               value={endDate}
               min={startDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-40"
+              className="w-full sm:w-40"
             />
           </div>
-          <Button size="sm" onClick={handleGenerate} disabled={isFetching}>
+          <Button size="sm" onClick={handleGenerate} disabled={isFetching} className="flex-1 sm:flex-none">
             <Filter className="w-4 h-4 mr-1.5" />
             {isFetching ? "Generating..." : "Generate Report"}
           </Button>
-          <Button size="sm" variant="outline" onClick={handleDownloadPdf} disabled={!data || isDownloading}>
+          <Button size="sm" variant="outline" onClick={handleDownloadPdf} disabled={!data || isDownloading} className="flex-1 sm:flex-none">
             <FileDown className="w-4 h-4 mr-1.5" />
             {isDownloading ? "Preparing PDF..." : "Download PDF Report"}
           </Button>
@@ -343,18 +343,18 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-primary">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">{todayDate}</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-primary">Dashboard</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">{todayDate}</p>
         </div>
-        <Link href="/invoices/new">
-          <Button size="sm"><Plus className="w-4 h-4 mr-1.5" /> New Invoice</Button>
+        <Link href="/invoices/new" className="self-start sm:self-auto">
+          <Button size="sm" className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-1.5" /> New Invoice</Button>
         </Link>
       </div>
 
       {/* Quick stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3">
         <Card className="bg-primary text-primary-foreground border-primary col-span-2 md:col-span-1">
           <CardHeader className="pb-1 pt-3 px-4">
             <CardTitle className="text-xs font-medium opacity-80">Today's Total</CardTitle>
