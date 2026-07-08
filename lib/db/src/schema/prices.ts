@@ -37,7 +37,9 @@ export const pricesTable = pgTable("prices", {
   liveModeConnected: boolean("live_mode_connected").notNull().default(false),
   manualInvoiceMode: boolean("manual_invoice_mode").notNull().default(false),
   liveApiKey: text("live_api_key"),
-  liveApiProvider: text("live_api_provider").notNull().default("goldapi"),
+  // "free" = livepriceofgold.com socket feed (Bid/Ask estimated via fixed spread).
+  // "goldapi" = paid GoldAPI.io REST feed (real Bid/Ask/High/Low), requires liveApiKey.
+  liveApiProvider: text("live_api_provider").notNull().default("free"),
   liveGoldRate24k: numeric("live_gold_rate_24k", { precision: 12, scale: 4 }),
   liveGoldRate22k: numeric("live_gold_rate_22k", { precision: 12, scale: 4 }),
   liveSilverRate: numeric("live_silver_rate", { precision: 12, scale: 4 }),

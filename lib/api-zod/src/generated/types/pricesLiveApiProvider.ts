@@ -7,11 +7,12 @@
  */
 
 /**
- * Metal price provider currently in use (APILayer Metals-API).
+ * Which price feed drives /prices/spot — "free" (socket feed, Bid/Ask estimated) or "goldapi" (GoldAPI.io paid feed, real Bid/Ask/High/Low).
  */
 export type PricesLiveApiProvider = typeof PricesLiveApiProvider[keyof typeof PricesLiveApiProvider];
 
 
 export const PricesLiveApiProvider = {
-  apilayer: 'apilayer',
+  free: 'free',
+  goldapi: 'goldapi',
 } as const;

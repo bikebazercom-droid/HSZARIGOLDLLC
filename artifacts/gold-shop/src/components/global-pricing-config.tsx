@@ -9,8 +9,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Gauge, Percent, Sparkles } from "lucide-react";
+import { Gauge, Percent, Sparkles, Radio, KeyRound, AlertTriangle } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -41,17 +48,23 @@ export function GlobalPricingConfig({ compact = false }: GlobalPricingConfigProp
 
   const [localSpreadPremiumAed, setLocalSpreadPremiumAed] = useState(0);
   const [localLaborCostPercent, setLocalLaborCostPercent] = useState(0);
+  const [localFeedSource, setLocalFeedSource] = useState<"free" | "goldapi">("free");
+  const [localApiKey, setLocalApiKey] = useState("");
   const [savingPricingConfig, setSavingPricingConfig] = useState(false);
 
   useEffect(() => {
     if (prices) {
       setLocalSpreadPremiumAed(prices.spreadPremiumAed ?? 0);
       setLocalLaborCostPercent(prices.laborCostPercent ?? 0);
+      setLocalFeedSource(prices.liveApiProvider === "goldapi" ? "goldapi" : "free");
     }
   }, [prices]);
 
   const pricingConfigChanged = prices
-    ? localSpreadPremiumAed !== (prices.spreadPremiumAed ?? 0) || localLaborCostPercent !== (prices.laborCostPercent ?? 0)
+    ? localSpreadPremiumAed !== (prices.spreadPremiumAed ?? 0)
+      || localLaborCostPercent !== (prices.laborCostPercent ?? 0)
+      || localFeedSource !== (prices.liveApiProvider === "goldapi" ? "goldapi" : "free")
+      || localApiKey.length > 0
     : false;
 
   const handleSavePricingConfig = async () => {
@@ -59,10 +72,18 @@ export function GlobalPricingConfig({ compact = false }: GlobalPricingConfigProp
     try {
       await new Promise<void>((resolve, reject) => {
         updatePrices.mutate(
-          { data: { spreadPremiumAed: localSpreadPremiumAed, laborCostPercent: localLaborCostPercent } as any },
+          {
+            data: {
+              spreadPremiumAed: localSpreadPremiumAed,
+              laborCostPercent: localLaborCostPercent,
+              liveApiProvider: localFeedSource,
+              ...(localApiKey.length > 0 ? { liveApiKey: localApiKey } : {}),
+            } as any,
+          },
           {
             onSuccess: () => {
               queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+              setLocalApiKey("");
               toast({
                 title: "Global Price Control saved",
                 description: "The TV board and every invoice rate update within 1 second — no reload needed.",
@@ -163,6 +184,51 @@ export function GlobalPricingConfig({ compact = false }: GlobalPricingConfigProp
               Applied automatically to Gold Jewelry <strong>22K / 21K / 18K</strong> rows only.
             </p>
           </div>
+        </div>
+
+        <div className="rounded-xl border bg-gradient-to-br from-slate-50 to-white p-4 mt-4">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: NAVY }}>
+            <Radio className="w-3.5 h-3.5" />
+            Price Feed Source
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select value={localFeedSource} onValueChange={v => setLocalFeedSource(v as "free" | "goldapi")}>
+              <SelectTrigger className="h-11 text-sm font-semibold">
+                <SelectValue placeholder="Select feed source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Free Live Feed (estimated bid/ask)</SelectItem>
+                <SelectItem value="goldapi">Paid Premium API (GoldAPI.io)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="password"
+                value={localApiKey}
+                onChange={e => setLocalApiKey(e.target.value)}
+                placeholder={
+                  prices?.liveApiKeyConfigured
+                    ? `Saved key: ${prices.liveApiKeyMasked ?? "••••"}`
+                    : "Paid API Key (GoldAPI.io)"
+                }
+                disabled={localFeedSource !== "goldapi"}
+                className="pl-9 h-11 text-sm"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+          {localFeedSource === "goldapi" && !prices?.liveApiKeyConfigured && localApiKey.length === 0 && (
+            <p className="flex items-center gap-1 text-[11px] mt-1.5" style={{ color: "#b91c1c" }}>
+              <AlertTriangle className="w-3 h-3" />
+              Enter and save an API key to activate the paid feed — otherwise the free feed stays active.
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Free: <code className="px-1 py-0.5 rounded bg-muted text-[10px]">Ask = XAU/USD + 1.04, Bid = Ask − 0.90</code>.
+            Paid: real bid/ask/high/low streamed directly from GoldAPI.io.
+          </p>
         </div>
 
         {previewFinal24k != null && (

@@ -169,13 +169,14 @@ export interface CategorySummary {
 }
 
 /**
- * Metal price provider currently in use (APILayer Metals-API).
+ * Which price feed drives /prices/spot — "free" (socket feed, Bid/Ask estimated) or "goldapi" (GoldAPI.io paid feed, real Bid/Ask/High/Low).
  */
 export type PricesLiveApiProvider = typeof PricesLiveApiProvider[keyof typeof PricesLiveApiProvider];
 
 
 export const PricesLiveApiProvider = {
-  apilayer: 'apilayer',
+  free: 'free',
+  goldapi: 'goldapi',
 } as const;
 
 export interface CustomDescription {
@@ -210,7 +211,7 @@ export interface Prices {
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;
-  /** Metal price provider currently in use (APILayer Metals-API). */
+  /** Which price feed drives /prices/spot — "free" (socket feed, Bid/Ask estimated) or "goldapi" (GoldAPI.io paid feed, real Bid/Ask/High/Low). */
   liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
@@ -219,22 +220,22 @@ export interface Prices {
   /** @nullable */
   liveSilverRate?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted Bid snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldBid?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted Ask snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldAsk?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted High snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldHigh?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted Low snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldLow?: number | null;
@@ -294,6 +295,17 @@ export interface PublicPrices {
   tvShowGoldKg9999: boolean;
 }
 
+/**
+ * Switches /prices/spot between the free socket feed (estimated Bid/Ask) and the paid GoldAPI.io feed (real Bid/Ask/High/Low).
+ */
+export type PricesInputLiveApiProvider = typeof PricesInputLiveApiProvider[keyof typeof PricesInputLiveApiProvider];
+
+
+export const PricesInputLiveApiProvider = {
+  free: 'free',
+  goldapi: 'goldapi',
+} as const;
+
 export interface PricesInput {
   goldPricePerGram?: number;
   silverPricePerGram?: number;
@@ -312,6 +324,10 @@ export interface PricesInput {
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
+  /** Switches /prices/spot between the free socket feed (estimated Bid/Ask) and the paid GoldAPI.io feed (real Bid/Ask/High/Low). */
+  liveApiProvider?: PricesInputLiveApiProvider;
+  /** Paid provider API key (write-only — never echoed back in GET responses; use liveApiKeyConfigured/liveApiKeyMasked to check status). Send an empty string to clear it. */
+  liveApiKey?: string;
   tvShowTtBar995?: boolean;
   tvShowTtBar999?: boolean;
   tvShowGold9999?: boolean;
@@ -495,6 +511,17 @@ export interface PublicSettings {
   showroomLogoUrl: string | null;
 }
 
+/**
+ * Which feed actually produced this tick. "paid" only when liveApiProvider is set to goldapi AND the paid fetch is currently succeeding; falls back to "free" automatically otherwise.
+ */
+export type SpotPriceFeedSource = typeof SpotPriceFeedSource[keyof typeof SpotPriceFeedSource];
+
+
+export const SpotPriceFeedSource = {
+  free: 'free',
+  paid: 'paid',
+} as const;
+
 export interface SpotPrice {
   /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
   usdPerOz: number;
@@ -535,6 +562,13 @@ export interface SpotPrice {
      * @nullable
      */
   dailyHighUsdPerOz?: number | null;
+  /** Which feed actually produced this tick. "paid" only when liveApiProvider is set to goldapi AND the paid fetch is currently succeeding; falls back to "free" automatically otherwise. */
+  feedSource?: SpotPriceFeedSource;
+  /**
+     * Set when liveApiProvider is "goldapi" but the paid fetch is currently failing (e.g. bad key, rate limit) — explains why feedSource fell back to "free".
+     * @nullable
+     */
+  paidFeedError?: string | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

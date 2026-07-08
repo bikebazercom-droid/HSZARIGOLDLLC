@@ -16,6 +16,8 @@ const TROY_OUNCE_TO_GRAM = 31.1034768;
 // admin saves new values (see PUT/PATCH handlers below) or on server boot.
 let adminSpreadPremiumAed = 0;
 let adminLaborCostPercent = 0;
+let adminPriceFeedSource: "free" | "goldapi" = "free";
+let adminLiveApiKey: string | null = null;
 
 async function loadAdminPricingConfig() {
   try {
@@ -23,10 +25,13 @@ async function loadAdminPricingConfig() {
     if (row) {
       adminSpreadPremiumAed = Number(row.spreadPremiumAed) || 0;
       adminLaborCostPercent = Number(row.laborCostPercent) || 0;
+      adminPriceFeedSource = row.liveApiProvider === "goldapi" ? "goldapi" : "free";
+      adminLiveApiKey = row.liveApiKey || null;
     }
   } catch (err) {
     logger.warn({ err }, "[live-gold] Failed to load admin pricing config on boot");
   }
+  syncPaidPolling();
 }
 void loadAdminPricingConfig();
 
@@ -49,21 +54,26 @@ interface LiveSpot {
   aedPerGram: number;      // Final_24K = Base_24K_AED + spreadPremiumAed
   baseAedPerGram: number;  // Base_24K_AED — derived from the live ASK price, no spread
   usdPerOz: number;        // raw mid-market XAUUSD international spot tick
-  bidUsdPerOz: number;     // Live Bid (USD/oz), synthesized at tick time
-  askUsdPerOz: number;     // Live Ask (USD/oz), synthesized at tick time — pricing-engine source of truth
+  bidUsdPerOz: number;     // Live Bid (USD/oz)
+  askUsdPerOz: number;     // Live Ask (USD/oz) — pricing-engine source of truth
+  dailyLowUsdPerOz: number | null;
+  dailyHighUsdPerOz: number | null;
   receivedAt: Date;
 }
 
 let liveSpot: LiveSpot | null = null;
 let lastDbWriteAt: Date | null = null;
 
-// ── Bid/Ask + Daily Low/High tracking ─────────────────────────────────────────
-// The upstream feed only provides a single mid-market XAUUSD tick — there is no
-// native bid/ask spread or daily high/low. We synthesize a realistic Bid/Ask by
-// splitting a fixed market spread symmetrically around the raw usdPerOz tick,
-// and track the daily low/high by recording the min/max usdPerOz tick observed
-// since UTC midnight (in-memory; resets automatically on day rollover).
-const BID_ASK_SPREAD_USD = 0.90; // matches typical live spot-gold bid/ask spread width
+// ── Dual price-feed sources ────────────────────────────────────────────────
+// "free": livepriceofgold.com socket only sends one mid-market XAUUSD tick —
+//   there is no native bid/ask spread or daily high/low, so we apply the
+//   admin-calibrated offset below and track daily low/high ourselves.
+// "goldapi": GoldAPI.io REST feed returns real ask/bid/high_price/low_price —
+//   no estimation needed, values are bound straight from the response.
+// Which source is active is controlled from the Admin Dashboard
+// ("Price Feed Source") and switches instantly — see syncPaidPolling() below.
+const ASK_OFFSET_USD = 1.04; // Estimated_Ask = Raw_XAUUSD + 1.04
+const BID_ASK_SPREAD_USD = 0.90; // Estimated_Bid = Estimated_Ask - 0.90
 
 let dailyLowUsdPerOz: number | null = null;
 let dailyHighUsdPerOz: number | null = null;
@@ -135,10 +145,12 @@ liveSocket.on("update", (raw: string) => {
       return;
     }
 
-    // Bid/Ask are synthesized symmetrically around the mid-market tick — the
-    // upstream feed only exposes a single mid price, no native bid/ask.
-    const bidUsdPerOz = usdPerOz - BID_ASK_SPREAD_USD / 2;
-    const askUsdPerOz = usdPerOz + BID_ASK_SPREAD_USD / 2;
+    // Estimated Bid/Ask per the calibrated offset (upstream feed only exposes
+    // a single mid price, no native bid/ask):
+    //   Estimated_Ask = Raw_XAUUSD + 1.04
+    //   Estimated_Bid = Estimated_Ask - 0.90
+    const askUsdPerOz = usdPerOz + ASK_OFFSET_USD;
+    const bidUsdPerOz = askUsdPerOz - BID_ASK_SPREAD_USD;
 
     // Pricing-engine source of truth per admin spec: the shop buys at the
     // international ASK price, so Base_24K_AED must be derived from Ask —
@@ -147,8 +159,11 @@ liveSocket.on("update", (raw: string) => {
     const baseAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
     const aedPerGram = baseAedPerGram + adminSpreadPremiumAed;
 
-    liveSpot = { aedPerGram, baseAedPerGram, usdPerOz, bidUsdPerOz, askUsdPerOz, receivedAt: new Date() };
     trackDailyRange(usdPerOz);
+    liveSpot = {
+      aedPerGram, baseAedPerGram, usdPerOz, bidUsdPerOz, askUsdPerOz,
+      dailyLowUsdPerOz, dailyHighUsdPerOz, receivedAt: new Date(),
+    };
 
     // Write to DB at most once every 5 minutes so the admin page stays current.
     const now = Date.now();
@@ -168,11 +183,100 @@ liveSocket.on("update", (raw: string) => {
   }
 });
 
+// ── Paid feed (GoldAPI.io) ───────────────────────────────────────────────────
+// Only active when the admin sets Price Feed Source = "Paid Premium API" and
+// saves a valid API key. Polls every 30s (GoldAPI.io plans are metered by
+// monthly request quota, so we deliberately poll far less often than the 1s
+// /prices/spot client refresh — the frontend still gets a fresh tick every
+// second, just re-serving the latest cached poll in between); returns real
+// ask/bid/high/low straight from the provider — no estimation. Falls back to
+// the free feed automatically (see /prices/spot below) if the paid fetch has
+// never succeeded; once it has succeeded at least once, transient failures
+// (e.g. a momentary quota/network blip) keep serving the last-known-good paid
+// tick with `paidFeedError` surfaced for transparency, rather than flapping
+// back and forth between sources on every failed poll.
+let paidLiveSpot: LiveSpot | null = null;
+let paidFeedError: string | null = null;
+let paidPollTimer: ReturnType<typeof setInterval> | null = null;
+
+async function fetchPaidGoldPrice(apiKey: string) {
+  try {
+    const resp = await fetch("https://www.goldapi.io/api/XAU/USD", {
+      headers: { "x-access-token": apiKey, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) {
+      paidFeedError = `GoldAPI.io returned HTTP ${resp.status}`;
+      logger.warn({ status: resp.status }, "[live-gold] Paid feed request failed");
+      return;
+    }
+    const data = (await resp.json()) as Record<string, number>;
+    const askUsdPerOz = Number(data.ask);
+    const bidUsdPerOz = Number(data.bid);
+    const usdPerOz = Number(data.price);
+    const lowUsdPerOz = Number(data.low_price);
+    const highUsdPerOz = Number(data.high_price);
+    if (!Number.isFinite(askUsdPerOz) || !Number.isFinite(bidUsdPerOz) || !Number.isFinite(usdPerOz)) {
+      paidFeedError = "GoldAPI.io response missing ask/bid/price fields";
+      return;
+    }
+
+    // Same Ask-based pricing engine, but the Ask/Bid/High/Low are the
+    // provider's real numbers — nothing synthesized.
+    const baseAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+    const aedPerGram = baseAedPerGram + adminSpreadPremiumAed;
+
+    paidLiveSpot = {
+      aedPerGram, baseAedPerGram, usdPerOz, bidUsdPerOz, askUsdPerOz,
+      dailyLowUsdPerOz: Number.isFinite(lowUsdPerOz) ? lowUsdPerOz : null,
+      dailyHighUsdPerOz: Number.isFinite(highUsdPerOz) ? highUsdPerOz : null,
+      receivedAt: new Date(),
+    };
+    paidFeedError = null;
+
+    db.update(pricesTable)
+      .set({
+        liveGoldBid: String(bidUsdPerOz),
+        liveGoldAsk: String(askUsdPerOz),
+        liveGoldHigh: Number.isFinite(highUsdPerOz) ? String(highUsdPerOz) : null,
+        liveGoldLow: Number.isFinite(lowUsdPerOz) ? String(lowUsdPerOz) : null,
+        liveLastSyncedAt: new Date(),
+        liveModeConnected: true,
+      })
+      .catch((err: unknown) => logger.warn({ err }, "[live-gold] Paid feed DB write failed"));
+  } catch (err) {
+    paidFeedError = err instanceof Error ? err.message : "Paid feed fetch failed";
+    logger.warn({ err }, "[live-gold] Paid feed fetch error");
+  }
+}
+
+// Starts/stops the 1s paid-feed poller to match the currently saved admin
+// config. Called on boot and every time the admin saves Price Feed Source /
+// API Key from the dashboard — the switch takes effect within one tick.
+function syncPaidPolling() {
+  if (paidPollTimer) {
+    clearInterval(paidPollTimer);
+    paidPollTimer = null;
+  }
+  if (adminPriceFeedSource === "goldapi" && adminLiveApiKey) {
+    const apiKey = adminLiveApiKey;
+    void fetchPaidGoldPrice(apiKey);
+    paidPollTimer = setInterval(() => void fetchPaidGoldPrice(apiKey), 30_000);
+  } else {
+    paidLiveSpot = null;
+    paidFeedError = adminPriceFeedSource === "goldapi" ? "No API key configured" : null;
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function toNum(v: string | number | null): number | null {
   if (v == null) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function maskApiKey(key: string): string {
+  if (key.length <= 4) return "•".repeat(key.length);
+  return "•".repeat(key.length - 4) + key.slice(-4);
 }
 
 function parsePrices(p: typeof pricesTable.$inferSelect) {
@@ -199,16 +303,16 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
-    liveApiKeyConfigured: false,
-    liveApiKeyMasked: null as null,
-    liveApiProvider: "apilayer" as const,
+    liveApiKeyConfigured: !!p.liveApiKey,
+    liveApiKeyMasked: p.liveApiKey ? maskApiKey(p.liveApiKey) : null,
+    liveApiProvider: p.liveApiProvider === "goldapi" ? "goldapi" as const : "free" as const,
     liveGoldRate24k: toNum(p.liveGoldRate24k),
     liveGoldRate22k: toNum(p.liveGoldRate22k),
     liveSilverRate: toNum(p.liveSilverRate),
-    liveGoldBid: null as null,
-    liveGoldAsk: null as null,
-    liveGoldHigh: null as null,
-    liveGoldLow: null as null,
+    liveGoldBid: toNum(p.liveGoldBid),
+    liveGoldAsk: toNum(p.liveGoldAsk),
+    liveGoldHigh: toNum(p.liveGoldHigh),
+    liveGoldLow: toNum(p.liveGoldLow),
     liveLastSyncedAt: p.liveLastSyncedAt
       ? p.liveLastSyncedAt.toISOString()
       : null,
@@ -264,18 +368,26 @@ publicPricesRouter.get("/prices/spot", (_req, res): void => {
   // caching too — every poll must hit this live in-memory tick, never a
   // stale cached copy.
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-  if (liveSpot) {
+
+  // Paid feed is authoritative when selected and healthy; otherwise fall back
+  // to the free feed automatically (surfacing the error for transparency).
+  const usePaid = adminPriceFeedSource === "goldapi" && paidLiveSpot != null;
+  const active = usePaid ? paidLiveSpot : liveSpot;
+
+  if (active) {
     res.json({
-      usdPerOz: liveSpot.usdPerOz,
-      aedPerGram: liveSpot.aedPerGram,
-      baseAedPerGram: liveSpot.baseAedPerGram,
+      usdPerOz: active.usdPerOz,
+      aedPerGram: active.aedPerGram,
+      baseAedPerGram: active.baseAedPerGram,
       spreadPremiumAed: adminSpreadPremiumAed,
       laborCostPercent: adminLaborCostPercent,
-      bidUsdPerOz: liveSpot.bidUsdPerOz,
-      askUsdPerOz: liveSpot.askUsdPerOz,
-      dailyLowUsdPerOz: dailyLowUsdPerOz,
-      dailyHighUsdPerOz: dailyHighUsdPerOz,
-      updatedAt: liveSpot.receivedAt.toISOString(),
+      bidUsdPerOz: active.bidUsdPerOz,
+      askUsdPerOz: active.askUsdPerOz,
+      dailyLowUsdPerOz: active.dailyLowUsdPerOz,
+      dailyHighUsdPerOz: active.dailyHighUsdPerOz,
+      updatedAt: active.receivedAt.toISOString(),
+      feedSource: usePaid ? "paid" as const : "free" as const,
+      paidFeedError: adminPriceFeedSource === "goldapi" ? paidFeedError : null,
     });
     return;
   }
@@ -285,7 +397,9 @@ publicPricesRouter.get("/prices/spot", (_req, res): void => {
 publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
   const prices = await getOrCreate();
   const parsed = parsePrices(prices);
-  const goldBullionRate = liveSpot?.aedPerGram ?? parsed.goldBullionRate;
+  const usePaid = adminPriceFeedSource === "goldapi" && paidLiveSpot != null;
+  const active = usePaid ? paidLiveSpot : liveSpot;
+  const goldBullionRate = active?.aedPerGram ?? parsed.goldBullionRate;
   res.json(
     GetPublicPricesResponse.parse({
       goldBullionRate,
@@ -298,13 +412,13 @@ publicPricesRouter.get("/prices/public", async (_req, res): Promise<void> => {
       gold18kRate: parsed.gold18kRate,
       gold9999Rate: parsed.gold9999Rate,
       goldKg9999Rate: parsed.goldKg9999Rate,
-      liveModeConnected: liveSpot !== null,
+      liveModeConnected: active !== null,
       liveSilverRate: parsed.liveSilverRate,
-      liveGoldBid: null,
-      liveGoldAsk: null,
-      liveGoldHigh: null,
-      liveGoldLow: null,
-      updatedAt: liveSpot?.receivedAt.toISOString() ?? parsed.updatedAt,
+      liveGoldBid: active?.bidUsdPerOz ?? null,
+      liveGoldAsk: active?.askUsdPerOz ?? null,
+      liveGoldHigh: active?.dailyHighUsdPerOz ?? null,
+      liveGoldLow: active?.dailyLowUsdPerOz ?? null,
+      updatedAt: active?.receivedAt.toISOString() ?? parsed.updatedAt,
       tvShowTtBar995: parsed.tvShowTtBar995,
       tvShowTtBar999: parsed.tvShowTtBar999,
       tvShowGold9999: parsed.tvShowGold9999,
@@ -347,9 +461,21 @@ router.put("/prices", async (req, res): Promise<void> => {
     if (typeof body[f] === "boolean") updates[f] = body[f] as boolean;
   }
 
+  if (body.liveApiProvider === "free" || body.liveApiProvider === "goldapi") {
+    updates.liveApiProvider = body.liveApiProvider;
+  }
+  if (typeof body.liveApiKey === "string" && body.liveApiKey.length > 0) {
+    updates.liveApiKey = body.liveApiKey;
+  }
+
   const [updated] = await db.update(pricesTable).set(updates).returning();
   if (updates.spreadPremiumAed != null) adminSpreadPremiumAed = Number(updated.spreadPremiumAed) || 0;
   if (updates.laborCostPercent != null) adminLaborCostPercent = Number(updated.laborCostPercent) || 0;
+  if (updates.liveApiProvider != null || updates.liveApiKey != null) {
+    adminPriceFeedSource = updated.liveApiProvider === "goldapi" ? "goldapi" : "free";
+    adminLiveApiKey = updated.liveApiKey || null;
+    syncPaidPolling();
+  }
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
 });
 
@@ -381,9 +507,21 @@ router.patch("/prices", async (req, res): Promise<void> => {
     if (typeof body[f] === "boolean") updates[f] = body[f] as boolean;
   }
 
+  if (body.liveApiProvider === "free" || body.liveApiProvider === "goldapi") {
+    updates.liveApiProvider = body.liveApiProvider;
+  }
+  if (typeof body.liveApiKey === "string" && body.liveApiKey.length > 0) {
+    updates.liveApiKey = body.liveApiKey;
+  }
+
   const [updated] = await db.update(pricesTable).set(updates).returning();
   if (updates.spreadPremiumAed != null) adminSpreadPremiumAed = Number(updated.spreadPremiumAed) || 0;
   if (updates.laborCostPercent != null) adminLaborCostPercent = Number(updated.laborCostPercent) || 0;
+  if (updates.liveApiProvider != null || updates.liveApiKey != null) {
+    adminPriceFeedSource = updated.liveApiProvider === "goldapi" ? "goldapi" : "free";
+    adminLiveApiKey = updated.liveApiKey || null;
+    syncPaidPolling();
+  }
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
 });
 

@@ -35,7 +35,7 @@ export interface Prices {
   liveApiKeyConfigured: boolean;
   /** @nullable */
   liveApiKeyMasked?: string | null;
-  /** Metal price provider currently in use (APILayer Metals-API). */
+  /** Which price feed drives /prices/spot — "free" (socket feed, Bid/Ask estimated) or "goldapi" (GoldAPI.io paid feed, real Bid/Ask/High/Low). */
   liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
@@ -44,22 +44,22 @@ export interface Prices {
   /** @nullable */
   liveSilverRate?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted Bid snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldBid?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted Ask snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldAsk?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted High snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldHigh?: number | null;
   /**
-     * Not populated by APILayer Metals-API; always null.
+     * Last persisted Low snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldLow?: number | null;

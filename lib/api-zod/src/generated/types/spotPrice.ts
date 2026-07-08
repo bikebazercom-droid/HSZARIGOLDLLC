@@ -5,6 +5,7 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { SpotPriceFeedSource } from './spotPriceFeedSource';
 
 export interface SpotPrice {
   /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
@@ -46,6 +47,13 @@ export interface SpotPrice {
      * @nullable
      */
   dailyHighUsdPerOz?: number | null;
+  /** Which feed actually produced this tick. "paid" only when liveApiProvider is set to goldapi AND the paid fetch is currently succeeding; falls back to "free" automatically otherwise. */
+  feedSource?: SpotPriceFeedSource;
+  /**
+     * Set when liveApiProvider is "goldapi" but the paid fetch is currently failing (e.g. bad key, rate limit) — explains why feedSource fell back to "free".
+     * @nullable
+     */
+  paidFeedError?: string | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }
