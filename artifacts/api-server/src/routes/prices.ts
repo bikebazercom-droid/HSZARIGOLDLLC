@@ -9,17 +9,44 @@ const router: IRouter = Router();
 const USD_TO_AED = 3.6725;
 const TROY_OUNCE_TO_GRAM = 31.1034768;
 
+// ── Admin-configurable pricing engine controls ────────────────────────────────
+// spreadPremiumAed / laborCostPercent are DB-backed (admin edits them from the
+// Live Prices page) but the live Socket.IO tick handler needs them synchronously
+// on every tick, so we mirror them into memory here and refresh whenever the
+// admin saves new values (see PUT/PATCH handlers below) or on server boot.
+let adminSpreadPremiumAed = 0;
+let adminLaborCostPercent = 0;
+
+async function loadAdminPricingConfig() {
+  try {
+    const [row] = await db.select().from(pricesTable).limit(1);
+    if (row) {
+      adminSpreadPremiumAed = Number(row.spreadPremiumAed) || 0;
+      adminLaborCostPercent = Number(row.laborCostPercent) || 0;
+    }
+  } catch (err) {
+    logger.warn({ err }, "[live-gold] Failed to load admin pricing config on boot");
+  }
+}
+void loadAdminPricingConfig();
+
 // ── Live Socket.IO feed — livepriceofgold.com ────────────────────────────────
 // Connects to the Socket.IO server that powers livepriceofgold.com's Dubai
-// price page. On every `update` event the payload contains pre-converted
-// AED per gram values (GXAUUSD_AED for 24K, 22GXAUUSD_AED for 22K, etc.)
-// so no manual conversion is needed. No server-side cache — liveSpot always
-// holds the most recent tick pushed by the feed.
+// price page. The payload includes the raw international Gold Spot (XAU/USD)
+// price (`XAUUSD`), which is our source of truth for the pricing engine.
+//
+// Pricing architecture (international spot market structure):
+//   Base_24K_AED = (XAU_USD_Price / 31.1034768) * 3.6725
+//   Final_24K    = Base_24K_AED + admin spreadPremiumAed
+// `Final_24K` is what the rest of the app calls `aedPerGram` — the single
+// atomic baseline every derived row (TT BAR, KG BAR, GOLD 9999, jewelry
+// karats) is computed from.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface LiveSpot {
-  aedPerGram: number;  // 24K per gram in AED (GXAUUSD_AED from socket)
-  usdPerOz: number;    // raw XAUUSD for reference
+  aedPerGram: number;      // Final_24K = Base_24K_AED + spreadPremiumAed
+  baseAedPerGram: number;  // Base_24K_AED — raw international conversion, no spread
+  usdPerOz: number;        // raw XAUUSD international spot
   receivedAt: Date;
 }
 
@@ -58,24 +85,29 @@ liveSocket.on("update", (raw: string) => {
   try {
     const data = JSON.parse(raw) as Record<string, string | number>;
 
-    // GXAUUSD_AED is the 24K AED/gram value computed server-side by livepriceofgold.com
-    // (their server converts XAUUSD → AED/g using the live AED/USD fix rate).
-    const aedRaw = parseFloat(String(data["GXAUUSD_AED"]));
+    // XAUUSD is the raw international Gold Spot price (USD per troy ounce) —
+    // the source of truth for our pricing engine's international architecture.
     const usdRaw = parseFloat(String(data["XAUUSD"]));
+    // Fallback only: livepriceofgold.com's own pre-converted Dubai retail AED/g,
+    // used solely if XAUUSD is ever absent/invalid from this particular tick.
+    const aedRawFallback = parseFloat(String(data["GXAUUSD_AED"]));
 
-    const aedPerGram = Number.isFinite(aedRaw) && aedRaw > 300 && aedRaw < 800
-      ? aedRaw
-      : Number.isFinite(usdRaw) && usdRaw > 1000
-        // Fallback: derive from XAUUSD if AED key absent
-        ? (usdRaw / TROY_OUNCE_TO_GRAM) * USD_TO_AED
-        : null;
+    let usdPerOz: number;
+    let baseAedPerGram: number;
 
-    if (aedPerGram === null) return;
+    if (Number.isFinite(usdRaw) && usdRaw > 1000) {
+      usdPerOz = usdRaw;
+      baseAedPerGram = (usdRaw / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+    } else if (Number.isFinite(aedRawFallback) && aedRawFallback > 300 && aedRawFallback < 800) {
+      baseAedPerGram = aedRawFallback;
+      usdPerOz = (aedRawFallback / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
+    } else {
+      return;
+    }
 
-    const usdPerOz = Number.isFinite(usdRaw) ? usdRaw
-      : (aedPerGram / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
+    const aedPerGram = baseAedPerGram + adminSpreadPremiumAed;
 
-    liveSpot = { aedPerGram, usdPerOz, receivedAt: new Date() };
+    liveSpot = { aedPerGram, baseAedPerGram, usdPerOz, receivedAt: new Date() };
 
     // Write to DB at most once every 5 minutes so the admin page stays current.
     const now = Date.now();
@@ -121,6 +153,8 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     gold18kRate: Number(p.gold18kRate),
     gold9999Rate: Number(p.gold9999Rate),
     goldKg9999Rate: Number(p.goldKg9999Rate),
+    spreadPremiumAed: Number(p.spreadPremiumAed),
+    laborCostPercent: Number(p.laborCostPercent),
     customDescriptions,
     updatedAt: p.updatedAt.toISOString(),
     liveModeConnected: p.liveModeConnected,
@@ -180,13 +214,17 @@ router.post("/prices/spot/refresh", async (_req, res): Promise<void> => {
 export const publicPricesRouter: IRouter = Router();
 
 // ── GET /prices/spot ──────────────────────────────────────────────────────────
-// No cache — returns the latest Socket.IO tick directly.
+// No cache — returns the latest Socket.IO tick directly, converted through the
+// international spot pricing engine (Base_24K_AED + admin spread = Final_24K).
 // Frontend polls every 1 second; each response is the freshest available tick.
 publicPricesRouter.get("/prices/spot", (_req, res): void => {
   if (liveSpot) {
     res.json({
       usdPerOz: liveSpot.usdPerOz,
       aedPerGram: liveSpot.aedPerGram,
+      baseAedPerGram: liveSpot.baseAedPerGram,
+      spreadPremiumAed: adminSpreadPremiumAed,
+      laborCostPercent: adminLaborCostPercent,
       updatedAt: liveSpot.receivedAt.toISOString(),
     });
     return;
@@ -240,6 +278,7 @@ router.put("/prices", async (req, res): Promise<void> => {
     "goldPricePerGram", "silverPricePerGram", "goldJewelryRate",
     "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate",
     "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate", "goldKg9999Rate",
+    "spreadPremiumAed", "laborCostPercent",
   ];
   for (const f of numFields) {
     if (body[f] != null) updates[f] = String(body[f]);
@@ -259,6 +298,8 @@ router.put("/prices", async (req, res): Promise<void> => {
   }
 
   const [updated] = await db.update(pricesTable).set(updates).returning();
+  if (updates.spreadPremiumAed != null) adminSpreadPremiumAed = Number(updated.spreadPremiumAed) || 0;
+  if (updates.laborCostPercent != null) adminLaborCostPercent = Number(updated.laborCostPercent) || 0;
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
 });
 
@@ -274,6 +315,7 @@ router.patch("/prices", async (req, res): Promise<void> => {
     "goldPricePerGram", "silverPricePerGram", "goldJewelryRate",
     "goldBullionRate", "ttBarRate", "ttBar24kRate", "kgBarRate",
     "gold22kRate", "gold21kRate", "gold18kRate", "gold9999Rate",
+    "spreadPremiumAed", "laborCostPercent",
   ];
   for (const f of numFields) {
     if (body[f] != null) updates[f] = String(body[f]);
@@ -290,6 +332,8 @@ router.patch("/prices", async (req, res): Promise<void> => {
   }
 
   const [updated] = await db.update(pricesTable).set(updates).returning();
+  if (updates.spreadPremiumAed != null) adminSpreadPremiumAed = Number(updated.spreadPremiumAed) || 0;
+  if (updates.laborCostPercent != null) adminLaborCostPercent = Number(updated.laborCostPercent) || 0;
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
 });
 

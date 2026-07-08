@@ -221,6 +221,8 @@ export const GetPricesResponse = zod.object({
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
   "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
+  "spreadPremiumAed": zod.number().describe('Admin-configurable fixed AED buffer added to the raw international spot conversion (Base_24K_AED) to compute Final_24K.'),
+  "laborCostPercent": zod.number().describe('Admin-configurable percentage markup applied only to jewelry rows (22K, 21K, 18K) on top of their purity-adjusted Final_24K value.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -266,6 +268,8 @@ export const UpdatePricesBody = zod.object({
   "gold18kRate": zod.number().optional(),
   "gold9999Rate": zod.number().optional(),
   "goldKg9999Rate": zod.number().optional(),
+  "spreadPremiumAed": zod.number().optional(),
+  "laborCostPercent": zod.number().optional(),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -295,6 +299,8 @@ export const UpdatePricesResponse = zod.object({
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
   "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
+  "spreadPremiumAed": zod.number().describe('Admin-configurable fixed AED buffer added to the raw international spot conversion (Base_24K_AED) to compute Final_24K.'),
+  "laborCostPercent": zod.number().describe('Admin-configurable percentage markup applied only to jewelry rows (22K, 21K, 18K) on top of their purity-adjusted Final_24K value.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -328,8 +334,11 @@ export const UpdatePricesResponse = zod.object({
  * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
  */
 export const GetPricesSpotResponse = zod.object({
-  "usdPerOz": zod.number().describe('Gold Futures (GC=F) price in USD per troy ounce from Yahoo Finance.'),
-  "aedPerGram": zod.number().describe('Derived AED per gram — (usdPerOz \/ 31.1034768) \* 3.6725.'),
+  "usdPerOz": zod.number().describe('Live international Gold Spot (XAU\/USD) price in USD per troy ounce.'),
+  "aedPerGram": zod.number().describe('Final_24K working baseline in AED per gram: Base_24K_AED + admin spreadPremiumAed. Base_24K_AED = (usdPerOz \/ 31.1034768) \* 3.6725.'),
+  "baseAedPerGram": zod.number().nullish().describe('Raw Base_24K_AED before the admin spread\/premium buffer is applied — (usdPerOz \/ 31.1034768) \* 3.6725.'),
+  "spreadPremiumAed": zod.number().nullish().describe('Admin-configured fixed AED buffer currently applied on top of baseAedPerGram to produce aedPerGram (Final_24K).'),
+  "laborCostPercent": zod.number().nullish().describe('Admin-configured percentage markup applied only to jewelry rows (22K, 21K, 18K) derived from this spot tick.'),
   "updatedAt": zod.string().describe('ISO-8601 timestamp of when this price was fetched.')
 })
 

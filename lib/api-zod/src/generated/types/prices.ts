@@ -23,6 +23,10 @@ export interface Prices {
   gold9999Rate: number;
   /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
   goldKg9999Rate: number;
+  /** Admin-configurable fixed AED buffer added to the raw international spot conversion (Base_24K_AED) to compute Final_24K. */
+  spreadPremiumAed: number;
+  /** Admin-configurable percentage markup applied only to jewelry rows (22K, 21K, 18K) on top of their purity-adjusted Final_24K value. */
+  laborCostPercent: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;

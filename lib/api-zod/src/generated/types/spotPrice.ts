@@ -7,10 +7,25 @@
  */
 
 export interface SpotPrice {
-  /** Gold Futures (GC=F) price in USD per troy ounce from Yahoo Finance. */
+  /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
   usdPerOz: number;
-  /** Derived AED per gram — (usdPerOz / 31.1034768) * 3.6725. */
+  /** Final_24K working baseline in AED per gram: Base_24K_AED + admin spreadPremiumAed. Base_24K_AED = (usdPerOz / 31.1034768) * 3.6725. */
   aedPerGram: number;
+  /**
+     * Raw Base_24K_AED before the admin spread/premium buffer is applied — (usdPerOz / 31.1034768) * 3.6725.
+     * @nullable
+     */
+  baseAedPerGram?: number | null;
+  /**
+     * Admin-configured fixed AED buffer currently applied on top of baseAedPerGram to produce aedPerGram (Final_24K).
+     * @nullable
+     */
+  spreadPremiumAed?: number | null;
+  /**
+     * Admin-configured percentage markup applied only to jewelry rows (22K, 21K, 18K) derived from this spot tick.
+     * @nullable
+     */
+  laborCostPercent?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

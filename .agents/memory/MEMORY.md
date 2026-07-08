@@ -6,3 +6,4 @@
 - [Gold-shop core asset parity](gold-shop-asset-parity.md) — new metal/karat rate types must get full manual-editable/live-syncable parity (DB column, API, OpenAPI, AssetCard, invoice lookup) like existing assets, not a derived/read-only shortcut.
 - [Gold-shop public routes pattern](gold-shop-public-routes.md) — unauthenticated pages (e.g. showroom display board) need both a public API sub-router mounted before `requireAuth` and a wouter route matched before the AuthGate.
 - [Gold-shop per-item live rate injection](gold-shop-per-item-live-rate.md) — each invoice row derives its own metal rate from live prices; never reintroduce a single shared page-level rate driving heterogeneous rows.
+- [Gold-shop pricing engine (spot-based)](gold-shop-pricing-engine.md) — Base_24K derived from XAU/USD international spot + admin spread/labor%; API server needs a workflow restart to pick up backend route changes (no hot reload).

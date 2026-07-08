@@ -23,6 +23,14 @@ export const pricesTable = pgTable("prices", {
   gold9999Rate: numeric("gold_9999_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
   // GOLD KG (0.9999) — per-gram rate for invoice/admin; TV board shows 1KG total.
   goldKg9999Rate: numeric("gold_kg_9999_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
+  // ── International spot pricing engine ─────────────────────────────────────
+  // spreadPremiumAed: fixed AED buffer added on top of the raw international
+  // spot conversion (Base_24K_AED) to arrive at the shop's working baseline
+  // (Final_24K = Base_24K_AED + spreadPremiumAed). Admin-configurable.
+  spreadPremiumAed: numeric("spread_premium_aed", { precision: 12, scale: 4 }).notNull().default("0"),
+  // laborCostPercent: percentage markup applied ONLY to jewelry rows (22K,
+  // 21K, 18K) on top of their purity-adjusted Final_24K value. Admin-configurable.
+  laborCostPercent: numeric("labor_cost_percent", { precision: 8, scale: 4 }).notNull().default("0"),
   customDescriptions: text("custom_descriptions").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 

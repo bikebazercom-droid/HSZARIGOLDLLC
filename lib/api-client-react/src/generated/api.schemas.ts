@@ -198,6 +198,10 @@ export interface Prices {
   gold9999Rate: number;
   /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
   goldKg9999Rate: number;
+  /** Admin-configurable fixed AED buffer added to the raw international spot conversion (Base_24K_AED) to compute Final_24K. */
+  spreadPremiumAed: number;
+  /** Admin-configurable percentage markup applied only to jewelry rows (22K, 21K, 18K) on top of their purity-adjusted Final_24K value. */
+  laborCostPercent: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;
@@ -303,6 +307,8 @@ export interface PricesInput {
   gold18kRate?: number;
   gold9999Rate?: number;
   goldKg9999Rate?: number;
+  spreadPremiumAed?: number;
+  laborCostPercent?: number;
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
@@ -490,10 +496,25 @@ export interface PublicSettings {
 }
 
 export interface SpotPrice {
-  /** Gold Futures (GC=F) price in USD per troy ounce from Yahoo Finance. */
+  /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
   usdPerOz: number;
-  /** Derived AED per gram — (usdPerOz / 31.1034768) * 3.6725. */
+  /** Final_24K working baseline in AED per gram: Base_24K_AED + admin spreadPremiumAed. Base_24K_AED = (usdPerOz / 31.1034768) * 3.6725. */
   aedPerGram: number;
+  /**
+     * Raw Base_24K_AED before the admin spread/premium buffer is applied — (usdPerOz / 31.1034768) * 3.6725.
+     * @nullable
+     */
+  baseAedPerGram?: number | null;
+  /**
+     * Admin-configured fixed AED buffer currently applied on top of baseAedPerGram to produce aedPerGram (Final_24K).
+     * @nullable
+     */
+  spreadPremiumAed?: number | null;
+  /**
+     * Admin-configured percentage markup applied only to jewelry rows (22K, 21K, 18K) derived from this spot tick.
+     * @nullable
+     */
+  laborCostPercent?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

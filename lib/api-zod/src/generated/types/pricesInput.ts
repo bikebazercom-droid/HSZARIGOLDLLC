@@ -20,6 +20,8 @@ export interface PricesInput {
   gold18kRate?: number;
   gold9999Rate?: number;
   goldKg9999Rate?: number;
+  spreadPremiumAed?: number;
+  laborCostPercent?: number;
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;

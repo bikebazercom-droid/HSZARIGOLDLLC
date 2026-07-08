@@ -1,0 +1,26 @@
+Hey Agent, we want to align our system backend logic with the international spot market pricing structure, just like the reference mobile app in 30.jpg. 
+
+Please restructure our pricing feed and calculations in `prices.ts` and the backend controller using this professional architecture:
+
+1. **Fetch International Spot Rates (XAU/USD):**
+   - Connect our live background ticker to pull real-time Global Spot Gold (XAU/USD) Bid/Ask prices (via a reliable forex/metal API or our livepriceofgold.com feed).
+   - Convert the USD per ounce price to AED per gram dynamically using the fixed peg formula:
+     `Base_24K_AED = (XAU_USD_Price / 31.1034768) * 3.6725`
+
+2. **Add Custom Admin Controls for Spread & Labor Cost:**
+   - In the Admin Dashboard (referencing Screenshot_24.jpg layout), add two global configuration input fields:
+     - **Spread % / Premium (AED):** To add a fixed buffer to the raw international rate.
+     - **Labor Cost %:** To adjust retail jewelry calculations.
+   - The final working baseline for 24K will be: `Final_24K = Base_24K_AED + Admin_Spread_Buffer`.
+
+3. **Recalculate All Row Elements with 100% Precision:**
+   - **TT. BAR (0.9999):** `Final_24K * 116.640 * 0.9999`
+   - **GOLD (0.9999) [1GM]:** Show `Final_24K * 0.9999` on Admin/Invoice, and display as 1GM on TV.
+   - **GOLD KG (0.9999) [1KG]:** Show `Final_24K * 1000 * 0.9999` on TV, while keeping it as a 1GM asset in the invoice setup.
+   - **KG BAR (0.995) [1KG]:** `Final_24K * 1000 * 0.995` (Ensure it perfectly syncs with the app's KILO BAR 995 output structure).
+   - **Jewelry rows (22K, 21K, 18K):** Apply respective purity factors (`0.916`, `0.875`, `0.750`) multiplied by `Final_24K` plus the customized Labor Cost percentage.
+
+4. **Verify Live Ticking & UI Layout:**
+   - Ensure these newly derived math blocks flow flawlessly into our 3-column TV layout (Title | Type | Price) and that the Green/Red directional pulses flash immediately on every micro-tick.
+
+Apply these calculation overrides, run a full build verification, and make the engine live!
