@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { GlobalPricingConfig } from "@/components/global-pricing-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Zap, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -237,13 +238,6 @@ export default function Prices() {
   const [localManualMode, setLocalManualMode] = useState(false);
   const [togglingMode, setTogglingMode] = useState(false);
 
-  // Global Pricing Configuration — spread/premium (fixed AED) added on top of
-  // the raw international spot conversion, and labor cost % applied only to
-  // jewelry rows. Both are admin-configurable and drive every derived rate.
-  const [localSpreadPremiumAed, setLocalSpreadPremiumAed] = useState(0);
-  const [localLaborCostPercent, setLocalLaborCostPercent] = useState(0);
-  const [savingPricingConfig, setSavingPricingConfig] = useState(false);
-
   const [tvVisibility, setTvVisibility] = useState<Record<TvVisibilityKey, boolean>>({
     tvShowTtBar995: true, tvShowTtBar999: true, tvShowGold9999: true, tvShowKgBar995: true,
     tvShowGold22k: true, tvShowGold21k: true, tvShowGold18k: true, tvShowGoldKg9999: true,
@@ -253,8 +247,6 @@ export default function Prices() {
   useEffect(() => {
     if (prices) {
       setLocalManualMode(prices.manualInvoiceMode ?? false);
-      setLocalSpreadPremiumAed(prices.spreadPremiumAed ?? 0);
-      setLocalLaborCostPercent(prices.laborCostPercent ?? 0);
       setTvVisibility({
         tvShowTtBar995: prices.tvShowTtBar995 ?? true,
         tvShowTtBar999: prices.tvShowTtBar999 ?? true,
@@ -288,34 +280,6 @@ export default function Prices() {
       },
       onSettled: () => setTogglingMode(false),
     });
-  };
-
-  const pricingConfigChanged = prices
-    ? localSpreadPremiumAed !== (prices.spreadPremiumAed ?? 0) || localLaborCostPercent !== (prices.laborCostPercent ?? 0)
-    : false;
-
-  const handleSavePricingConfig = async () => {
-    setSavingPricingConfig(true);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        updatePrices.mutate(
-          { data: { spreadPremiumAed: localSpreadPremiumAed, laborCostPercent: localLaborCostPercent } as any },
-          {
-            onSuccess: () => {
-              queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-              toast({ title: "Global Pricing Configuration saved", description: "Every derived rate now reflects the new spread/labor cost." });
-              resolve();
-            },
-            onError: (err: any) => {
-              toast({ title: "Save failed", description: err.message, variant: "destructive" });
-              reject(err);
-            },
-          },
-        );
-      });
-    } finally {
-      setSavingPricingConfig(false);
-    }
   };
 
   const handleToggleTvVisible = (key: TvVisibilityKey, value: boolean) => {
@@ -580,55 +544,8 @@ export default function Prices() {
         </div>
       </div>
 
-      {/* ── Global Pricing Configuration ─────────────────────────────── */}
-      <Card className="relative overflow-hidden">
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: NAVY }} />
-        <CardHeader className="pb-2 pt-5">
-          <CardTitle className="text-base font-bold flex items-center gap-2">
-            <TrendingUp className="w-4 h-4" style={{ color: NAVY }} />
-            Global Pricing Configuration
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            International Spot Gold (XAU/USD) engine — every rate below is derived from
-            <code className="mx-1 px-1 py-0.5 rounded bg-muted text-[11px]">Final_24K = Base_24K_AED + Spread</code>
-            {liveRates.baseAedPerGram != null && (
-              <>· Live Base_24K_AED: <span className="font-semibold" style={{ color: NAVY }}>AED {liveRates.baseAedPerGram.toFixed(2)}</span></>
-            )}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">
-                Spread / Premium (AED)
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-                <Input type="number" step="0.01" value={localSpreadPremiumAed}
-                  onChange={e => setLocalSpreadPremiumAed(parseFloat(e.target.value) || 0)}
-                  className="pl-14 text-lg font-bold h-11" style={{ fontFamily: "monospace" }} />
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">Fixed buffer added to the raw international rate.</p>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">
-                Labor Cost %
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">%</span>
-                <Input type="number" step="0.01" value={localLaborCostPercent}
-                  onChange={e => setLocalLaborCostPercent(parseFloat(e.target.value) || 0)}
-                  className="pl-9 text-lg font-bold h-11" style={{ fontFamily: "monospace" }} />
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">Applied only to Gold Jewelry 22K / 21K / 18K rows.</p>
-            </div>
-          </div>
-          <Button className="w-full mt-4" style={{ background: pricingConfigChanged ? NAVY : undefined }}
-            onClick={handleSavePricingConfig} disabled={savingPricingConfig || !pricingConfigChanged} size="sm">
-            {savingPricingConfig ? "Saving..." : pricingConfigChanged ? "Save Pricing Configuration" : "Configuration Saved ✓"}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* ── Global Price Control Panel ─────────────────────────────── */}
+      <GlobalPricingConfig />
 
       {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
