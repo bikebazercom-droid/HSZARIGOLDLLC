@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CustomDescription } from './customDescription';
-import type { PricesLiveApiProvider } from './pricesLiveApiProvider';
 
 export interface Prices {
   id: number;
@@ -23,20 +22,11 @@ export interface Prices {
   gold9999Rate: number;
   /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
   goldKg9999Rate: number;
-  /** Admin-configurable fixed AED buffer added to the raw international spot conversion (Base_24K_AED) to compute Final_24K. */
-  spreadPremiumAed: number;
-  /** Admin-configurable percentage markup applied only to jewelry rows (22K, 21K, 18K) on top of their purity-adjusted Final_24K value. */
-  laborCostPercent: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode: boolean;
-  liveApiKeyConfigured: boolean;
-  /** @nullable */
-  liveApiKeyMasked?: string | null;
-  /** Which price feed drives /prices/spot — "free" (socket feed, Bid/Ask estimated) or "goldapi" (GoldAPI.io paid feed, real Bid/Ask/High/Low). */
-  liveApiProvider: PricesLiveApiProvider;
   /** @nullable */
   liveGoldRate24k?: number | null;
   /** @nullable */
@@ -44,22 +34,22 @@ export interface Prices {
   /** @nullable */
   liveSilverRate?: number | null;
   /**
-     * Last persisted Bid snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
+     * Last persisted Bid snapshot (USD/oz). Live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldBid?: number | null;
   /**
-     * Last persisted Ask snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
+     * Last persisted Ask snapshot (USD/oz). Live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldAsk?: number | null;
   /**
-     * Last persisted High snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
+     * Last persisted daily High snapshot (USD/oz). Live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldHigh?: number | null;
   /**
-     * Last persisted Low snapshot (USD/oz). Only real when liveApiProvider is "goldapi"; live values stream via /prices/spot, not this field.
+     * Last persisted daily Low snapshot (USD/oz). Live values stream via /prices/spot, not this field.
      * @nullable
      */
   liveGoldLow?: number | null;

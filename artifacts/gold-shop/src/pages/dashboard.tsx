@@ -17,7 +17,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { format } from "date-fns";
 import { Plus, Filter, FileDown } from "lucide-react";
 import { useAuth } from "@/context/auth";
-import { GlobalPricingConfig } from "@/components/global-pricing-config";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -353,9 +352,6 @@ export default function Dashboard() {
           <Button size="sm" className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-1.5" /> New Invoice</Button>
         </Link>
       </div>
-
-      {/* Global Price Control Panel */}
-      <GlobalPricingConfig compact />
 
       {/* Quick stats row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3">

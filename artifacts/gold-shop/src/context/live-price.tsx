@@ -11,17 +11,16 @@ import {
 // freshest in-memory tick):
 //
 //   Base_24K_AED = (Live_International_Ask_Price / 31.1034768) * 3.6725
-//   Final_24K    = Base_24K_AED + Dashboard_Spread_Input (admin spreadPremiumAed, +/-)
 //
-// Row derivations from Final_24K:
-//   TT. BAR (0.995)  = Final_24K × 116.640 × 0.995
-//   TT. BAR (0.9999) = Final_24K × 116.640 × 0.9999
-//   GOLD (0.9999)    = Final_24K × 0.9999
-//   GOLD KG (0.9999) = Final_24K × 1000 × 0.9999 (TV total) / × 0.9999 (1GM invoice rate)
-//   KG BAR (0.995)   = Final_24K × 1000 × 0.995
-//   Gold Jewelry 22K = Final_24K × (22 / 24) × (1 + laborCostPercent / 100)
-//   Gold Jewelry 21K = Final_24K × (21 / 24) × (1 + laborCostPercent / 100)
-//   Gold Jewelry 18K = Final_24K × (18 / 24) × (1 + laborCostPercent / 100)
+// Row derivations from Base_24K_AED:
+//   TT. BAR (0.995)  = Base_24K_AED × 116.640 × 0.995
+//   TT. BAR (0.9999) = Base_24K_AED × 116.640 × 0.9999
+//   GOLD (0.9999)    = Base_24K_AED × 0.9999
+//   GOLD KG (0.9999) = Base_24K_AED × 1000 × 0.9999 (TV total) / × 0.9999 (1GM invoice rate)
+//   KG BAR (0.995)   = Base_24K_AED × 1000 × 0.995
+//   Gold Jewelry 22K = Base_24K_AED × (22 / 24)
+//   Gold Jewelry 21K = Base_24K_AED × (21 / 24)
+//   Gold Jewelry 18K = Base_24K_AED × (18 / 24)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TOLA_BAR_GRAMS = 116.640;
@@ -35,12 +34,10 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface LiveRates {
   usdPerOz:      number | null;
-  aedPerGram:    number | null;  // Final_24K (Base_24K_AED + admin spread) — invoice baseline
-  baseAedPerGram: number | null; // Base_24K_AED — raw international conversion, no spread
-  spreadPremiumAed: number | null; // Admin-configured fixed AED buffer currently applied
-  laborCostPercent: number | null; // Admin-configured jewelry labor cost % currently applied
-  bidUsdPerOz:   number | null;  // Synthesized live Bid (USD/oz)
-  askUsdPerOz:   number | null;  // Synthesized live Ask (USD/oz)
+  aedPerGram:    number | null;  // Base_24K_AED — invoice baseline
+  baseAedPerGram: number | null; // same as aedPerGram (no spread applied)
+  bidUsdPerOz:   number | null;  // Live Bid (USD/oz)
+  askUsdPerOz:   number | null;  // Live Ask (USD/oz)
   dailyLowUsdPerOz:  number | null; // Lowest usdPerOz tick since UTC midnight
   dailyHighUsdPerOz: number | null; // Highest usdPerOz tick since UTC midnight
   ttBar995Total: number | null;  // TT. BAR (0.995) total price per bar
@@ -49,9 +46,9 @@ export interface LiveRates {
   goldKg9999Total: number | null; // GOLD KG (0.9999) total price per 1KG bar (TV)
   goldKg9999Rate:  number | null; // GOLD KG (0.9999) per gram (admin / invoice)
   kgBar995Total: number | null;  // KG BAR (0.995) total price per kg
-  gold22kRate:   number | null;  // Gold Jewelry 22K per gram (incl. labor cost)
-  gold21kRate:   number | null;  // Gold Jewelry 21K per gram (incl. labor cost)
-  gold18kRate:   number | null;  // Gold Jewelry 18K per gram (incl. labor cost)
+  gold22kRate:   number | null;  // Gold Jewelry 22K per gram
+  gold21kRate:   number | null;  // Gold Jewelry 21K per gram
+  gold18kRate:   number | null;  // Gold Jewelry 18K per gram
   isLive:        boolean;
   updatedAt:     string | null;
 }
@@ -64,8 +61,6 @@ const EMPTY_RATES: LiveRates = {
   usdPerOz:      null,
   aedPerGram:    null,
   baseAedPerGram: null,
-  spreadPremiumAed: null,
-  laborCostPercent: null,
   bidUsdPerOz:   null,
   askUsdPerOz:   null,
   dailyLowUsdPerOz:  null,
@@ -103,28 +98,21 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
   });
 
   const liveRates = useMemo<LiveRates>(() => {
-    // aedPerGram is Final_24K — the international-spot-derived 24K rate per
-    // gram (AED), computed server-side as Base_24K_AED + admin spread. Guard
-    // on this — not usdPerOz — since the backend may return usdPerOz=0 when
-    // falling back to a pre-cached rate.
+    // aedPerGram is Base_24K_AED — the international-spot-derived 24K rate per
+    // gram (AED), computed server-side as (XAUUSD / 31.1034768) × 3.6725.
+    // Guard on this — not usdPerOz — since the backend may return usdPerOz=0
+    // when falling back to a pre-cached rate.
     if (!spot?.aedPerGram || spot.aedPerGram <= 0) return EMPTY_RATES;
 
-    // Atomic base: Final_24K AED/gram from the live Socket.IO feed.
     // Round to 2dp FIRST so every derived row is exactly verifiable from the
     // displayed base — i.e. if the board shows 491.86, then
     //   TT BAR 0.9999 = 491.86 × 116.640 × 0.9999 = 57,319.00  (pocket-calc match)
-    // Using the unrounded float would give a result that differs from what a
-    // user would compute from the displayed base, causing apparent "errors".
     const base = round2(spot.aedPerGram);
-    const laborCostPercent = spot.laborCostPercent ?? 0;
-    const laborMultiplier = 1 + laborCostPercent / 100;
 
     return {
       usdPerOz:      spot.usdPerOz ?? null,
       aedPerGram:    base,
       baseAedPerGram: spot.baseAedPerGram != null ? round2(spot.baseAedPerGram) : null,
-      spreadPremiumAed: spot.spreadPremiumAed ?? null,
-      laborCostPercent: spot.laborCostPercent ?? null,
       bidUsdPerOz:   spot.bidUsdPerOz != null ? round2(spot.bidUsdPerOz) : null,
       askUsdPerOz:   spot.askUsdPerOz != null ? round2(spot.askUsdPerOz) : null,
       dailyLowUsdPerOz:  spot.dailyLowUsdPerOz != null ? round2(spot.dailyLowUsdPerOz) : null,
@@ -135,9 +123,9 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       goldKg9999Total: round2(base * 1000 * PURITY_9999),
       goldKg9999Rate:  round2(base * PURITY_9999),
       kgBar995Total: round2(base * 1000 * PURITY_995),
-      gold22kRate:   round2(base * PURITY_22K * laborMultiplier),
-      gold21kRate:   round2(base * PURITY_21K * laborMultiplier),
-      gold18kRate:   round2(base * PURITY_18K * laborMultiplier),
+      gold22kRate:   round2(base * PURITY_22K),
+      gold21kRate:   round2(base * PURITY_21K),
+      gold18kRate:   round2(base * PURITY_18K),
       isLive:        true,
       updatedAt:     spot.updatedAt,
     };

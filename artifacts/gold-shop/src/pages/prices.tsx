@@ -16,7 +16,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { GlobalPricingConfig } from "@/components/global-pricing-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, RefreshCw, Plus, Trash2, Check, CalendarDays, Zap, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -543,9 +542,6 @@ export default function Prices() {
           />
         </div>
       </div>
-
-      {/* ── Global Price Control Panel ─────────────────────────────── */}
-      <GlobalPricingConfig />
 
       {/* All cards in one grid: built-in + custom + always-visible add button */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

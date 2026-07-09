@@ -64,8 +64,6 @@ interface PricesData {
   gold18kRate: number;
   gold9999Rate: number;
   goldKg9999Rate: number;
-  spreadPremiumAed?: number;
-  laborCostPercent?: number;
   liveModeConnected?: boolean;
   manualInvoiceMode?: boolean;
 }
@@ -146,16 +144,15 @@ function descToCategory(desc: string): string {
 // (22K/21K/18K each have their own manually-editable & live-syncable rate,
 // exactly like TT. BAR/KG BAR/GOLD) — except for Silver, which always uses
 // the flat silver rate regardless of its purity value.
-function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null, laborCostPercent?: number): number {
+function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
   if (category === "silver") return prices?.silverPricePerGram ?? fallback;
-  // Prefer live math when raw spot rate is available (Final_24K from the
-  // international spot engine). Labor cost % applies ONLY to jewelry purities.
+  // Prefer live math when raw spot rate is available (Base_24K_AED from the
+  // international spot engine).
   if (rawAedPerGram && rawAedPerGram > 0) {
-    const laborMultiplier = 1 + (laborCostPercent ?? 0) / 100;
     if (purity === "0.9999") return roundTo(rawAedPerGram * 0.9999, 2);
-    if (purity === "0.916")  return roundTo(rawAedPerGram * (22 / 24) * laborMultiplier, 2);
-    if (purity === "0.875")  return roundTo(rawAedPerGram * (21 / 24) * laborMultiplier, 2);
-    if (purity === "0.750")  return roundTo(rawAedPerGram * (18 / 24) * laborMultiplier, 2);
+    if (purity === "0.916")  return roundTo(rawAedPerGram * (22 / 24), 2);
+    if (purity === "0.875")  return roundTo(rawAedPerGram * (21 / 24), 2);
+    if (purity === "0.750")  return roundTo(rawAedPerGram * (18 / 24), 2);
     if (purity === "0.995")  return roundTo(rawAedPerGram * 0.995, 2);
     if (purity === "0.999")  return roundTo(rawAedPerGram * 0.999, 2);
     const factor = parsePurity(purity);
@@ -178,15 +175,13 @@ function getRateForPurity(purity: string, category: string, prices: PricesData |
 // their own manually-editable & live-syncable rate fields — identical in
 // behavior to TT. BAR/KG BAR/GOLD — so their rate is read directly from the
 // saved DB field, never recomputed inline from the raw spot rate.
-function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null, laborCostPercent?: number): number {
+function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
   // Prefer live math for all gold products when raw spot is available
-  // (Final_24K from the international spot engine). Labor cost % applies
-  // ONLY to jewelry rows (22K/21K/18K).
+  // (Base_24K_AED from the international spot engine).
   if (rawAedPerGram && rawAedPerGram > 0) {
-    const laborMultiplier = 1 + (laborCostPercent ?? 0) / 100;
-    if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return roundTo(rawAedPerGram * (22 / 24) * laborMultiplier, 2);
-    if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return roundTo(rawAedPerGram * (21 / 24) * laborMultiplier, 2);
-    if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return roundTo(rawAedPerGram * (18 / 24) * laborMultiplier, 2);
+    if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return roundTo(rawAedPerGram * (22 / 24), 2);
+    if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return roundTo(rawAedPerGram * (21 / 24), 2);
+    if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return roundTo(rawAedPerGram * (18 / 24), 2);
     if (description === "GOLD (0.9999)" || description === "GOLD KG (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return roundTo(rawAedPerGram * 0.9999, 2);
     if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return roundTo(rawAedPerGram * 0.995, 2);
     if (description === "TT. BAR (0.9999)") return roundTo(rawAedPerGram * 0.9999, 2);
@@ -244,11 +239,11 @@ function calcItem(item: LineItem, metalRate: number): LineItem {
 // into the global Metal Rate field — resolved from the invoice's primary
 // item (the first row that has a description or purity chosen). Falls back
 // to the raw live spot rate when no item has been specified yet.
-function resolvePrimaryRate(currentItems: LineItem[], prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null, laborCostPercent?: number): number {
+function resolvePrimaryRate(currentItems: LineItem[], prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
   const primary = currentItems.find(i => i.description || i.purity);
   if (!primary) return fallback;
-  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborCostPercent);
-  return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram, laborCostPercent);
+  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram);
+  return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram);
 }
 
 export default function NewInvoice() {
@@ -274,10 +269,6 @@ export default function NewInvoice() {
   const { liveRates } = useLivePrice();
   // When manual mode is ON, pass undefined so rate helpers fall back to DB values.
   const liveAed = isManualMode ? undefined : liveRates.aedPerGram;
-  // Labor cost % (jewelry-only markup) — prefer the live-price context's tick
-  // value (kept fresh every second from /prices/spot); fall back to the DB
-  // value from /prices when live mode is off or the context hasn't ticked yet.
-  const laborCostPercent = (isManualMode ? undefined : liveRates.laborCostPercent) ?? prices?.laborCostPercent ?? 0;
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");
@@ -380,7 +371,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, laborCostPercent);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
@@ -395,7 +386,7 @@ export default function NewInvoice() {
       }
       if (field === "purity" && value) {
         const currentCategory = updated.category ?? "gold_jewelry";
-        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveAed, laborCostPercent);
+        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveAed);
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {
@@ -425,7 +416,7 @@ export default function NewInvoice() {
   useEffect(() => {
     // In manual mode the live 1s tick must NOT override admin-set rates.
     if (!isLive || isManualMode) return;
-    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed, laborCostPercent));
+    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive, isManualMode, prices, itemSignature]);
 

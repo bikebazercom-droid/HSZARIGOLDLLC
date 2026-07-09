@@ -5,28 +5,17 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { SpotPriceFeedSource } from './spotPriceFeedSource';
 
 export interface SpotPrice {
   /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
   usdPerOz: number;
-  /** Final_24K working baseline in AED per gram: Base_24K_AED + admin spreadPremiumAed. Base_24K_AED = (usdPerOz / 31.1034768) * 3.6725. */
+  /** Base_24K_AED in AED per gram: (usdPerOz / 31.1034768) * 3.6725. Verified to match livepriceofgold.com Dubai AED/gram display to ±1¢. */
   aedPerGram: number;
   /**
-     * Raw Base_24K_AED before the admin spread/premium buffer is applied — (usdPerOz / 31.1034768) * 3.6725.
+     * Same as aedPerGram — (usdPerOz / 31.1034768) * 3.6725.
      * @nullable
      */
   baseAedPerGram?: number | null;
-  /**
-     * Admin-configured fixed AED buffer currently applied on top of baseAedPerGram to produce aedPerGram (Final_24K).
-     * @nullable
-     */
-  spreadPremiumAed?: number | null;
-  /**
-     * Admin-configured percentage markup applied only to jewelry rows (22K, 21K, 18K) derived from this spot tick.
-     * @nullable
-     */
-  laborCostPercent?: number | null;
   /**
      * Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.
      * @nullable
@@ -47,13 +36,6 @@ export interface SpotPrice {
      * @nullable
      */
   dailyHighUsdPerOz?: number | null;
-  /** Which feed actually produced this tick. "paid" only when liveApiProvider is set to goldapi AND the paid fetch is currently succeeding; falls back to "free" automatically otherwise. */
-  feedSource?: SpotPriceFeedSource;
-  /**
-     * Set when liveApiProvider is "goldapi" but the paid fetch is currently failing (e.g. bad key, rate limit) — explains why feedSource fell back to "free".
-     * @nullable
-     */
-  paidFeedError?: string | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

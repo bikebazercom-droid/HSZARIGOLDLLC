@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CustomDescription } from './customDescription';
-import type { PricesInputLiveApiProvider } from './pricesInputLiveApiProvider';
 
 export interface PricesInput {
   goldPricePerGram?: number;
@@ -21,15 +20,9 @@ export interface PricesInput {
   gold18kRate?: number;
   gold9999Rate?: number;
   goldKg9999Rate?: number;
-  spreadPremiumAed?: number;
-  laborCostPercent?: number;
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
-  /** Switches /prices/spot between the free socket feed (estimated Bid/Ask) and the paid GoldAPI.io feed (real Bid/Ask/High/Low). */
-  liveApiProvider?: PricesInputLiveApiProvider;
-  /** Paid provider API key (write-only — never echoed back in GET responses; use liveApiKeyConfigured/liveApiKeyMasked to check status). Send an empty string to clear it. */
-  liveApiKey?: string;
   tvShowTtBar995?: boolean;
   tvShowTtBar999?: boolean;
   tvShowGold9999?: boolean;
