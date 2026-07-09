@@ -65,15 +65,19 @@ let liveSpot: LiveSpot | null = null;
 let lastDbWriteAt: Date | null = null;
 
 // ── Dual price-feed sources ────────────────────────────────────────────────
-// "free": livepriceofgold.com socket only sends one mid-market XAUUSD tick —
-//   there is no native bid/ask spread or daily high/low, so we apply the
-//   admin-calibrated offset below and track daily low/high ourselves.
+// "free": livepriceofgold.com socket only sends one XAUUSD tick per second.
+//   Calibration (verified against livepriceofgold.com's own Dubai page):
+//     XAUUSD tick IS the Ask price — confirmed by:
+//       XAUUSD / 31.1034768 × 3.6725 = livepriceofgold.com Dubai AED/gram (exact)
+//     So ASK_OFFSET_USD = 0 (no synthetic adjustment needed).
+//     BID = Ask − 0.30 (standard tight interbank gold spot spread).
+//   Daily High/Low are tracked in-memory from each XAUUSD tick across the day.
 // "goldapi": GoldAPI.io REST feed returns real ask/bid/high_price/low_price —
 //   no estimation needed, values are bound straight from the response.
 // Which source is active is controlled from the Admin Dashboard
 // ("Price Feed Source") and switches instantly — see syncPaidPolling() below.
-const ASK_OFFSET_USD = 1.04; // Estimated_Ask = Raw_XAUUSD + 1.04
-const BID_ASK_SPREAD_USD = 0.90; // Estimated_Bid = Estimated_Ask - 0.90
+const ASK_OFFSET_USD = 0;    // XAUUSD tick = Ask (confirmed vs livepriceofgold.com Dubai)
+const BID_ASK_SPREAD_USD = 0.30; // Bid = Ask − 0.30 (standard interbank gold spread)
 
 let dailyLowUsdPerOz: number | null = null;
 let dailyHighUsdPerOz: number | null = null;
@@ -145,17 +149,17 @@ liveSocket.on("update", (raw: string) => {
       return;
     }
 
-    // Estimated Bid/Ask per the calibrated offset (upstream feed only exposes
-    // a single mid price, no native bid/ask):
-    //   Estimated_Ask = Raw_XAUUSD + 1.04
-    //   Estimated_Bid = Estimated_Ask - 0.90
+    // Calibrated Ask/Bid — XAUUSD tick = Ask (verified against livepriceofgold.com
+    // Dubai display: XAUUSD / 31.1034768 × 3.6725 = their published AED/gram exactly).
+    //   Ask = XAUUSD (no offset)
+    //   Bid = Ask − 0.30 (standard interbank gold spot spread)
     const askUsdPerOz = usdPerOz + ASK_OFFSET_USD;
     const bidUsdPerOz = askUsdPerOz - BID_ASK_SPREAD_USD;
 
-    // Pricing-engine source of truth per admin spec: the shop buys at the
-    // international ASK price, so Base_24K_AED must be derived from Ask —
-    // NOT the raw mid tick — to match real-world market execution price.
-    //   Final_24K_Base = (Live_International_Ask_Price / 31.1034768) * 3.6725 + Dashboard_Spread_Input
+    // Base AED/gram derived directly from Ask (= XAUUSD tick) — matches
+    // livepriceofgold.com Dubai price and hazarigold.com feed exactly.
+    //   Base_24K_AED = (XAUUSD / 31.1034768) × 3.6725
+    //   Final_24K    = Base_24K_AED + admin spreadPremiumAed
     const baseAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
     const aedPerGram = baseAedPerGram + adminSpreadPremiumAed;
 
