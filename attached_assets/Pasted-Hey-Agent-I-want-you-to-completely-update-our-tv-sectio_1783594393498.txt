@@ -1,0 +1,26 @@
+Hey Agent, I want you to completely update our `/tv` section UI and backend data pipeline to EXACTLY match the design and structure shown in the uploaded screenshots (Screenshot_11.jpg and Screenshot_12.jpg). 
+
+Please replace the current layout with this precise professional design:
+
+1. **Top Section - Gold Spot Panel (Matches Screenshot_11.jpg):**
+   - Background: Dark grey/black sleek card container.
+   - Header: Center-aligned golden title text "Gold Spot".
+   - Layout: Two main columns/boxes:
+     * **Left Box:** Title "ASK PRICE (oz)" in light red/coral color with a small red dollar icon ($). Inside the box, display the live Ask price (large, bold, white, e.g., `4097.52`). Right below the price inside the same box, show "Low 4054.45" in red font.
+     * **Right Box:** Title "BID PRICE (oz)" in light green color with a small green dollar icon ($). Inside the box, display the live Bid price (large, bold, white, e.g., `4096.62`). Right below the price inside the same box, show "High 4117.88" in green font.
+
+2. **Bottom Section - Metals Price Table (Matches Screenshot_12.jpg):**
+   - Create a clean structured table with a dark brown/copper header row spanning 3 columns: `METALS`, `WEIGHT`, and `PRICE (AED)`.
+   - Each data row must have a dark rounded card background with white text, formatted EXACTLY as follows:
+     * **Row 1:** Gold Bar Icon | "TEN TOLA BAR" | "TTB" | Calculated Live Price (e.g., 56,371.90)
+     * **Row 2:** Necklace Icon | "JEWELLERY 22K" | "1GM" | Calculated Live Price (e.g., 445.08)
+     * **Row 3:** Gold Bricks Icon | "GOLD 9999" | "1GM" | Calculated Live Price (e.g., 483.73)
+     * **Row 4:** Gold Bricks Icon | "GOLD 9999" | "1KG" | Calculated Live Price (e.g., 483,298.20)
+     * **Row 5:** Gold Bar Icon | "KILO BAR 995" | "1KG" | Calculated Live Price (e.g., 481,363.07)
+
+3. **Backend Free Live Feed & Automatic Local Math:**
+   - Use our 100% FREE live market scrapper/polling method to fetch the live global `XAU/USD` rate (Bid, Ask, Low, High).
+   - Dynamically compute the exact Dubai Dirham (AED) prices for the 1GM, 1KG, and Ten Tola Bar items in the table using the standard purity multipliers (0.995, 0.999, 0.9999, 0.916) in real-time.
+   - Ensure the entire TV view updates seamlessly without any user interaction or premium API keys.
+
+Make sure the font sizes are optimized for large TV screens, completely responsive, and has zero compilation errors. Let's make it pixel-perfect!

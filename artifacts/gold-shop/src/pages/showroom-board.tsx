@@ -7,11 +7,15 @@ import {
   getGetPublicPricesQueryKey,
 } from "@workspace/api-client-react";
 
-const GOLD = "#d4af37";
+const GOLD       = "#d4af37";
+const ASK_COLOR  = "#f87171";   // coral/red for ASK side
+const BID_COLOR  = "#4ade80";   // green for BID side
 const GREEN_TICK = "#22c55e";
 const RED_TICK   = "#ef4444";
+const HEADER_BG  = "#3b2409";   // dark brown/copper for table header
+const HEADER_BORDER = "#b97a30";
 
-// ── Ticker clock ─────────────────────────────────────────────────────────────
+// ── Clock ─────────────────────────────────────────────────────────────────────
 function useTicker() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -22,18 +26,25 @@ function useTicker() {
 }
 
 function formatDate(d: Date) {
-  return d.toLocaleDateString("en-AE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  return d.toLocaleDateString("en-AE", {
+    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  });
 }
 function formatClock(d: Date) {
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
+  });
 }
 
-function fmt(n: number | null | undefined) {
+function fmt(n: number | null | undefined, decimals = 2) {
   if (n == null || !Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-AE", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
-// ── Direction tracking ────────────────────────────────────────────────────────
+// ── Direction tracking (for row flash animations) ─────────────────────────────
 type Direction = "up" | "down" | "neutral";
 
 function useDirections(values: (number | null)[]) {
@@ -50,194 +61,362 @@ function useDirections(values: (number | null)[]) {
       if (v < p) return "down";
       return "neutral";
     });
-
     const changed = next.some((d, i) => d !== "neutral" && d !== dirs[i]);
     if (changed) {
       setDirs(next);
       if (timerRef.current) clearTimeout(timerRef.current);
-      // Reset to neutral after animation completes (1.8 s)
       timerRef.current = setTimeout(() => setDirs(values.map(() => "neutral")), 1800);
     }
-
     prevRef.current = [...values];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values]);
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
-
   return dirs;
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
-function GoldBarIcon() {
-  return (
-    <svg width="100%" height="100%" viewBox="0 0 40 40" fill="none">
-      <polygon points="6,26 10,14 34,14 30,26" fill="url(#barGrad)" stroke={GOLD} strokeWidth="1" />
-      <polygon points="10,14 12,12 32,12 34,14" fill="#f4d873" opacity="0.7" />
-      <defs>
-        <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#f6e27a" />
-          <stop offset="55%" stopColor={GOLD} />
-          <stop offset="100%" stopColor="#8a6a1a" />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
-function GoldRingIcon() {
-  return (
-    <svg width="100%" height="100%" viewBox="0 0 40 40" fill="none">
-      <circle cx="20" cy="22" r="11" stroke="url(#ringGrad)" strokeWidth="4" fill="none" />
-      <polygon points="20,6 24,12 16,12" fill="#f6e27a" stroke={GOLD} strokeWidth="0.5" />
-      <defs>
-        <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#f6e27a" />
-          <stop offset="100%" stopColor="#8a6a1a" />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
-function GoldIngotIcon() {
-  return (
-    <svg width="100%" height="100%" viewBox="0 0 40 40" fill="none">
-      <polygon points="8,28 12,12 28,12 32,28" fill="url(#ingotGrad)" stroke={GOLD} strokeWidth="1" />
-      <line x1="12" y1="20" x2="28" y2="20" stroke="#8a6a1a" strokeWidth="0.75" opacity="0.6" />
-      <defs>
-        <linearGradient id="ingotGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f6e27a" />
-          <stop offset="100%" stopColor={GOLD} />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
-// ── Keyframe injection ────────────────────────────────────────────────────────
-const STYLE_ID = "tick-animations";
+// ── Keyframes ─────────────────────────────────────────────────────────────────
+const STYLE_ID = "tv-tick-anims";
 function ensureKeyframes() {
   if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = `
-    @keyframes tickUp {
-      0%   { color: ${GREEN_TICK}; text-shadow: 0 0 16px ${GREEN_TICK}cc, 0 0 40px ${GREEN_TICK}66; }
-      40%  { color: ${GREEN_TICK}; text-shadow: 0 0 24px ${GREEN_TICK}ff, 0 0 60px ${GREEN_TICK}88; }
-      100% { color: ${GOLD};       text-shadow: 0 0 24px ${GOLD}33; }
+  const s = document.createElement("style");
+  s.id = STYLE_ID;
+  s.textContent = `
+    @keyframes tvTickUp {
+      0%   { color: ${GREEN_TICK}; text-shadow: 0 0 20px ${GREEN_TICK}cc, 0 0 50px ${GREEN_TICK}55; }
+      40%  { color: ${GREEN_TICK}; text-shadow: 0 0 32px ${GREEN_TICK}ff, 0 0 80px ${GREEN_TICK}77; }
+      100% { color: #ffffff;       text-shadow: none; }
     }
-    @keyframes tickDown {
-      0%   { color: ${RED_TICK}; text-shadow: 0 0 16px ${RED_TICK}cc, 0 0 40px ${RED_TICK}66; }
-      40%  { color: ${RED_TICK}; text-shadow: 0 0 24px ${RED_TICK}ff, 0 0 60px ${RED_TICK}88; }
-      100% { color: ${GOLD};     text-shadow: 0 0 24px ${GOLD}33; }
+    @keyframes tvTickDown {
+      0%   { color: ${RED_TICK}; text-shadow: 0 0 20px ${RED_TICK}cc, 0 0 50px ${RED_TICK}55; }
+      40%  { color: ${RED_TICK}; text-shadow: 0 0 32px ${RED_TICK}ff, 0 0 80px ${RED_TICK}77; }
+      100% { color: #ffffff;     text-shadow: none; }
     }
-    @keyframes borderUp {
-      0%   { border-color: ${GREEN_TICK}; background: linear-gradient(90deg, ${GREEN_TICK}2e 0%, #0a0a0a 100%); box-shadow: 0 0 0 1px ${GREEN_TICK}44 inset, 0 0 28px -4px ${GREEN_TICK}77; }
-      100% { border-color: ${GOLD}55;      background: linear-gradient(90deg, #131313 0%, #0a0a0a 100%); box-shadow: none; }
+    @keyframes tvRowUp {
+      0%   { border-color: ${GREEN_TICK}; box-shadow: 0 0 0 1px ${GREEN_TICK}44 inset, 0 0 28px -6px ${GREEN_TICK}88; }
+      100% { border-color: ${GOLD}44;     box-shadow: none; }
     }
-    @keyframes borderDown {
-      0%   { border-color: ${RED_TICK}; background: linear-gradient(90deg, ${RED_TICK}2e 0%, #0a0a0a 100%); box-shadow: 0 0 0 1px ${RED_TICK}44 inset, 0 0 28px -4px ${RED_TICK}77; }
-      100% { border-color: ${GOLD}55;     background: linear-gradient(90deg, #131313 0%, #0a0a0a 100%); box-shadow: none; }
+    @keyframes tvRowDown {
+      0%   { border-color: ${RED_TICK}; box-shadow: 0 0 0 1px ${RED_TICK}44 inset, 0 0 28px -6px ${RED_TICK}88; }
+      100% { border-color: ${GOLD}44;   box-shadow: none; }
     }
   `;
-  document.head.appendChild(style);
+  document.head.appendChild(s);
 }
 
-// ── AssetRow ──────────────────────────────────────────────────────────────────
-interface AssetRowProps {
-  title: string;
-  tag: string;
-  value: string;
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
+function IconGoldBar() {
+  return (
+    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none">
+      <defs>
+        <linearGradient id="gb1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#f9e97a" />
+          <stop offset="55%" stopColor="#d4af37" />
+          <stop offset="100%" stopColor="#7a5a10" />
+        </linearGradient>
+      </defs>
+      <polygon points="7,32 13,16 41,16 35,32" fill="url(#gb1)" />
+      <polygon points="13,16 15,13 39,13 41,16" fill="#f9e97a" opacity="0.7" />
+      <line x1="20" y1="24" x2="28" y2="24" stroke="#7a5a10" strokeWidth="1" opacity="0.6" />
+    </svg>
+  );
+}
+
+function IconNecklace() {
+  return (
+    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none">
+      <defs>
+        <linearGradient id="nk1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#f9e97a" />
+          <stop offset="100%" stopColor="#7a5a10" />
+        </linearGradient>
+      </defs>
+      <circle cx="24" cy="28" r="13" stroke="url(#nk1)" strokeWidth="4.5" fill="none" />
+      <path d="M16 20 Q24 10 32 20" stroke="url(#nk1)" strokeWidth="4.5" fill="none" strokeLinecap="round" />
+      <circle cx="24" cy="38" r="3" fill="#d4af37" />
+    </svg>
+  );
+}
+
+function IconGoldBricks() {
+  return (
+    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none">
+      <defs>
+        <linearGradient id="gi1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#f9e97a" />
+          <stop offset="100%" stopColor="#d4af37" />
+        </linearGradient>
+        <linearGradient id="gi2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#d4af37" />
+          <stop offset="100%" stopColor="#7a5a10" />
+        </linearGradient>
+      </defs>
+      <rect x="6" y="27" width="36" height="14" rx="2" fill="url(#gi2)" />
+      <rect x="10" y="17" width="28" height="13" rx="2" fill="url(#gi1)" />
+      <rect x="14" y="8" width="20" height="12" rx="2" fill="#f9e97a" />
+      <line x1="6" y1="34" x2="42" y2="34" stroke="#7a5a10" strokeWidth="0.75" opacity="0.5" />
+      <line x1="10" y1="23" x2="38" y2="23" stroke="#7a5a10" strokeWidth="0.75" opacity="0.5" />
+    </svg>
+  );
+}
+
+// ── Gold Spot Panel ───────────────────────────────────────────────────────────
+interface GoldSpotPanelProps {
+  ask: number | null;
+  bid: number | null;
+  low: number | null;
+  high: number | null;
+}
+
+function GoldSpotPanel({ ask, bid, low, high }: GoldSpotPanelProps) {
+  return (
+    <div
+      style={{
+        background: "linear-gradient(160deg, #1a1a1a 0%, #0d0d0d 100%)",
+        border: `1px solid ${GOLD}44`,
+        borderRadius: "clamp(0.75rem, 1.5vw, 1.5rem)",
+        padding: "clamp(0.6rem, 1.4vh, 1.25rem) clamp(0.75rem, 2vw, 2rem)",
+        boxShadow: "0 8px 40px -12px #000000cc",
+      }}
+    >
+      <div
+        className="text-center font-black uppercase tracking-widest"
+        style={{
+          color: GOLD,
+          fontSize: "clamp(0.9rem, calc(0.9vh + 1vw), 1.9rem)",
+          letterSpacing: "0.25em",
+          textShadow: `0 0 30px ${GOLD}77`,
+          marginBottom: "clamp(0.5rem, 1.2vh, 1rem)",
+        }}
+      >
+        Gold Spot
+      </div>
+
+      <div
+        className="grid grid-cols-2"
+        style={{ gap: "clamp(0.5rem, 1.5vw, 1.5rem)" }}
+      >
+        {/* ── ASK PRICE box ── */}
+        <div
+          style={{
+            background: "linear-gradient(135deg, #1e0a0a 0%, #120505 100%)",
+            border: `1px solid ${ASK_COLOR}55`,
+            borderRadius: "clamp(0.5rem, 1vw, 1rem)",
+            padding: "clamp(0.6rem, 1.4vh, 1.25rem) clamp(0.75rem, 2vw, 1.75rem)",
+            boxShadow: `0 0 0 1px ${ASK_COLOR}18 inset`,
+          }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center font-bold uppercase tracking-wider"
+            style={{
+              color: ASK_COLOR,
+              fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
+              letterSpacing: "0.14em",
+              gap: "0.4em",
+              marginBottom: "clamp(0.35rem, 0.8vh, 0.75rem)",
+            }}
+          >
+            <span
+              className="flex items-center justify-center font-black shrink-0"
+              style={{
+                width: "1.5em", height: "1.5em",
+                borderRadius: "50%",
+                background: `${ASK_COLOR}25`,
+                border: `1px solid ${ASK_COLOR}55`,
+                color: ASK_COLOR,
+                fontSize: "0.9em",
+              }}
+            >
+              $
+            </span>
+            ASK PRICE (oz)
+          </div>
+          {/* Price */}
+          <div
+            className="tabular-nums font-black"
+            style={{
+              color: "#ffffff",
+              fontSize: "clamp(1.6rem, calc(2.4vh + 2.4vw), 4.8rem)",
+              fontFamily: "monospace",
+              lineHeight: 1,
+              letterSpacing: "-0.03em",
+              textShadow: "0 2px 20px #00000088",
+            }}
+          >
+            {fmt(ask)}
+          </div>
+          {/* Low */}
+          <div
+            className="flex items-center font-semibold tabular-nums"
+            style={{
+              color: ASK_COLOR,
+              fontSize: "clamp(0.7rem, calc(0.65vh + 0.7vw), 1.25rem)",
+              marginTop: "clamp(0.3rem, 0.7vh, 0.65rem)",
+              gap: "0.35em",
+            }}
+          >
+            <span style={{ opacity: 0.75, fontSize: "0.85em" }}>▼</span>
+            Low &nbsp;{fmt(low)}
+          </div>
+        </div>
+
+        {/* ── BID PRICE box ── */}
+        <div
+          style={{
+            background: "linear-gradient(135deg, #061a0d 0%, #040f08 100%)",
+            border: `1px solid ${BID_COLOR}55`,
+            borderRadius: "clamp(0.5rem, 1vw, 1rem)",
+            padding: "clamp(0.6rem, 1.4vh, 1.25rem) clamp(0.75rem, 2vw, 1.75rem)",
+            boxShadow: `0 0 0 1px ${BID_COLOR}18 inset`,
+          }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center font-bold uppercase tracking-wider"
+            style={{
+              color: BID_COLOR,
+              fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
+              letterSpacing: "0.14em",
+              gap: "0.4em",
+              marginBottom: "clamp(0.35rem, 0.8vh, 0.75rem)",
+            }}
+          >
+            <span
+              className="flex items-center justify-center font-black shrink-0"
+              style={{
+                width: "1.5em", height: "1.5em",
+                borderRadius: "50%",
+                background: `${BID_COLOR}22`,
+                border: `1px solid ${BID_COLOR}55`,
+                color: BID_COLOR,
+                fontSize: "0.9em",
+              }}
+            >
+              $
+            </span>
+            BID PRICE (oz)
+          </div>
+          {/* Price */}
+          <div
+            className="tabular-nums font-black"
+            style={{
+              color: "#ffffff",
+              fontSize: "clamp(1.6rem, calc(2.4vh + 2.4vw), 4.8rem)",
+              fontFamily: "monospace",
+              lineHeight: 1,
+              letterSpacing: "-0.03em",
+              textShadow: "0 2px 20px #00000088",
+            }}
+          >
+            {fmt(bid)}
+          </div>
+          {/* High */}
+          <div
+            className="flex items-center font-semibold tabular-nums"
+            style={{
+              color: BID_COLOR,
+              fontSize: "clamp(0.7rem, calc(0.65vh + 0.7vw), 1.25rem)",
+              marginTop: "clamp(0.3rem, 0.7vh, 0.65rem)",
+              gap: "0.35em",
+            }}
+          >
+            <span style={{ opacity: 0.75, fontSize: "0.85em" }}>▲</span>
+            High &nbsp;{fmt(high)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Metals Table ──────────────────────────────────────────────────────────────
+interface MetalRowData {
   icon: React.ReactNode;
+  name: string;
+  weight: string;
+  price: number | null;
   direction: Direction;
 }
 
-function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
+function MetalRow({ icon, name, weight, price, direction }: MetalRowData) {
   useEffect(() => { ensureKeyframes(); }, []);
-
   const isUp   = direction === "up";
   const isDown = direction === "down";
   const isTick = isUp || isDown;
 
-  const tickColor = isUp ? GREEN_TICK : isDown ? RED_TICK : GOLD;
-
-  const containerAnim = isTick
-    ? `${isUp ? "borderUp" : "borderDown"} 1.8s ease-out forwards`
-    : undefined;
-
-  const priceAnim = isTick
-    ? `${isUp ? "tickUp" : "tickDown"} 1.8s ease-out forwards`
-    : undefined;
-
   return (
     <div
-      className="relative rounded-2xl"
       style={{
-        background: "linear-gradient(90deg, #131313 0%, #0a0a0a 100%)",
-        border: `1px solid ${GOLD}55`,
-        padding: "clamp(0.5rem, 1.6vh, 1.5rem) clamp(0.75rem, 2.2vw, 2rem)",
-        height: "100%",
-        minHeight: 0,
-        animation: containerAnim,
-        willChange: isTick ? "border-color, box-shadow, background" : undefined,
         display: "grid",
-        gridTemplateColumns: "1fr auto 1fr",
+        gridTemplateColumns: "1fr auto auto",
         alignItems: "center",
-        gap: "clamp(0.5rem, 1.5vw, 1.5rem)",
+        gap: "clamp(0.5rem, 1.5vw, 1.75rem)",
+        background: "linear-gradient(90deg, #161616 0%, #0e0e0e 100%)",
+        border: `1px solid ${GOLD}44`,
+        borderRadius: "clamp(0.5rem, 1vw, 1rem)",
+        padding: "clamp(0.45rem, 1.1vh, 1rem) clamp(0.75rem, 2vw, 1.75rem)",
+        animation: isTick
+          ? `${isUp ? "tvRowUp" : "tvRowDown"} 1.8s ease-out forwards`
+          : undefined,
+        willChange: isTick ? "border-color, box-shadow" : undefined,
       }}
     >
-      {/* ── LEFT: icon + title ── */}
-      <div className="flex items-center min-w-0" style={{ gap: "clamp(0.5rem, 1.2vw, 1.1rem)" }}>
+      {/* ── METALS column ── */}
+      <div
+        className="flex items-center min-w-0"
+        style={{ gap: "clamp(0.5rem, 1.3vw, 1.25rem)" }}
+      >
         <div
-          className="rounded-full flex items-center justify-center shrink-0"
+          className="shrink-0 flex items-center justify-center rounded-full"
           style={{
-            width: "clamp(2rem, calc(3vh + 1.5vw), 3.5rem)",
-            height: "clamp(2rem, calc(3vh + 1.5vw), 3.5rem)",
-            padding: "clamp(0.4rem, 0.9vh, 0.7rem)",
-            background: "#1a1a1a",
-            border: `1px solid ${GOLD}55`,
+            width: "clamp(2rem, calc(3vh + 1.2vw), 3.5rem)",
+            height: "clamp(2rem, calc(3vh + 1.2vw), 3.5rem)",
+            padding: "clamp(0.3rem, 0.7vh, 0.6rem)",
+            background: "#1c1c1c",
+            border: `1px solid ${GOLD}44`,
           }}
         >
           {icon}
         </div>
         <div
-          className="font-bold uppercase text-white truncate"
-          style={{ fontSize: "clamp(0.85rem, calc(0.9vh + 0.75vw), 1.5rem)", letterSpacing: "0.03em" }}
+          className="font-black uppercase tracking-wider text-white truncate"
+          style={{ fontSize: "clamp(0.9rem, calc(1vh + 0.9vw), 1.8rem)", letterSpacing: "0.04em" }}
         >
-          {title}
+          {name}
         </div>
       </div>
 
-      {/* ── CENTER: unit tag ── */}
-      <div className="flex items-center justify-center">
-        <div
-          className="uppercase font-black tracking-widest"
-          style={{
-            color: GOLD,
-            fontSize: "clamp(0.85rem, calc(1vh + 0.8vw), 1.6rem)",
-            letterSpacing: "0.18em",
-            background: `${GOLD}14`,
-            border: `1px solid ${GOLD}40`,
-            borderRadius: "0.5rem",
-            padding: "clamp(0.2rem, 0.5vh, 0.4rem) clamp(0.6rem, 1.4vw, 1.1rem)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {tag}
-        </div>
+      {/* ── WEIGHT column ── */}
+      <div
+        className="font-black uppercase tracking-widest shrink-0"
+        style={{
+          color: GOLD,
+          fontSize: "clamp(0.8rem, calc(0.9vh + 0.8vw), 1.55rem)",
+          letterSpacing: "0.2em",
+          background: `${GOLD}14`,
+          border: `1px solid ${GOLD}44`,
+          borderRadius: "0.45rem",
+          padding: "clamp(0.2rem, 0.5vh, 0.45rem) clamp(0.6rem, 1.5vw, 1.2rem)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {weight}
       </div>
 
-      {/* ── RIGHT: price + arrow ── */}
-      <div className="flex items-center justify-end gap-2 shrink-0">
+      {/* ── PRICE column ── */}
+      <div
+        className="flex items-center justify-end shrink-0"
+        style={{ gap: "0.35em" }}
+      >
         {isTick && (
           <span
             style={{
-              color: tickColor,
-              fontSize: "clamp(1rem, calc(1.5vh + 1.3vw), 2.6rem)",
+              color: isUp ? GREEN_TICK : RED_TICK,
+              fontSize: "clamp(1rem, calc(1.3vh + 1.1vw), 2.2rem)",
               fontWeight: 900,
               lineHeight: 1,
-              animation: priceAnim,
+              animation: `${isUp ? "tvTickUp" : "tvTickDown"} 1.8s ease-out forwards`,
               willChange: "color",
               userSelect: "none",
             }}
@@ -246,77 +425,102 @@ function AssetRow({ title, tag, value, icon, direction }: AssetRowProps) {
           </span>
         )}
         <div
-          className="font-extrabold tabular-nums"
+          className="tabular-nums font-extrabold"
           style={{
-            color: GOLD,
-            fontSize: "clamp(1.1rem, calc(1.7vh + 1.5vw), 2.9rem)",
-            lineHeight: 1,
+            color: "#ffffff",
+            fontSize: "clamp(1.1rem, calc(1.5vh + 1.4vw), 2.8rem)",
             fontFamily: "monospace",
+            lineHeight: 1,
             letterSpacing: "-0.02em",
-            textShadow: `0 0 24px ${GOLD}33`,
             whiteSpace: "nowrap",
-            animation: priceAnim,
+            animation: isTick
+              ? `${isUp ? "tvTickUp" : "tvTickDown"} 1.8s ease-out forwards`
+              : undefined,
             willChange: isTick ? "color, text-shadow" : undefined,
           }}
         >
-          {value} <span style={{ fontSize: "0.42em", fontFamily: "sans-serif", fontWeight: 700, opacity: 0.75 }}>AED</span>
+          {fmt(price)}{" "}
+          <span
+            style={{
+              fontSize: "0.42em",
+              fontFamily: "sans-serif",
+              fontWeight: 700,
+              color: GOLD,
+              opacity: 0.85,
+            }}
+          >
+            AED
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-// ── TickerBox: BID / ASK / LOW / HIGH global spot boxes ───────────────────────
-interface TickerBoxProps {
-  label: string;
-  sublabel: string;
-  value: string;
-  arrow?: "up" | "down";
-}
-
-function TickerBox({ label, sublabel, value, arrow }: TickerBoxProps) {
-  const arrowColor = arrow === "up" ? GREEN_TICK : arrow === "down" ? RED_TICK : undefined;
+function MetalsTable({
+  rows,
+}: {
+  rows: MetalRowData[];
+}) {
   return (
     <div
-      className="rounded-2xl flex flex-col items-center justify-center text-center"
-      style={{
-        background: "linear-gradient(160deg, #161616 0%, #0a0a0a 100%)",
-        border: `1px solid ${GOLD}55`,
-        padding: "clamp(0.5rem, 1.4vh, 1rem) clamp(0.4rem, 1.2vw, 1rem)",
-        boxShadow: `0 0 0 1px #ffffff08 inset, 0 4px 20px -8px #000000cc`,
-        minWidth: 0,
-      }}
+      className="flex flex-col w-full"
+      style={{ gap: 0 }}
     >
+      {/* ── Header ── */}
       <div
-        className="uppercase font-bold"
         style={{
-          color: GOLD,
-          fontSize: "clamp(0.6rem, calc(0.5vh + 0.5vw), 0.95rem)",
-          letterSpacing: "0.16em",
-          opacity: 0.9,
+          display: "grid",
+          gridTemplateColumns: "1fr auto auto",
+          gap: "clamp(0.5rem, 1.5vw, 1.75rem)",
+          background: `linear-gradient(90deg, ${HEADER_BG} 0%, #2e1a06 100%)`,
+          border: `1px solid ${HEADER_BORDER}`,
+          borderRadius: "clamp(0.5rem, 1vw, 1rem) clamp(0.5rem, 1vw, 1rem) 0 0",
+          padding: "clamp(0.35rem, 0.9vh, 0.8rem) clamp(0.75rem, 2vw, 1.75rem)",
         }}
       >
-        {label}
+        <div
+          className="font-black uppercase tracking-widest"
+          style={{
+            color: GOLD,
+            fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
+            letterSpacing: "0.2em",
+          }}
+        >
+          METALS
+        </div>
+        <div
+          className="font-black uppercase tracking-widest text-right"
+          style={{
+            color: GOLD,
+            fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
+            letterSpacing: "0.2em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          WEIGHT
+        </div>
+        <div
+          className="font-black uppercase tracking-widest text-right"
+          style={{
+            color: GOLD,
+            fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
+            letterSpacing: "0.2em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          PRICE (AED)
+        </div>
       </div>
+
+      {/* ── Rows ── */}
       <div
-        className="uppercase text-neutral-500 font-medium"
-        style={{ fontSize: "clamp(0.5rem, calc(0.35vh + 0.35vw), 0.7rem)", letterSpacing: "0.08em", marginTop: 1 }}
+        className="flex flex-col"
+        style={{ gap: "clamp(0.2rem, 0.5vh, 0.45rem)", paddingTop: "clamp(0.2rem, 0.5vh, 0.45rem)" }}
       >
-        {sublabel}
-      </div>
-      <div
-        className="flex items-center justify-center tabular-nums font-extrabold"
-        style={{
-          color: arrowColor ?? "#f5f5f5",
-          fontSize: "clamp(0.95rem, calc(1.2vh + 1.1vw), 1.9rem)",
-          fontFamily: "monospace",
-          marginTop: "clamp(0.15rem, 0.4vh, 0.4rem)",
-          gap: "0.25rem",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {arrow && <span style={{ fontSize: "0.85em", lineHeight: 1 }}>{arrow === "up" ? "▲" : "▼"}</span>}
-        {value}
+        {rows.map((row, i) => (
+          <MetalRow key={i} {...row} />
+        ))}
       </div>
     </div>
   );
@@ -327,155 +531,187 @@ export default function ShowroomBoard() {
   const now = useTicker();
   const { liveRates } = useLivePrice();
   const { data: publicSettings } = useGetPublicSettings({
-    query: { queryKey: getGetPublicSettingsQueryKey(), refetchInterval: 60000, refetchIntervalInBackground: true },
+    query: {
+      queryKey: getGetPublicSettingsQueryKey(),
+      refetchInterval: 60_000,
+      refetchIntervalInBackground: true,
+    },
   });
-  // Poll visibility every 5 s — no auth needed, changes from admin appear quickly
   const { data: publicPrices } = useGetPublicPrices({
-    query: { queryKey: getGetPublicPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
+    query: {
+      queryKey: getGetPublicPricesQueryKey(),
+      refetchInterval: 5_000,
+      refetchIntervalInBackground: true,
+    },
   });
-  const showroomLogoUrl = publicSettings?.showroomLogoUrl || null;
+  const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
 
-  // Always track all 8 values for direction — stable array length regardless of visibility
-  const rowValues: (number | null)[] = [
-    liveRates.ttBar995Total,
+  // Stable 5-value array for direction tracking — order matches rows below
+  const priceValues: (number | null)[] = [
     liveRates.ttBar9999Total,
-    liveRates.gold9999Rate,
-    liveRates.kgBar995Total,
     liveRates.gold22kRate,
-    liveRates.gold21kRate,
-    liveRates.gold18kRate,
+    liveRates.gold9999Rate,
     liveRates.goldKg9999Total,
+    liveRates.kgBar995Total,
   ];
+  const dirs = useDirections(priceValues);
 
-  const directions = useDirections(rowValues);
-
-  // All 8 rows with their original index (for direction lookup) and visibility flag —
-  // ordered to match the requested strict 3-column layout (TT BAR 9999, 22K, GOLD 9999, GOLD KG, KG BAR first).
-  const allRows = [
-    { idx: 1, title: "TT. BAR (0.9999)", tag: "TT",  value: fmt(liveRates.ttBar9999Total),  icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar999  ?? true },
-    { idx: 4, title: "Gold Jewelry 22K", tag: "1GM", value: fmt(liveRates.gold22kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold22k   ?? true },
-    { idx: 2, title: "GOLD (0.9999)",    tag: "1GM", value: fmt(liveRates.gold9999Rate),  icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGold9999   ?? true },
-    { idx: 7, title: "GOLD KG (0.9999)", tag: "1KG", value: fmt(liveRates.goldKg9999Total), icon: <GoldIngotIcon />, visible: publicPrices?.tvShowGoldKg9999 ?? true },
-    { idx: 3, title: "KG BAR (0.995)",   tag: "1KG", value: fmt(liveRates.kgBar995Total), icon: <GoldBarIcon />,   visible: publicPrices?.tvShowKgBar995  ?? true },
-    { idx: 0, title: "TT. BAR (0.995)",  tag: "TT",  value: fmt(liveRates.ttBar995Total),   icon: <GoldBarIcon />,   visible: publicPrices?.tvShowTtBar995  ?? true },
-    { idx: 5, title: "Gold Jewelry 21K", tag: "1GM", value: fmt(liveRates.gold21kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold21k   ?? true },
-    { idx: 6, title: "Gold Jewelry 18K", tag: "1GM", value: fmt(liveRates.gold18kRate),   icon: <GoldRingIcon />,  visible: publicPrices?.tvShowGold18k    ?? true },
-  ];
-
-  // Only render rows toggled ON; direction tracked by original idx (stable)
-  const rows = allRows.filter(r => r.visible);
+  const rows: MetalRowData[] = [
+    {
+      icon: <IconGoldBar />,
+      name: "TEN TOLA BAR",
+      weight: "TTB",
+      price: liveRates.ttBar9999Total,
+      direction: dirs[0],
+      visible: publicPrices?.tvShowTtBar999 ?? true,
+    },
+    {
+      icon: <IconNecklace />,
+      name: "JEWELLERY 22K",
+      weight: "1GM",
+      price: liveRates.gold22kRate,
+      direction: dirs[1],
+      visible: publicPrices?.tvShowGold22k ?? true,
+    },
+    {
+      icon: <IconGoldBricks />,
+      name: "GOLD 9999",
+      weight: "1GM",
+      price: liveRates.gold9999Rate,
+      direction: dirs[2],
+      visible: publicPrices?.tvShowGold9999 ?? true,
+    },
+    {
+      icon: <IconGoldBricks />,
+      name: "GOLD 9999",
+      weight: "1KG",
+      price: liveRates.goldKg9999Total,
+      direction: dirs[3],
+      visible: publicPrices?.tvShowGoldKg9999 ?? true,
+    },
+    {
+      icon: <IconGoldBar />,
+      name: "KILO BAR 995",
+      weight: "1KG",
+      price: liveRates.kgBar995Total,
+      direction: dirs[4],
+      visible: publicPrices?.tvShowKgBar995 ?? true,
+    },
+  ].filter(r => (r as any).visible) as MetalRowData[];
 
   return (
     <div
-      className="w-full flex flex-col items-center min-h-screen lg:h-screen lg:overflow-hidden"
+      className="w-full min-h-screen lg:h-screen lg:overflow-hidden flex flex-col"
       style={{
         background: `
-          linear-gradient(160deg, #0b0b0b 0%, #121212 100%),
-          repeating-linear-gradient(0deg, ${GOLD}0d 0px, ${GOLD}0d 1px, transparent 1px, transparent 64px),
-          repeating-linear-gradient(90deg, ${GOLD}0d 0px, ${GOLD}0d 1px, transparent 1px, transparent 64px)
+          linear-gradient(160deg, #0b0b0b 0%, #111111 100%),
+          repeating-linear-gradient(0deg,  ${GOLD}09 0px, ${GOLD}09 1px, transparent 1px, transparent 72px),
+          repeating-linear-gradient(90deg, ${GOLD}09 0px, ${GOLD}09 1px, transparent 1px, transparent 72px)
         `,
-        backgroundBlendMode: "normal, normal, normal",
-        padding: "clamp(0.5rem, 1.2vh, 1.5rem) clamp(0.75rem, 2.5vw, 3rem)",
+        padding: "clamp(0.4rem, 1vh, 1.2rem) clamp(0.6rem, 2vw, 2.5rem)",
       }}
     >
-      <div className="w-full flex flex-col mx-auto lg:h-full" style={{ maxWidth: 1400 }}>
+      <div
+        className="w-full mx-auto flex flex-col lg:h-full lg:min-h-0"
+        style={{ maxWidth: 1500, flex: 1 }}
+      >
 
-        {/* ── Header: logo + date/clock pill ── */}
+        {/* ── Header: logo + date/clock ── */}
         <div
-          className="flex flex-col items-center shrink-0"
-          style={{ gap: "clamp(0.3rem, 0.7vh, 0.75rem)", paddingBottom: "clamp(0.3rem, 0.8vh, 0.75rem)" }}
+          className="flex items-center justify-between shrink-0"
+          style={{
+            gap: "clamp(0.5rem, 1.5vw, 1.5rem)",
+            paddingBottom: "clamp(0.35rem, 0.9vh, 0.8rem)",
+          }}
         >
+          {/* Logo or shop name */}
           {showroomLogoUrl ? (
-            <div
-              className="flex items-center justify-center"
+            <img
+              src={showroomLogoUrl}
+              alt="Showroom logo"
               style={{
-                height: "clamp(3.5rem, 10vh, 80px)",
-                marginBottom: "clamp(0.2rem, 0.5vh, 0.5rem)",
-                filter: `drop-shadow(0 0 28px ${GOLD}66)`,
+                height: "clamp(2.5rem, 7vh, 64px)",
+                maxWidth: "min(50vw, 220px)",
+                objectFit: "contain",
+                filter: `drop-shadow(0 0 22px ${GOLD}66)`,
               }}
-            >
-              <img
-                src={showroomLogoUrl}
-                alt="Showroom logo"
-                className="max-h-full max-w-full object-contain"
-                style={{ maxWidth: "min(90vw, 280px)" }}
-              />
-            </div>
+            />
           ) : (
             <div
-              className="font-black uppercase flex items-center justify-center"
+              className="font-black uppercase"
               style={{
                 color: GOLD,
-                fontSize: "clamp(1.15rem, calc(1.4vh + 1.4vw), 2.4rem)",
+                fontSize: "clamp(1rem, calc(1.2vh + 1.2vw), 2.2rem)",
                 letterSpacing: "0.14em",
                 textShadow: `0 0 30px ${GOLD}55`,
                 fontFamily: "serif",
-                gap: "clamp(0.35rem, 0.8vw, 0.75rem)",
                 whiteSpace: "nowrap",
               }}
             >
-              Hazari Gold <span style={{ color: "#f5f5f5", fontSize: "0.65em" }}>✦</span>
+              Hazari Gold
             </div>
           )}
 
+          {/* Date + clock pill */}
           <div
-            className="flex items-center justify-between rounded-full w-full"
+            className="flex items-center rounded-full"
             style={{
-              border: `1px solid ${GOLD}66`,
-              background: "#111111",
-              maxWidth: 560,
-              padding: "clamp(0.3rem, 0.7vh, 0.65rem) clamp(1rem, 2.5vw, 2.5rem)",
-              gap: "clamp(0.75rem, 2vw, 2.5rem)",
+              border: `1px solid ${GOLD}55`,
+              background: "#141414",
+              padding: "clamp(0.25rem, 0.6vh, 0.55rem) clamp(0.9rem, 2vw, 2rem)",
+              gap: "clamp(0.6rem, 1.5vw, 2rem)",
             }}
           >
             <span
-              className="text-neutral-300 font-semibold truncate"
-              style={{ fontSize: "clamp(0.65rem, calc(0.55vh + 0.55vw), 1.1rem)" }}
+              className="text-neutral-300 font-semibold"
+              style={{ fontSize: "clamp(0.6rem, calc(0.55vh + 0.5vw), 1rem)" }}
             >
               {formatDate(now)}
             </span>
             <span
-              className="font-bold tabular-nums shrink-0"
-              style={{ color: GOLD, fontSize: "clamp(0.75rem, calc(0.65vh + 0.6vw), 1.25rem)", fontFamily: "monospace" }}
+              className="font-bold tabular-nums"
+              style={{
+                color: GOLD,
+                fontSize: "clamp(0.7rem, calc(0.65vh + 0.6vw), 1.2rem)",
+                fontFamily: "monospace",
+              }}
             >
               {formatClock(now)}
             </span>
           </div>
-
-          {/* ── Global Spot Ticker: BID / ASK / LOW / HIGH ── */}
-          <div
-            className="grid grid-cols-4 w-full"
-            style={{ gap: "clamp(0.4rem, 1vw, 0.9rem)", maxWidth: 1200, marginTop: "clamp(0.2rem, 0.5vh, 0.5rem)" }}
-          >
-            <TickerBox label="Bid" sublabel="USD / oz" value={fmt(liveRates.bidUsdPerOz)} />
-            <TickerBox label="Ask" sublabel="USD / oz" value={fmt(liveRates.askUsdPerOz)} />
-            <TickerBox label="Low" sublabel="Today" value={fmt(liveRates.dailyLowUsdPerOz)} arrow="down" />
-            <TickerBox label="High" sublabel="Today" value={fmt(liveRates.dailyHighUsdPerOz)} arrow="up" />
-          </div>
         </div>
 
-        {/* ── Asset rows ── */}
-        <div
-          className="flex flex-col w-full lg:flex-1 lg:min-h-0"
-          style={{ gap: "clamp(0.25rem, 0.6vh, 0.6rem)", marginTop: "clamp(0.4rem, 1vh, 1rem)" }}
-        >
-          {rows.map(row => (
-            <div
-              key={row.title}
-              className="lg:flex-1 lg:min-h-0"
-              style={{ minHeight: "clamp(3rem, 7vh, 5rem)" }}
-            >
-              <AssetRow {...row} direction={directions[row.idx]} />
-            </div>
-          ))}
+        {/* ── Gold Spot Panel ── */}
+        <div className="shrink-0">
+          <GoldSpotPanel
+            ask={liveRates.askUsdPerOz}
+            bid={liveRates.bidUsdPerOz}
+            low={liveRates.dailyLowUsdPerOz}
+            high={liveRates.dailyHighUsdPerOz}
+          />
         </div>
 
+        {/* ── Metals Table ── */}
         <div
-          className="text-neutral-500 text-center tracking-wide shrink-0"
-          style={{ fontSize: "clamp(0.55rem, calc(0.45vh + 0.35vw), 0.8rem)", paddingTop: "clamp(0.25rem, 0.6vh, 0.6rem)" }}
+          className="lg:flex-1 lg:min-h-0 flex flex-col justify-start"
+          style={{ marginTop: "clamp(0.4rem, 1vh, 1rem)" }}
         >
-          {liveRates.isLive ? "((●)) Live — Real-time 1s Sync" : "Connecting to live feed…"}
-          {liveRates.updatedAt && ` · ${new Date(liveRates.updatedAt).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
+          <MetalsTable rows={rows} />
+        </div>
+
+        {/* ── Live status footer ── */}
+        <div
+          className="text-center shrink-0"
+          style={{
+            color: liveRates.isLive ? "#555" : "#774",
+            fontSize: "clamp(0.5rem, calc(0.4vh + 0.35vw), 0.8rem)",
+            paddingTop: "clamp(0.2rem, 0.5vh, 0.5rem)",
+            letterSpacing: "0.05em",
+          }}
+        >
+          {liveRates.isLive
+            ? `((●)) Live · Real-time Free Market Feed${liveRates.updatedAt ? " · " + new Date(liveRates.updatedAt).toLocaleTimeString("en-AE") : ""}`
+            : "Connecting to live feed…"}
         </div>
       </div>
     </div>
