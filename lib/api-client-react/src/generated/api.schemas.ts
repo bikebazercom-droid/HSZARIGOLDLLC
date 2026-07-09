@@ -188,6 +188,10 @@ export interface Prices {
   gold9999Rate: number;
   /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
   goldKg9999Rate: number;
+  /** Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100). */
+  spreadPremiumPercent: number;
+  /** Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base. */
+  laborCostPercent: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;
@@ -288,6 +292,16 @@ export interface PricesInput {
   gold18kRate?: number;
   gold9999Rate?: number;
   goldKg9999Rate?: number;
+  /**
+     * Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100).
+     * @nullable
+     */
+  spreadPremiumPercent?: number | null;
+  /**
+     * Labor markup percentage for jewelry rows (22K/21K/18K).
+     * @nullable
+     */
+  laborCostPercent?: number | null;
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
@@ -504,6 +518,16 @@ export interface SpotPrice {
      * @nullable
      */
   dailyHighUsdPerOz?: number | null;
+  /**
+     * Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.
+     * @nullable
+     */
+  spreadPercent?: number | null;
+  /**
+     * Currently active admin labor markup (%) for jewelry rows.
+     * @nullable
+     */
+  laborCostPercent?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

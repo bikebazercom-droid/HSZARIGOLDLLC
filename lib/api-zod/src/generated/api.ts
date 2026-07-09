@@ -221,6 +221,8 @@ export const GetPricesResponse = zod.object({
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
   "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
+  "spreadPremiumPercent": zod.number().describe('Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
+  "laborCostPercent": zod.number().describe('Admin-configurable labor markup (%) applied to jewelry rows (22K\/21K\/18K) on top of the spread-adjusted base.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -263,6 +265,8 @@ export const UpdatePricesBody = zod.object({
   "gold18kRate": zod.number().optional(),
   "gold9999Rate": zod.number().optional(),
   "goldKg9999Rate": zod.number().optional(),
+  "spreadPremiumPercent": zod.number().nullish().describe('Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
+  "laborCostPercent": zod.number().nullish().describe('Labor markup percentage for jewelry rows (22K\/21K\/18K).'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -292,6 +296,8 @@ export const UpdatePricesResponse = zod.object({
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
   "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
+  "spreadPremiumPercent": zod.number().describe('Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
+  "laborCostPercent": zod.number().describe('Admin-configurable labor markup (%) applied to jewelry rows (22K\/21K\/18K) on top of the spread-adjusted base.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -329,6 +335,8 @@ export const GetPricesSpotResponse = zod.object({
   "askUsdPerOz": zod.number().nullish().describe('Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.'),
   "dailyLowUsdPerOz": zod.number().nullish().describe('Lowest usdPerOz tick observed since UTC midnight today.'),
   "dailyHighUsdPerOz": zod.number().nullish().describe('Highest usdPerOz tick observed since UTC midnight today.'),
+  "spreadPercent": zod.number().nullish().describe('Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.'),
+  "laborCostPercent": zod.number().nullish().describe('Currently active admin labor markup (%) for jewelry rows.'),
   "updatedAt": zod.string().describe('ISO-8601 timestamp of when this price was fetched.')
 })
 

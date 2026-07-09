@@ -5,13 +5,21 @@ description: How the 24K base rate and all downstream rate rows are computed fro
 
 The pricing engine derives `Base_24K_AED` directly from the international gold spot price (XAU/USD).
 
-- Formula: `Base_24K_AED = (Live_ASK_Price_USD / 31.1034768) × 3.6725`
-  All rate rows (TT Bar 0.9999, GOLD 0.9999, GOLD KG 0.9999, KG BAR 0.995, jewelry 22K/21K/18K) are derived from `Base_24K_AED` by pure purity multiplication — no spread, no labor markup.
-  **Why:** international spot is the pricing source of truth; the business no longer uses admin-configurable spread or labor %. Both fields (`spreadPremiumAed`, `laborCostPercent`) were permanently removed from the API surface and all frontend logic (components, context, invoice page) — DB columns kept to avoid a migration.
-  **How to apply:** `aedPerGram` from `/prices/spot` IS `Base_24K_AED` (verified vs. livepriceofgold.com Dubai display to ±1¢). Do not re-introduce a spread offset.
+- Formula pipeline:
+  ```
+  Base_24K_AED  = (Ask_USD / 31.1034768) × 3.6725
+  Adjusted_Base = Base_24K_AED × (1 + adminSpreadPercent / 100)
+  Bar/bullion   = Adjusted_Base × purity
+  Jewelry rows  = Adjusted_Base × purity × (1 + adminLaborPercent / 100)
+  ```
+  **Why:** admin-configurable spread and labor cost were re-added as percentage inputs (not flat AED) via a "Live Price Tuning" card on the Admin Dashboard.
+  **How to apply:** `aedPerGram` from `/prices/spot` IS `Adjusted_Base` (spread applied server-side). `spreadPercent` and `laborCostPercent` are also returned from `/prices/spot` so the frontend can apply jewelry labor. Bars (TT Bar, KG Bar, GOLD 9999) never get the labor multiplier.
 
-- Jewelry purities (22K/21K/18K): rate = `Base_24K_AED × (karat / 24)`. No labor multiplier.
-  Previously `laborCostPercent` was applied to jewelry rows only. That multiplier is now fully removed everywhere: `live-price.tsx`, `getRateForPurity`, `getRateForDesc`, `resolvePrimaryRate`, `invoices/new.tsx`.
+- DB storage: `spreadPremiumAed` column (numeric) is reused to store the spread **percentage** (not a flat AED buffer). `laborCostPercent` column stores labor %. No migration needed — both columns existed from a prior iteration.
+
+- Admin in-memory state: `adminSpreadPercent` and `adminLaborPercent` are module-level vars in `prices.ts`, loaded from DB on startup via `loadAdminConfig()`. PATCH /api/prices with `{spreadPremiumPercent, laborCostPercent}` updates both DB and in-memory vars; `liveSpot.aedPerGram` is re-computed immediately so the next 1s poll picks up the change instantly (no restart needed).
+
+- Jewelry purities (22K/21K/18K): `Adjusted_Base × purity × (1 + laborPct/100)` applied in `live-price.tsx`. Bar/bullion rows use `Adjusted_Base × purity` only.
 
 - Free feed formula (verified against livepriceofgold.com Dubai AED/gram — matches to 1 cent):
   `Ask = XAUUSD` (ASK_OFFSET_USD = 0), `Bid = Ask − 0.30` (BID_ASK_SPREAD_USD = 0.30).

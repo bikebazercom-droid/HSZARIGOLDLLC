@@ -22,6 +22,10 @@ export interface Prices {
   gold9999Rate: number;
   /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
   goldKg9999Rate: number;
+  /** Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100). */
+  spreadPremiumPercent: number;
+  /** Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base. */
+  laborCostPercent: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;

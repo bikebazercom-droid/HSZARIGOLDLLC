@@ -36,6 +36,16 @@ export interface SpotPrice {
      * @nullable
      */
   dailyHighUsdPerOz?: number | null;
+  /**
+     * Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.
+     * @nullable
+     */
+  spreadPercent?: number | null;
+  /**
+     * Currently active admin labor markup (%) for jewelry rows.
+     * @nullable
+     */
+  laborCostPercent?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }
