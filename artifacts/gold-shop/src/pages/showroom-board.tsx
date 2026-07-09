@@ -161,6 +161,10 @@ function IconGoldBricks() {
 }
 
 // ── Gold Spot Panel ───────────────────────────────────────────────────────────
+// Four equal dark rounded boxes in a 2×2 grid:
+//   [BID oz]   [ASK oz]
+//   [Low ↓]    [High ↑]
+// All values come from the live livepriceofgold.com Socket.IO feed (1s cadence).
 interface GoldSpotPanelProps {
   ask: number | null;
   bid: number | null;
@@ -168,164 +172,115 @@ interface GoldSpotPanelProps {
   high: number | null;
 }
 
+interface SpotBoxProps {
+  label: string;
+  icon: React.ReactNode;
+  value: number | null;
+  accentColor: string;
+  bg: string;
+}
+
+function SpotBox({ label, icon, value, accentColor, bg }: SpotBoxProps) {
+  return (
+    <div
+      style={{
+        background: bg,
+        border: `1px solid ${accentColor}45`,
+        borderRadius: "clamp(0.6rem, 1.2vw, 1.25rem)",
+        padding: "clamp(0.55rem, 1.3vh, 1.1rem) clamp(0.7rem, 1.8vw, 1.6rem)",
+        boxShadow: `0 0 0 1px ${accentColor}12 inset, 0 6px 32px -10px #00000099`,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
+    >
+      {/* Label row */}
+      <div
+        className="flex items-center gap-2 font-bold uppercase tracking-widest"
+        style={{
+          color: accentColor,
+          fontSize: "clamp(0.6rem, calc(0.55vh + 0.6vw), 1.05rem)",
+          letterSpacing: "0.18em",
+          marginBottom: "clamp(0.3rem, 0.7vh, 0.6rem)",
+        }}
+      >
+        <span style={{ fontSize: "1.15em", lineHeight: 1 }}>{icon}</span>
+        {label}
+      </div>
+
+      {/* Value */}
+      <div
+        className="tabular-nums font-black"
+        style={{
+          color: "#ffffff",
+          fontSize: "clamp(1.5rem, calc(2.1vh + 2.1vw), 4.4rem)",
+          fontFamily: "monospace",
+          lineHeight: 1,
+          letterSpacing: "-0.03em",
+          textShadow: `0 2px 24px #00000099, 0 0 40px ${accentColor}22`,
+        }}
+      >
+        {fmt(value)}
+      </div>
+
+      {/* Bottom tint bar */}
+      <div
+        style={{
+          height: "2px",
+          borderRadius: "1px",
+          background: `linear-gradient(90deg, ${accentColor}55 0%, ${accentColor}00 100%)`,
+          marginTop: "clamp(0.3rem, 0.7vh, 0.6rem)",
+        }}
+      />
+    </div>
+  );
+}
+
 function GoldSpotPanel({ ask, bid, low, high }: GoldSpotPanelProps) {
   return (
     <div
       style={{
-        background: "linear-gradient(160deg, #1a1a1a 0%, #0d0d0d 100%)",
-        border: `1px solid ${GOLD}44`,
-        borderRadius: "clamp(0.75rem, 1.5vw, 1.5rem)",
-        padding: "clamp(0.6rem, 1.4vh, 1.25rem) clamp(0.75rem, 2vw, 2rem)",
-        boxShadow: "0 8px 40px -12px #000000cc",
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gridTemplateRows: "1fr 1fr",
+        gap: "clamp(0.4rem, 1.1vw, 1.1rem)",
       }}
     >
-      <div
-        className="text-center font-black uppercase tracking-widest"
-        style={{
-          color: GOLD,
-          fontSize: "clamp(0.9rem, calc(0.9vh + 1vw), 1.9rem)",
-          letterSpacing: "0.25em",
-          textShadow: `0 0 30px ${GOLD}77`,
-          marginBottom: "clamp(0.5rem, 1.2vh, 1rem)",
-        }}
-      >
-        Gold Spot
-      </div>
+      {/* Top-Left: BID oz — green */}
+      <SpotBox
+        label="BID oz"
+        icon="↑"
+        value={bid}
+        accentColor={BID_COLOR}
+        bg="linear-gradient(135deg, #051205 0%, #030b04 100%)"
+      />
 
-      <div
-        className="grid grid-cols-2"
-        style={{ gap: "clamp(0.5rem, 1.5vw, 1.5rem)" }}
-      >
-        {/* ── ASK PRICE box ── */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, #1e0a0a 0%, #120505 100%)",
-            border: `1px solid ${ASK_COLOR}55`,
-            borderRadius: "clamp(0.5rem, 1vw, 1rem)",
-            padding: "clamp(0.6rem, 1.4vh, 1.25rem) clamp(0.75rem, 2vw, 1.75rem)",
-            boxShadow: `0 0 0 1px ${ASK_COLOR}18 inset`,
-          }}
-        >
-          {/* Header */}
-          <div
-            className="flex items-center font-bold uppercase tracking-wider"
-            style={{
-              color: ASK_COLOR,
-              fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
-              letterSpacing: "0.14em",
-              gap: "0.4em",
-              marginBottom: "clamp(0.35rem, 0.8vh, 0.75rem)",
-            }}
-          >
-            <span
-              className="flex items-center justify-center font-black shrink-0"
-              style={{
-                width: "1.5em", height: "1.5em",
-                borderRadius: "50%",
-                background: `${ASK_COLOR}25`,
-                border: `1px solid ${ASK_COLOR}55`,
-                color: ASK_COLOR,
-                fontSize: "0.9em",
-              }}
-            >
-              $
-            </span>
-            ASK PRICE (oz)
-          </div>
-          {/* Price */}
-          <div
-            className="tabular-nums font-black"
-            style={{
-              color: "#ffffff",
-              fontSize: "clamp(1.6rem, calc(2.4vh + 2.4vw), 4.8rem)",
-              fontFamily: "monospace",
-              lineHeight: 1,
-              letterSpacing: "-0.03em",
-              textShadow: "0 2px 20px #00000088",
-            }}
-          >
-            {fmt(ask)}
-          </div>
-          {/* Low */}
-          <div
-            className="flex items-center font-semibold tabular-nums"
-            style={{
-              color: ASK_COLOR,
-              fontSize: "clamp(0.7rem, calc(0.65vh + 0.7vw), 1.25rem)",
-              marginTop: "clamp(0.3rem, 0.7vh, 0.65rem)",
-              gap: "0.35em",
-            }}
-          >
-            <span style={{ opacity: 0.75, fontSize: "0.85em" }}>▼</span>
-            Low &nbsp;{fmt(low)}
-          </div>
-        </div>
+      {/* Top-Right: ASK oz — coral/red */}
+      <SpotBox
+        label="ASK oz"
+        icon="↓"
+        value={ask}
+        accentColor={ASK_COLOR}
+        bg="linear-gradient(135deg, #1a0808 0%, #0f0404 100%)"
+      />
 
-        {/* ── BID PRICE box ── */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, #061a0d 0%, #040f08 100%)",
-            border: `1px solid ${BID_COLOR}55`,
-            borderRadius: "clamp(0.5rem, 1vw, 1rem)",
-            padding: "clamp(0.6rem, 1.4vh, 1.25rem) clamp(0.75rem, 2vw, 1.75rem)",
-            boxShadow: `0 0 0 1px ${BID_COLOR}18 inset`,
-          }}
-        >
-          {/* Header */}
-          <div
-            className="flex items-center font-bold uppercase tracking-wider"
-            style={{
-              color: BID_COLOR,
-              fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
-              letterSpacing: "0.14em",
-              gap: "0.4em",
-              marginBottom: "clamp(0.35rem, 0.8vh, 0.75rem)",
-            }}
-          >
-            <span
-              className="flex items-center justify-center font-black shrink-0"
-              style={{
-                width: "1.5em", height: "1.5em",
-                borderRadius: "50%",
-                background: `${BID_COLOR}22`,
-                border: `1px solid ${BID_COLOR}55`,
-                color: BID_COLOR,
-                fontSize: "0.9em",
-              }}
-            >
-              $
-            </span>
-            BID PRICE (oz)
-          </div>
-          {/* Price */}
-          <div
-            className="tabular-nums font-black"
-            style={{
-              color: "#ffffff",
-              fontSize: "clamp(1.6rem, calc(2.4vh + 2.4vw), 4.8rem)",
-              fontFamily: "monospace",
-              lineHeight: 1,
-              letterSpacing: "-0.03em",
-              textShadow: "0 2px 20px #00000088",
-            }}
-          >
-            {fmt(bid)}
-          </div>
-          {/* High */}
-          <div
-            className="flex items-center font-semibold tabular-nums"
-            style={{
-              color: BID_COLOR,
-              fontSize: "clamp(0.7rem, calc(0.65vh + 0.7vw), 1.25rem)",
-              marginTop: "clamp(0.3rem, 0.7vh, 0.65rem)",
-              gap: "0.35em",
-            }}
-          >
-            <span style={{ opacity: 0.75, fontSize: "0.85em" }}>▲</span>
-            High &nbsp;{fmt(high)}
-          </div>
-        </div>
-      </div>
+      {/* Bottom-Left: Low ↓ — red */}
+      <SpotBox
+        label="Low"
+        icon={<span style={{ color: ASK_COLOR }}>↓</span>}
+        value={low}
+        accentColor={ASK_COLOR}
+        bg="linear-gradient(135deg, #160606 0%, #0c0303 100%)"
+      />
+
+      {/* Bottom-Right: High ↑ — green */}
+      <SpotBox
+        label="High"
+        icon={<span style={{ color: BID_COLOR }}>↑</span>}
+        value={high}
+        accentColor={BID_COLOR}
+        bg="linear-gradient(135deg, #041204 0%, #020a02 100%)"
+      />
     </div>
   );
 }
