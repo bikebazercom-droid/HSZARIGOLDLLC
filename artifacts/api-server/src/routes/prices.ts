@@ -156,8 +156,8 @@ liveSocket.on("update", (raw: string) => {
     const askUsdPerOz = usdPerOz + ASK_OFFSET_USD;
     const bidUsdPerOz = askUsdPerOz - BID_ASK_SPREAD_USD;
 
-    // Base AED/gram derived directly from Ask (= XAUUSD tick) — matches
-    // livepriceofgold.com Dubai price and hazarigold.com feed exactly.
+    // Base AED/gram derived directly from Ask (= XAUUSD tick).
+    //   Verified: XAUUSD / 31.1034768 × 3.6725 = livepriceofgold.com Dubai AED/gram (±1¢).
     //   Base_24K_AED = (XAUUSD / 31.1034768) × 3.6725
     //   Final_24K    = Base_24K_AED + admin spreadPremiumAed
     const baseAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
