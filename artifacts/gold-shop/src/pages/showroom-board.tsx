@@ -501,32 +501,35 @@ export default function ShowroomBoard() {
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
 
-  // Stable 5-value array for direction tracking — order matches rows below
+  // Stable 8-value array for direction tracking — order matches rows below
   const priceValues: (number | null)[] = [
-    liveRates.ttBar9999Total,
-    liveRates.gold22kRate,
-    liveRates.gold9999Rate,
-    liveRates.goldKg9999Total,
-    liveRates.kgBar995Total,
+    liveRates.ttBar995Total,   // 0
+    liveRates.ttBar9999Total,  // 1
+    liveRates.gold9999Rate,    // 2
+    liveRates.kgBar995Total,   // 3
+    liveRates.goldKg9999Total, // 4
+    liveRates.gold22kRate,     // 5
+    liveRates.gold21kRate,     // 6
+    liveRates.gold18kRate,     // 7
   ];
   const dirs = useDirections(priceValues);
 
   const rows: MetalRowData[] = [
     {
       icon: <IconGoldBar />,
-      name: "TEN TOLA BAR",
+      name: "TT. BAR 995",
       weight: "TTB",
-      price: liveRates.ttBar9999Total,
+      price: liveRates.ttBar995Total,
       direction: dirs[0],
-      visible: publicPrices?.tvShowTtBar999 ?? true,
+      visible: publicPrices?.tvShowTtBar995 ?? true,
     },
     {
-      icon: <IconNecklace />,
-      name: "JEWELLERY 22K",
-      weight: "1GM",
-      price: liveRates.gold22kRate,
+      icon: <IconGoldBar />,
+      name: "TT. BAR 9999",
+      weight: "TTB",
+      price: liveRates.ttBar9999Total,
       direction: dirs[1],
-      visible: publicPrices?.tvShowGold22k ?? true,
+      visible: publicPrices?.tvShowTtBar999 ?? true,
     },
     {
       icon: <IconGoldBricks />,
@@ -537,20 +540,44 @@ export default function ShowroomBoard() {
       visible: publicPrices?.tvShowGold9999 ?? true,
     },
     {
+      icon: <IconGoldBar />,
+      name: "KG BAR 995",
+      weight: "1KG",
+      price: liveRates.kgBar995Total,
+      direction: dirs[3],
+      visible: publicPrices?.tvShowKgBar995 ?? true,
+    },
+    {
       icon: <IconGoldBricks />,
-      name: "GOLD 9999",
+      name: "KG BAR 9999",
       weight: "1KG",
       price: liveRates.goldKg9999Total,
-      direction: dirs[3],
+      direction: dirs[4],
       visible: publicPrices?.tvShowGoldKg9999 ?? true,
     },
     {
-      icon: <IconGoldBar />,
-      name: "KILO BAR 995",
-      weight: "1KG",
-      price: liveRates.kgBar995Total,
-      direction: dirs[4],
-      visible: publicPrices?.tvShowKgBar995 ?? true,
+      icon: <IconNecklace />,
+      name: "JEWELLERY 22K",
+      weight: "1GM",
+      price: liveRates.gold22kRate,
+      direction: dirs[5],
+      visible: publicPrices?.tvShowGold22k ?? true,
+    },
+    {
+      icon: <IconNecklace />,
+      name: "JEWELLERY 21K",
+      weight: "1GM",
+      price: liveRates.gold21kRate,
+      direction: dirs[6],
+      visible: publicPrices?.tvShowGold21k ?? true,
+    },
+    {
+      icon: <IconNecklace />,
+      name: "JEWELLERY 18K",
+      weight: "1GM",
+      price: liveRates.gold18kRate,
+      direction: dirs[7],
+      visible: publicPrices?.tvShowGold18k ?? true,
     },
   ].filter(r => (r as any).visible) as MetalRowData[];
 

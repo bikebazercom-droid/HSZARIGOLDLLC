@@ -68,16 +68,15 @@ interface PricesData {
   manualInvoiceMode?: boolean;
 }
 
-// The core "live-priced" asset descriptions, kept in sync with the asset
-// cards on the Live Prices page. These are STRICTLY plain item names — no
-// decimal/purity numbers are ever attached to the label. Selecting one of
-// these in an invoice row only sets a *suggested* starting purity/rate; the
-// actual Pure Weight calculation always reads the live value of the separate
-// Purity field (see calcItem), never the description text itself.
+// Canonical live-priced item list — exactly the 8 trade items plus Silver.
+// Names use the "(purity)" suffix convention so staff can see the fineness
+// at a glance and the rate resolver can match unambiguously.
 const LIVE_ASSET_DESCRIPTIONS = [
-  "TT. BAR",
-  "KG BAR",
-  "GOLD",
+  "TT. BAR (0.995)",
+  "TT. BAR (0.9999)",
+  "GOLD (0.9999)",
+  "KG BAR (0.995)",
+  "KG BAR (0.9999)",
   "Gold Jewelry 22K",
   "Gold Jewelry 21K",
   "Gold Jewelry 18K",
@@ -92,18 +91,21 @@ const LIVE_ASSET_DESCRIPTIONS = [
 // Pure Weight formula always multiplies by whatever purity is currently
 // selected (see calcItem), never by this initial suggestion.
 const DESC_TO_PURITY: Record<string, string> = {
-  "TT. BAR": "0.995",
-  "KG BAR": "0.995",
+  // ── Canonical item names ─────────────────────────────────────────────────
+  "TT. BAR (0.995)":  "0.995",
+  "TT. BAR (0.9999)": "0.9999",
+  "GOLD (0.9999)":    "0.9999",
+  "KG BAR (0.995)":   "0.995",
+  "KG BAR (0.9999)":  "0.9999",
   "Gold Jewelry 22K": "0.916",
   "Gold Jewelry 21K": "0.875",
   "Gold Jewelry 18K": "0.750",
-  "Silver": "0.999",
-  // Legacy descriptions kept for backward compatibility with existing invoices.
-  "TT. BAR (0.995)": "0.995",
-  "TT. BAR (0.9999)": "0.9999",
+  "Silver":           "0.999",
+  // ── Legacy aliases (backward compatibility with existing invoices) ────────
+  "TT. BAR": "0.995",
+  "KG BAR":  "0.995",
+  "GOLD":    "0.9999",
   "TT. BAR (0.999)": "0.999",
-  "KG BAR (0.995)": "0.995",
-  "GOLD (0.9999)": "0.9999",
   "GOLD KG (0.9999)": "0.9999",
   "Gold 22K (0.916)": "0.916",
   "Gold 21K (0.875)": "0.875",
@@ -118,7 +120,6 @@ const DESC_TO_PURITY: Record<string, string> = {
   "KG BAR 995": "0.995",
   "Silver 999": "0.999",
   "Gold Jewelry": "0.916",
-  "GOLD": "0.9999",
   "22K Gold Jewelry": "0.916",
   "24K GOLD": "0.9999",
   "KG. BAR": "0.995",
@@ -129,30 +130,53 @@ const DESC_TO_PURITY: Record<string, string> = {
   "Kilo Bar 995 1KG": "0.995",
 };
 
+const JEWELRY_DESCS = new Set([
+  "Gold Jewelry 22K", "Gold Jewelry 21K", "Gold Jewelry 18K",
+  "Gold 22K (0.916)", "Gold 21K (0.875)", "Gold 18K (0.750)",
+  "Gold Jewelry 22k", "Gold Jewelry 21k", "Gold Jewelry 18k",
+  "Gold Jewelry", "22K Gold Jewelry", "Jewellery 22K 1GM",
+]);
+const GOLD_DESCS = new Set([
+  "GOLD (0.9999)", "KG BAR (0.9999)", "GOLD KG (0.9999)",
+  "GOLD 999.99", "GOLD", "24K GOLD", "Gold 9999 1GM", "Gold 9999 1KG",
+]);
+const TT_BAR_DESCS = new Set([
+  "TT. BAR (0.995)", "TT. BAR (0.9999)", "TT. BAR", "TT. BAR (0.999)",
+  "TT. BAR 995", "TT. BAR 24K", "Ten Tola Bar TTB",
+]);
+const KG_BAR_DESCS = new Set([
+  "KG BAR (0.995)", "KG BAR", "KG BAR 995", "KG. BAR", "Kilo Bar 995 1KG",
+]);
+const SILVER_DESCS = new Set(["Silver", "Silver (0.999)", "Silver 999"]);
+
 function descToCategory(desc: string): string {
-  if (desc === "Gold Jewelry 22K" || desc === "Gold Jewelry 21K" || desc === "Gold Jewelry 18K" || desc === "Gold 22K (0.916)" || desc === "Gold 21K (0.875)" || desc === "Gold 18K (0.750)" || desc === "Gold Jewelry 22k" || desc === "Gold Jewelry 21k" || desc === "Gold Jewelry 18k" || desc === "Gold Jewelry" || desc === "22K Gold Jewelry" || desc === "Jewellery 22K 1GM") return "gold_jewelry";
-  if (desc === "GOLD (0.9999)" || desc === "GOLD KG (0.9999)" || desc === "GOLD 999.99" || desc === "GOLD" || desc === "24K GOLD" || desc === "Gold 9999 1GM" || desc === "Gold 9999 1KG") return "gold";
-  if (desc === "TT. BAR" || desc === "TT. BAR (0.995)" || desc === "TT. BAR (0.999)" || desc === "TT. BAR (0.9999)" || desc === "TT. BAR 995" || desc === "TT. BAR 24K" || desc === "Ten Tola Bar TTB") return "tt_bar";
-  if (desc === "KG BAR" || desc === "KG BAR (0.995)" || desc === "KG BAR 995" || desc === "KG. BAR" || desc === "Kilo Bar 995 1KG") return "kg_bar";
-  if (desc === "Silver" || desc === "Silver (0.999)" || desc === "Silver 999") return "silver";
-  // Anything else (custom-typed description, saved custom price, or a Product) is Custom
+  if (JEWELRY_DESCS.has(desc)) return "gold_jewelry";
+  if (GOLD_DESCS.has(desc))    return "gold";
+  if (TT_BAR_DESCS.has(desc))  return "tt_bar";
+  if (KG_BAR_DESCS.has(desc))  return "kg_bar";
+  if (SILVER_DESCS.has(desc))  return "silver";
   return "custom";
 }
 
 // When the Purity dropdown is changed directly, the Metal Rate AED/g must
-// instantly resolve to the matching first-class asset's own saved/live rate
-// (22K/21K/18K each have their own manually-editable & live-syncable rate,
-// exactly like TT. BAR/KG BAR/GOLD) — except for Silver, which always uses
-// the flat silver rate regardless of its purity value.
-function getRateForPurity(purity: string, category: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
+// instantly resolve to the matching first-class asset's own saved/live rate.
+// Labor cost % is applied to jewelry purities (0.916 / 0.875 / 0.750) when
+// a non-zero laborPct is supplied.
+function getRateForPurity(
+  purity: string,
+  category: string,
+  prices: PricesData | undefined,
+  fallback: number,
+  rawAedPerGram?: number | null,
+  laborPct = 0,
+): number {
   if (category === "silver") return prices?.silverPricePerGram ?? fallback;
-  // Prefer live math when raw spot rate is available (Base_24K_AED from the
-  // international spot engine).
+  const lm = 1 + laborPct / 100;
   if (rawAedPerGram && rawAedPerGram > 0) {
     if (purity === "0.9999") return roundTo(rawAedPerGram * 0.9999, 2);
-    if (purity === "0.916")  return roundTo(rawAedPerGram * (22 / 24), 2);
-    if (purity === "0.875")  return roundTo(rawAedPerGram * (21 / 24), 2);
-    if (purity === "0.750")  return roundTo(rawAedPerGram * (18 / 24), 2);
+    if (purity === "0.916")  return roundTo(rawAedPerGram * (22 / 24) * lm, 2);
+    if (purity === "0.875")  return roundTo(rawAedPerGram * (21 / 24) * lm, 2);
+    if (purity === "0.750")  return roundTo(rawAedPerGram * (18 / 24) * lm, 2);
     if (purity === "0.995")  return roundTo(rawAedPerGram * 0.995, 2);
     if (purity === "0.999")  return roundTo(rawAedPerGram * 0.999, 2);
     const factor = parsePurity(purity);
@@ -171,35 +195,54 @@ function getRateForPurity(purity: string, category: string, prices: PricesData |
   return roundTo(prices.goldBullionRate * factor, 2);
 }
 
-// Gold Jewelry rate cards (22K/21K/18K) are first-class core assets with
-// their own manually-editable & live-syncable rate fields — identical in
-// behavior to TT. BAR/KG BAR/GOLD — so their rate is read directly from the
-// saved DB field, never recomputed inline from the raw spot rate.
-function getRateForDesc(description: string, prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
-  // Prefer live math for all gold products when raw spot is available
-  // (Base_24K_AED from the international spot engine).
+// Resolve the per-gram Metal Rate for a given item description.
+// Hierarchy: live spot math → DB stored rates → fallback.
+// laborPct is applied to all jewelry items (22K/21K/18K) so the rate
+// matches the formula: Adjusted_Base × purity × (1 + labor%/100).
+function getRateForDesc(
+  description: string,
+  prices: PricesData | undefined,
+  fallback: number,
+  rawAedPerGram?: number | null,
+  laborPct = 0,
+): number {
+  const lm = 1 + laborPct / 100;
+
   if (rawAedPerGram && rawAedPerGram > 0) {
-    if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return roundTo(rawAedPerGram * (22 / 24), 2);
-    if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return roundTo(rawAedPerGram * (21 / 24), 2);
-    if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return roundTo(rawAedPerGram * (18 / 24), 2);
-    if (description === "GOLD (0.9999)" || description === "GOLD KG (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return roundTo(rawAedPerGram * 0.9999, 2);
-    if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return roundTo(rawAedPerGram * 0.995, 2);
-    if (description === "TT. BAR (0.9999)") return roundTo(rawAedPerGram * 0.9999, 2);
-    if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return roundTo(rawAedPerGram * 0.999, 2);
-    if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Kilo Bar 995 1KG") return roundTo(rawAedPerGram * 0.995, 2);
+    // Bars & bullion (no labor)
+    if (TT_BAR_DESCS.has(description)) {
+      if (description === "TT. BAR (0.9999)") return roundTo(rawAedPerGram * 0.9999, 2);
+      if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return roundTo(rawAedPerGram * 0.999, 2);
+      return roundTo(rawAedPerGram * 0.995, 2);   // (0.995) and legacy "TT. BAR"
+    }
+    if (KG_BAR_DESCS.has(description)) return roundTo(rawAedPerGram * 0.995, 2);
+    if (GOLD_DESCS.has(description))   return roundTo(rawAedPerGram * 0.9999, 2);
+    // Jewelry (labor applied)
+    if (JEWELRY_DESCS.has(description)) {
+      if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k")
+        return roundTo(rawAedPerGram * (21 / 24) * lm, 2);
+      if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k")
+        return roundTo(rawAedPerGram * (18 / 24) * lm, 2);
+      return roundTo(rawAedPerGram * (22 / 24) * lm, 2);   // 22K and generic jewelry
+    }
+    // Silver
+    if (SILVER_DESCS.has(description)) return prices?.silverPricePerGram ?? fallback;
   }
+
+  // DB fallbacks (manual mode or no live feed)
   if (!prices) return fallback;
-  if (description === "Gold Jewelry 22K" || description === "Gold 22K (0.916)" || description === "Gold Jewelry 22k" || description === "Gold Jewelry" || description === "22K Gold Jewelry" || description === "Jewellery 22K 1GM") return prices.gold22kRate;
-  if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return prices.gold21kRate;
-  if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return prices.gold18kRate;
-  if (description === "GOLD KG (0.9999)") return prices.goldKg9999Rate;
-  if (description === "GOLD (0.9999)" || description === "GOLD 999.99" || description === "GOLD" || description === "24K GOLD" || description === "Gold 9999 1GM" || description === "Gold 9999 1KG") return prices.gold9999Rate;
-  if (description === "TT. BAR" || description === "TT. BAR (0.995)" || description === "TT. BAR 995" || description === "Ten Tola Bar TTB") return prices.ttBarRate;
+  if (JEWELRY_DESCS.has(description)) {
+    if (description === "Gold Jewelry 21K" || description === "Gold 21K (0.875)" || description === "Gold Jewelry 21k") return prices.gold21kRate;
+    if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return prices.gold18kRate;
+    return prices.gold22kRate;
+  }
   if (description === "TT. BAR (0.9999)") return prices.ttBar24kRate;
-  if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return prices.ttBar24kRate;
-  if (description === "KG BAR" || description === "KG BAR (0.995)" || description === "KG BAR 995" || description === "KG. BAR" || description === "Kilo Bar 995 1KG") return prices.kgBarRate;
-  if (description === "Silver" || description === "Silver (0.999)" || description === "Silver 999") return prices.silverPricePerGram;
-  // Check custom descriptions
+  if (description === "KG BAR (0.9999)" || description === "GOLD KG (0.9999)") return prices.goldKg9999Rate;
+  if (GOLD_DESCS.has(description)) return prices.gold9999Rate;
+  if (TT_BAR_DESCS.has(description)) return prices.ttBarRate;
+  if (KG_BAR_DESCS.has(description)) return prices.kgBarRate;
+  if (SILVER_DESCS.has(description)) return prices.silverPricePerGram;
+  // Custom saved descriptions
   const custom = (prices as any).customDescriptions as { name: string; rate: number }[] | undefined;
   const found = custom?.find(d => d.name === description);
   if (found) return found.rate;
@@ -239,11 +282,17 @@ function calcItem(item: LineItem, metalRate: number): LineItem {
 // into the global Metal Rate field — resolved from the invoice's primary
 // item (the first row that has a description or purity chosen). Falls back
 // to the raw live spot rate when no item has been specified yet.
-function resolvePrimaryRate(currentItems: LineItem[], prices: PricesData | undefined, fallback: number, rawAedPerGram?: number | null): number {
+function resolvePrimaryRate(
+  currentItems: LineItem[],
+  prices: PricesData | undefined,
+  fallback: number,
+  rawAedPerGram?: number | null,
+  laborPct = 0,
+): number {
   const primary = currentItems.find(i => i.description || i.purity);
   if (!primary) return fallback;
-  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram);
-  return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram);
+  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborPct);
+  return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram, laborPct);
 }
 
 export default function NewInvoice() {
@@ -371,7 +420,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
@@ -386,7 +435,7 @@ export default function NewInvoice() {
       }
       if (field === "purity" && value) {
         const currentCategory = updated.category ?? "gold_jewelry";
-        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveAed);
+        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent);
       }
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {
@@ -416,7 +465,7 @@ export default function NewInvoice() {
   useEffect(() => {
     // In manual mode the live 1s tick must NOT override admin-set rates.
     if (!isLive || isManualMode) return;
-    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed));
+    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed, liveRates.laborCostPercent));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive, isManualMode, prices, itemSignature]);
 
