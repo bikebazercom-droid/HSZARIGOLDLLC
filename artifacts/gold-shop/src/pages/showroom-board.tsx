@@ -547,16 +547,18 @@ export default function ShowroomBoard() {
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
 
-  // Stable 8-value array for direction tracking — order matches rows below
+  // Stable 8-value array for direction tracking — order matches rows below.
+  // TV board uses raw market rates (no spread, no labor markup) so the
+  // displayed prices mirror the international spot exactly.
   const priceValues: (number | null)[] = [
-    liveRates.ttBar995Total,   // 0
-    liveRates.ttBar9999Total,  // 1
-    liveRates.gold9999Rate,    // 2
-    liveRates.kgBar995Total,   // 3
-    liveRates.goldKg9999Total, // 4
-    liveRates.gold22kRate,     // 5
-    liveRates.gold21kRate,     // 6
-    liveRates.gold18kRate,     // 7
+    liveRates.rawTtBar995Total,   // 0
+    liveRates.rawTtBar9999Total,  // 1
+    liveRates.rawGold9999Rate,    // 2
+    liveRates.rawKgBar995Total,   // 3
+    liveRates.rawGoldKg9999Total, // 4
+    liveRates.rawGold22kRate,     // 5
+    liveRates.rawGold21kRate,     // 6
+    liveRates.rawGold18kRate,     // 7
   ];
   const dirs = useDirections(priceValues);
 
@@ -565,7 +567,7 @@ export default function ShowroomBoard() {
       icon: <IconGoldBar />,
       name: "TT. BAR 995",
       weight: "TTB",
-      price: liveRates.ttBar995Total,
+      price: liveRates.rawTtBar995Total,
       direction: dirs[0],
       visible: publicPrices?.tvShowTtBar995 ?? true,
     },
@@ -573,7 +575,7 @@ export default function ShowroomBoard() {
       icon: <IconGoldBar />,
       name: "TT. BAR 9999",
       weight: "TTB",
-      price: liveRates.ttBar9999Total,
+      price: liveRates.rawTtBar9999Total,
       direction: dirs[1],
       visible: publicPrices?.tvShowTtBar999 ?? true,
     },
@@ -581,7 +583,7 @@ export default function ShowroomBoard() {
       icon: <IconGoldBricks />,
       name: "GOLD 9999",
       weight: "1GM",
-      price: liveRates.gold9999Rate,
+      price: liveRates.rawGold9999Rate,
       direction: dirs[2],
       visible: publicPrices?.tvShowGold9999 ?? true,
     },
@@ -589,7 +591,7 @@ export default function ShowroomBoard() {
       icon: <IconGoldBar />,
       name: "KG BAR 995",
       weight: "1KG",
-      price: liveRates.kgBar995Total,
+      price: liveRates.rawKgBar995Total,
       direction: dirs[3],
       visible: publicPrices?.tvShowKgBar995 ?? true,
     },
@@ -597,7 +599,7 @@ export default function ShowroomBoard() {
       icon: <IconGoldBricks />,
       name: "KG BAR 9999",
       weight: "1KG",
-      price: liveRates.goldKg9999Total,
+      price: liveRates.rawGoldKg9999Total,
       direction: dirs[4],
       visible: publicPrices?.tvShowGoldKg9999 ?? true,
     },
@@ -605,7 +607,7 @@ export default function ShowroomBoard() {
       icon: <IconNecklace />,
       name: "JEWELLERY 22K",
       weight: "1GM",
-      price: liveRates.gold22kRate,
+      price: liveRates.rawGold22kRate,
       direction: dirs[5],
       visible: publicPrices?.tvShowGold22k ?? true,
     },
@@ -613,7 +615,7 @@ export default function ShowroomBoard() {
       icon: <IconNecklace />,
       name: "JEWELLERY 21K",
       weight: "1GM",
-      price: liveRates.gold21kRate,
+      price: liveRates.rawGold21kRate,
       direction: dirs[6],
       visible: publicPrices?.tvShowGold21k ?? true,
     },
@@ -621,7 +623,7 @@ export default function ShowroomBoard() {
       icon: <IconNecklace />,
       name: "JEWELLERY 18K",
       weight: "1GM",
-      price: liveRates.gold18kRate,
+      price: liveRates.rawGold18kRate,
       direction: dirs[7],
       visible: publicPrices?.tvShowGold18k ?? true,
     },
