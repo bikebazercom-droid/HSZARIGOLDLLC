@@ -18,10 +18,15 @@ import {
 // applied here for jewelry rows only (22K/21K/18K).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TOLA_BAR_GRAMS = 116.640;
+// 1 Tola = 3/8 troy oz exactly. 3.75 × 31.1034768 = 116.638038g.
+// Using the precise tola definition rather than the rounded 116.640.
+const TOLA_BAR_GRAMS = 3.75 * 31.1034768;  // = 116.638038…g
 const PURITY_995     = 0.995;
 const PURITY_9999    = 0.9999;
-const PURITY_22K     = 22 / 24;
+// Dubai gold market convention: 22K is priced at 92.00% of 24K spot
+// (the "916" standard used by Dubai Gold & Jewellery Group boards).
+// Pure 22/24 = 91.67%, but the published market rate uses 0.9200.
+const PURITY_22K     = 0.9200;
 const PURITY_21K     = 21 / 24;
 const PURITY_18K     = 18 / 24;
 
