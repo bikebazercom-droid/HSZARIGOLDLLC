@@ -125,7 +125,7 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
     return {
       usdPerOz:          spot.usdPerOz ?? null,
       aedPerGram:        round2(adjustedBase),
-      baseAedPerGram:    round2(marketBase),
+      baseAedPerGram:    marketBase,          // full float — TV formula rounds only at final output
       bidUsdPerOz:       spot.bidUsdPerOz        != null ? round2(spot.bidUsdPerOz)        : null,
       askUsdPerOz:       spot.askUsdPerOz        != null ? round2(spot.askUsdPerOz)        : null,
       dailyLowUsdPerOz:  spot.dailyLowUsdPerOz  != null ? round2(spot.dailyLowUsdPerOz)  : null,
