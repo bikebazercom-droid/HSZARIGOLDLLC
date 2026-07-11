@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Package,
-  DollarSign, Settings, LogOut, Menu, X,
+  DollarSign, Settings, LogOut, Menu, X, FilePlus,
 } from "lucide-react";
 import { useGetSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/context/auth";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 const ADMIN_NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/invoices/new", label: "New Invoice", icon: FilePlus },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
   { href: "/prices", label: "Prices", icon: DollarSign },
@@ -20,11 +21,13 @@ const ADMIN_NAV = [
 
 const STAFF_NAV = [
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/invoices/new", label: "New Invoice", icon: FilePlus },
 ];
 
 const ADMIN_BOTTOM_NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/invoices/new", label: "New Invoice", icon: FilePlus },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/prices", label: "Prices", icon: DollarSign },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -47,8 +50,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = user?.role === "admin" ? ADMIN_NAV : STAFF_NAV;
   const bottomNavItems = user?.role === "admin" ? ADMIN_BOTTOM_NAV : STAFF_NAV;
 
-  const isActive = (href: string) =>
-    href === "/" ? location === "/" : location.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/") return location === "/";
+    if (href === "/invoices") {
+      return location === "/invoices" ||
+        (location.startsWith("/invoices/") && !location.startsWith("/invoices/new"));
+    }
+    return location === href || location.startsWith(href + "/");
+  };
 
   const LogoMark = () => (
     logoType === "image" && logoImageUrl ? (
