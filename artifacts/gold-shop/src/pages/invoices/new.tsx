@@ -657,7 +657,7 @@ export default function NewInvoice() {
                           <Select
                             value={item.description}
                             onValueChange={val => {
-                              if (val === "__new_custom__" || val === "__custom__") {
+                              if (val === "__custom__") {
                                 updateItem(index, "descriptionIsCustom" as keyof LineItem, true);
                                 updateItem(index, "description", "");
                               } else {
@@ -674,7 +674,6 @@ export default function NewInvoice() {
                                 <SelectItem key={d} value={d}>{d}</SelectItem>
                               ))}
                               <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Other</div>
-                              <SelectItem value="__new_custom__">⊕ New Custom Item</SelectItem>
                               {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
                                 <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
                               ))}
