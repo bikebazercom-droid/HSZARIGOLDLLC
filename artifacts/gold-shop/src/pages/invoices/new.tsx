@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -608,20 +608,6 @@ export default function NewInvoice() {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-20 px-1 sm:px-0">
-      <div className="flex items-center gap-3 sm:gap-4">
-        <Link href="/invoices">
-          <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
-        </Link>
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-primary truncate">New Invoice</h1>
-          {prices && (
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
-              Gold Rate: AED {goldRate}/g &nbsp;|&nbsp; Silver Rate: AED {prices.silverPricePerGram}/g
-            </p>
-          )}
-        </div>
-      </div>
-
       <div className="space-y-6">
         {/* Invoice Items */}
         <Card>
