@@ -55,7 +55,7 @@ function StaffRouter() {
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={NewInvoice} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
-        <Route>{() => <Redirect to="/invoices" />}</Route>
+        <Route>{() => <Redirect to="/invoices/new" />}</Route>
       </Switch>
     </AppLayout>
   );
@@ -65,7 +65,7 @@ function AdminRouter() {
   return (
     <AppLayout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={NewInvoice} />
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={NewInvoice} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
