@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/context/auth";
 import { LivePriceProvider } from "@/context/live-price";
 import { AppLayout } from "@/components/layout";
 import { emitSessionExpired } from "@/lib/session-events";
+import { useAdminSocket } from "@/hooks/use-admin-socket";
 
 import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -84,6 +85,11 @@ function AdminRouter() {
 
 function AuthGate() {
   const { user, isLoading } = useAuth();
+  // Opens a single shared Socket.IO connection once the user is logged in and
+  // listens for server-broadcast mutation events. On each event the relevant
+  // React Query cache is invalidated so every connected session stays in sync
+  // without a manual refresh. Local form state is never touched.
+  useAdminSocket();
 
   if (isLoading) {
     return (

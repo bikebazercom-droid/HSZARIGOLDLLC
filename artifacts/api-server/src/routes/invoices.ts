@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, gte, lte, and, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
+import { broadcast } from "../lib/socket.js";
 import {
   ListInvoicesQueryParams,
   CreateInvoiceBody,
@@ -192,6 +193,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     ...parseInvoice(invoice),
     items: savedItems.map(parseItem),
   }));
+  broadcast("INVOICE_MUTATION");
 });
 
 router.get("/invoices/:id", async (req, res): Promise<void> => {
@@ -222,6 +224,7 @@ router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => 
   }
 
   await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  broadcast("INVOICE_MUTATION");
   res.sendStatus(204);
 });
 

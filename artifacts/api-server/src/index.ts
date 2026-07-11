@@ -1,6 +1,8 @@
-import app from "./app";
-import { logger } from "./lib/logger";
-import { seedAdminUser } from "./lib/seed";
+import { createServer } from "http";
+import app from "./app.js";
+import { logger } from "./lib/logger.js";
+import { seedAdminUser } from "./lib/seed.js";
+import { initSocketIO } from "./lib/socket.js";
 
 const rawPort = process.env["PORT"];
 
@@ -16,13 +18,16 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+const httpServer = createServer(app);
+initSocketIO(httpServer);
+
 seedAdminUser().catch((err) => logger.error({ err }, "Failed to seed admin user"));
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+httpServer.on("error", (err) => {
+  logger.error({ err }, "HTTP server error");
+  process.exit(1);
+});
 
+httpServer.listen(port, () => {
   logger.info({ port }, "Server listening");
 });

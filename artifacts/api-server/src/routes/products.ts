@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, productsTable } from "@workspace/db";
+import { broadcast } from "../lib/socket.js";
 import {
   ListProductsQueryParams,
   CreateProductBody,
@@ -59,6 +60,7 @@ router.post("/products", async (req, res): Promise<void> => {
     pricePerUnit: product.pricePerUnit != null ? Number(product.pricePerUnit) : null,
     stock: product.stock != null ? Number(product.stock) : null,
   }));
+  broadcast("PRODUCT_MUTATION");
 });
 
 router.put("/products/:id", async (req, res): Promise<void> => {
@@ -97,6 +99,7 @@ router.put("/products/:id", async (req, res): Promise<void> => {
     pricePerUnit: product.pricePerUnit != null ? Number(product.pricePerUnit) : null,
     stock: product.stock != null ? Number(product.stock) : null,
   }));
+  broadcast("PRODUCT_MUTATION");
 });
 
 router.delete("/products/:id", async (req, res): Promise<void> => {
@@ -108,6 +111,7 @@ router.delete("/products/:id", async (req, res): Promise<void> => {
   }
 
   await db.delete(productsTable).where(eq(productsTable.id, params.data.id));
+  broadcast("PRODUCT_MUTATION");
   res.sendStatus(204);
 });
 

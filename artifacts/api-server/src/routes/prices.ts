@@ -3,6 +3,7 @@ import { db, pricesTable } from "@workspace/db";
 import { GetPricesResponse, UpdatePricesResponse, GetPublicPricesResponse } from "@workspace/api-zod";
 import { io as socketIO } from "socket.io-client";
 import { logger } from "../lib/logger.js";
+import { broadcast } from "../lib/socket.js";
 
 const router: IRouter = Router();
 
@@ -349,11 +350,13 @@ async function applyUpdates(body: Record<string, unknown>) {
 router.put("/prices", async (req, res): Promise<void> => {
   const updated = await applyUpdates(req.body as Record<string, unknown>);
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
+  broadcast("PRICE_MUTATION");
 });
 
 router.patch("/prices", async (req, res): Promise<void> => {
   const updated = await applyUpdates(req.body as Record<string, unknown>);
   res.json(UpdatePricesResponse.parse(parsePrices(updated)));
+  broadcast("PRICE_MUTATION");
 });
 
 export default router;

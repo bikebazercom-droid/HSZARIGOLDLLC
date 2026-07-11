@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, companySettingsTable } from "@workspace/db";
 import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
+import { broadcast } from "../lib/socket.js";
 
 const router: IRouter = Router();
 
@@ -39,6 +40,7 @@ router.put("/settings", async (req, res): Promise<void> => {
     .where(eq(companySettingsTable.id, settings.id))
     .returning();
   res.json(UpdateSettingsResponse.parse(updated));
+  broadcast("SETTINGS_MUTATION");
 });
 
 // Public, unauthenticated router — mounted separately, before the requireAuth

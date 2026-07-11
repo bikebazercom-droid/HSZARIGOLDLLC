@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "html2pdf.js": "^0.14.0",
-    "qrcode.react": "^4.2.0"
+    "qrcode.react": "^4.2.0",
+    "socket.io-client": "^4.8.3"
   }
 }
