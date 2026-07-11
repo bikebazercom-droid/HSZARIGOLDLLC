@@ -217,11 +217,6 @@ router.delete("/prices/items/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Price item not found" });
     return;
   }
-  if (existing.isCore) {
-    res.status(400).json({ error: "Core items cannot be deleted" });
-    return;
-  }
-
   await db.delete(priceItemsTable).where(eq(priceItemsTable.id, id));
   broadcast("PRICE_MUTATION");
   res.status(204).send();
