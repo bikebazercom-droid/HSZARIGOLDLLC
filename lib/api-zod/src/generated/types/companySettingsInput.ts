@@ -19,4 +19,6 @@ export interface CompanySettingsInput {
   logoImageUrl?: string;
   stampSignatureUrl?: string;
   showroomLogoUrl?: string;
+  /** GoldAPI.io API token. Send an empty string to clear the token. */
+  goldApiToken?: string;
 }

@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key } from "lucide-react";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
 
@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
   const [showroomLogoUrl, setShowroomLogoUrl] = useState<string>("");
+  const [goldApiToken, setGoldApiToken] = useState<string>("");
 
   useEffect(() => {
     if (settings) {
@@ -57,6 +58,19 @@ export default function SettingsPage() {
       setShowroomLogoUrl(settings.showroomLogoUrl ?? "");
     }
   }, [settings]);
+
+  const handleSaveGoldApi = () => {
+    updateSettings.mutate({ data: { goldApiToken } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+        setGoldApiToken("");
+        toast({ title: "GoldAPI.io token saved", description: "Live pricing will use GoldAPI.io on the next 60-second tick." });
+      },
+      onError: (err: any) => {
+        toast({ title: "Failed to save token", description: err.message, variant: "destructive" });
+      }
+    });
+  };
 
   const handleSave = () => {
     updateSettings.mutate({
@@ -509,6 +523,67 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* GoldAPI.io Settings */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Key className="w-5 h-5 text-primary" />
+            <CardTitle>GoldAPI.io Settings</CardTitle>
+          </div>
+          <CardDescription>
+            Configure your GoldAPI.io token to fetch the official XAU/USD spot price every 60 seconds.
+            When a token is active it takes precedence over the fallback live-price feed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Status:</span>
+            {settings?.goldApiTokenSet ? (
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                Token configured — GoldAPI.io active
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <span className="w-2 h-2 rounded-full bg-muted-foreground/50 inline-block" />
+                No token set — using fallback feed
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="goldApiToken">API Token</Label>
+            <Input
+              id="goldApiToken"
+              type="password"
+              value={goldApiToken}
+              onChange={e => setGoldApiToken(e.target.value)}
+              placeholder={settings?.goldApiTokenSet ? "Enter new token to replace existing…" : "Paste your GoldAPI.io token here…"}
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">
+              Get your token from{" "}
+              <a href="https://www.goldapi.io" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                goldapi.io
+              </a>
+              . To clear the token, save an empty field.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <Button
+              onClick={handleSaveGoldApi}
+              disabled={updateSettings.isPending}
+              variant="outline"
+              className="gap-2"
+            >
+              <Key className="w-4 h-4" />
+              {updateSettings.isPending ? "Saving…" : "Save API Settings"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

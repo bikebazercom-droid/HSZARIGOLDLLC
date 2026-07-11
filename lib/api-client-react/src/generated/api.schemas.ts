@@ -463,6 +463,8 @@ export interface CompanySettings {
      * @nullable
      */
   showroomLogoUrl?: string | null;
+  /** Whether a GoldAPI.io API token has been configured. The token itself is never returned. */
+  goldApiTokenSet: boolean;
 }
 
 export interface CompanySettingsInput {
@@ -478,6 +480,8 @@ export interface CompanySettingsInput {
   logoImageUrl?: string;
   stampSignatureUrl?: string;
   showroomLogoUrl?: string;
+  /** GoldAPI.io API token. Send an empty string to clear the token. */
+  goldApiToken?: string;
 }
 
 /**

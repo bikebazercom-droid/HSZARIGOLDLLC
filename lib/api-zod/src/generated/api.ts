@@ -24,7 +24,8 @@ export const GetSettingsResponse = zod.object({
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
   "stampSignatureUrl": zod.string().nullish(),
-  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.')
+  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.'),
+  "goldApiTokenSet": zod.boolean().describe('Whether a GoldAPI.io API token has been configured. The token itself is never returned.')
 })
 
 
@@ -43,7 +44,8 @@ export const UpdateSettingsBody = zod.object({
   "logoInitial": zod.string().optional(),
   "logoImageUrl": zod.string().optional(),
   "stampSignatureUrl": zod.string().optional(),
-  "showroomLogoUrl": zod.string().optional()
+  "showroomLogoUrl": zod.string().optional(),
+  "goldApiToken": zod.string().optional().describe('GoldAPI.io API token. Send an empty string to clear the token.')
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -59,7 +61,8 @@ export const UpdateSettingsResponse = zod.object({
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
   "stampSignatureUrl": zod.string().nullish(),
-  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.')
+  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.'),
+  "goldApiTokenSet": zod.boolean().describe('Whether a GoldAPI.io API token has been configured. The token itself is never returned.')
 })
 
 

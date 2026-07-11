@@ -13,9 +13,13 @@ async function getOrCreate() {
   return created;
 }
 
+function toSettingsResponse(row: typeof companySettingsTable.$inferSelect) {
+  return { ...row, goldApiTokenSet: !!(row.goldApiToken) };
+}
+
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await getOrCreate();
-  res.json(GetSettingsResponse.parse(settings));
+  res.json(GetSettingsResponse.parse(toSettingsResponse(settings)));
 });
 
 router.put("/settings", async (req, res): Promise<void> => {
@@ -33,13 +37,14 @@ router.put("/settings", async (req, res): Promise<void> => {
     logoImageUrl?: string;
     stampSignatureUrl?: string;
     showroomLogoUrl?: string;
+    goldApiToken?: string;
   };
   const [updated] = await db
     .update(companySettingsTable)
     .set(body)
     .where(eq(companySettingsTable.id, settings.id))
     .returning();
-  res.json(UpdateSettingsResponse.parse(updated));
+  res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
   broadcast("SETTINGS_MUTATION");
 });
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, pricesTable } from "@workspace/db";
+import { db, pricesTable, companySettingsTable } from "@workspace/db";
 import { GetPricesResponse, UpdatePricesResponse, GetPublicPricesResponse } from "@workspace/api-zod";
 import { io as socketIO } from "socket.io-client";
 import { logger } from "../lib/logger.js";
@@ -112,6 +112,70 @@ liveSocket.on("disconnect", (reason: string) => {
 liveSocket.on("connect_error", (err: Error) => {
   logger.warn({ msg: err.message }, "[live-gold] Socket.IO connection error");
 });
+
+// ── GoldAPI.io polling ────────────────────────────────────────────────────────
+// When an admin saves a GoldAPI.io token in Settings, this 60-second loop
+// reads the token from DB and fetches the live XAU/USD price. The result
+// updates the shared `liveSpot` object (same struct as the Socket.IO feed),
+// so the /tv board and all admin clients receive the authoritative price.
+// Free tier: 1 req/min is enough — we poll every 60 s.
+// ─────────────────────────────────────────────────────────────────────────────
+async function pollGoldApi(): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ goldApiToken: companySettingsTable.goldApiToken })
+      .from(companySettingsTable)
+      .limit(1);
+    const token = row?.goldApiToken;
+    if (!token) return;
+
+    const resp = await fetch("https://www.goldapi.io/api/XAU/USD", {
+      headers: { "x-access-token": token, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) {
+      logger.warn({ status: resp.status }, "[goldapi] Request failed");
+      return;
+    }
+    const data = await resp.json() as { price?: number; timestamp?: number };
+    const usdPerOz = data.price;
+    if (!usdPerOz || !Number.isFinite(usdPerOz) || usdPerOz < 500) {
+      logger.warn({ data }, "[goldapi] Unexpected response shape");
+      return;
+    }
+
+    await loadAdminConfig();
+    const askUsdPerOz   = usdPerOz + ASK_OFFSET_USD;
+    const bidUsdPerOz   = askUsdPerOz - BID_ASK_SPREAD_USD;
+    const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+    const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
+
+    trackDailyRange(usdPerOz);
+    liveSpot = {
+      rawAedPerGram,
+      aedPerGram,
+      baseAedPerGram: rawAedPerGram,
+      usdPerOz,
+      bidUsdPerOz,
+      askUsdPerOz,
+      dailyLowUsdPerOz,
+      dailyHighUsdPerOz,
+      receivedAt: new Date(),
+    };
+
+    logger.info({ usdPerOz, aedPerGram: aedPerGram.toFixed(4) }, "[goldapi] Price updated");
+
+    db.update(pricesTable)
+      .set({ goldBullionRate: String(aedPerGram), goldPricePerGram: String(aedPerGram), liveModeConnected: true, updatedAt: new Date() })
+      .catch((err: unknown) => logger.warn({ err }, "[goldapi] DB write failed"));
+  } catch (err) {
+    logger.warn({ err }, "[goldapi] Poll failed");
+  }
+}
+
+// Start polling immediately, then every 60 seconds
+pollGoldApi();
+setInterval(pollGoldApi, 60_000);
 
 liveSocket.on("update", (raw: string) => {
   try {

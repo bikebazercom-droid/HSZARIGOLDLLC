@@ -1158,7 +1158,7 @@ components:
 
     CompanySettings:
       type: object
-      required: [id, companyName, address, phone, email, trn, logoType, logoInitial]
+      required: [id, companyName, address, phone, email, trn, logoType, logoInitial, goldApiTokenSet]
       properties:
         id:
           type: integer
@@ -1187,6 +1187,9 @@ components:
         showroomLogoUrl:
           type: ["string", "null"]
           description: Optional custom logo image shown at the top of the public showroom TV price display board.
+        goldApiTokenSet:
+          type: boolean
+          description: Whether a GoldAPI.io API token has been configured. The token itself is never returned.
 
     CompanySettingsInput:
       type: object
@@ -1215,6 +1218,9 @@ components:
           type: string
         showroomLogoUrl:
           type: string
+        goldApiToken:
+          type: string
+          description: GoldAPI.io API token. Send an empty string to clear the token.
 
     PublicSettings:
       type: object
