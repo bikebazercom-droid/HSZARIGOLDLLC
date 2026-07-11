@@ -7,6 +7,8 @@ import {
   useGetSettings, getGetSettingsQueryKey,
   useGetPrices, getGetPricesQueryKey,
   useUpdatePrices,
+  useCreateInvoice,
+  InvoiceInputPaymentMethod,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLivePrice } from "@/context/live-price";
@@ -17,13 +19,332 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus, Filter, FileDown, Sliders, Check, Loader2 } from "lucide-react";
+import { Plus, Filter, FileDown, Sliders, Check, Loader2, Zap } from "lucide-react";
 import { useAuth } from "@/context/auth";
+import { useToast } from "@/hooks/use-toast";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
+
+// ── Quick Invoice Builder ─────────────────────────────────────────────────────
+
+const QUICK_STOCK_ITEMS = [
+  "TT. BAR (0.995)",
+  "TT. BAR (0.9999)",
+  "GOLD (0.9999)",
+  "KG BAR (0.995)",
+  "KG BAR (0.9999)",
+  "Gold Jewelry 22K",
+  "Gold Jewelry 21K",
+  "Gold Jewelry 18K",
+  "Silver",
+] as const;
+
+const QUICK_PURITY: Record<string, number> = {
+  "TT. BAR (0.995)":  0.995,
+  "TT. BAR (0.9999)": 0.9999,
+  "GOLD (0.9999)":    0.9999,
+  "KG BAR (0.995)":   0.995,
+  "KG BAR (0.9999)":  0.9999,
+  "Gold Jewelry 22K": 22 / 24,
+  "Gold Jewelry 21K": 21 / 24,
+  "Gold Jewelry 18K": 18 / 24,
+  "Silver":           0.999,
+};
+
+function quickCategory(desc: string): string {
+  if (desc === "Gold Jewelry 22K" || desc === "Gold Jewelry 21K" || desc === "Gold Jewelry 18K") return "gold_jewelry";
+  if (desc === "GOLD (0.9999)") return "gold";
+  if (desc.startsWith("TT. BAR")) return "tt_bar";
+  if (desc.startsWith("KG BAR")) return "kg_bar";
+  if (desc === "Silver") return "silver";
+  return "custom";
+}
+
+function resolveQuickRate(
+  desc: string,
+  rawAed: number | null | undefined,
+  laborPct: number,
+  prices: any,
+): number {
+  const lm = 1 + laborPct / 100;
+  if (rawAed && rawAed > 0) {
+    if (desc === "TT. BAR (0.9999)" || desc === "GOLD (0.9999)" || desc === "KG BAR (0.9999)") return rawAed * 0.9999;
+    if (desc === "TT. BAR (0.995)" || desc === "KG BAR (0.995)") return rawAed * 0.995;
+    if (desc === "Gold Jewelry 22K") return rawAed * (22 / 24) * lm;
+    if (desc === "Gold Jewelry 21K") return rawAed * (21 / 24) * lm;
+    if (desc === "Gold Jewelry 18K") return rawAed * (18 / 24) * lm;
+    if (desc === "Silver") return prices?.silverPricePerGram ?? 0;
+  }
+  if (!prices) return 0;
+  if (desc === "Gold Jewelry 22K") return prices.gold22kRate ?? 0;
+  if (desc === "Gold Jewelry 21K") return prices.gold21kRate ?? 0;
+  if (desc === "Gold Jewelry 18K") return prices.gold18kRate ?? 0;
+  if (desc === "TT. BAR (0.9999)") return prices.ttBar24kRate ?? 0;
+  if (desc === "GOLD (0.9999)" || desc === "KG BAR (0.9999)") return prices.gold9999Rate ?? 0;
+  if (desc === "TT. BAR (0.995)" || desc === "KG BAR (0.995)") return prices.ttBarRate ?? 0;
+  if (desc === "Silver") return prices.silverPricePerGram ?? 0;
+  return prices.goldPricePerGram ?? 0;
+}
+
+function round2(n: number) { return Math.round(n * 100) / 100; }
+function round3(n: number) { return Math.round(n * 1000) / 1000; }
+
+function QuickInvoiceBuilder() {
+  const { liveRates } = useLivePrice();
+  const { data: prices } = useGetPrices({ query: { queryKey: getGetPricesQueryKey(), refetchInterval: 5000 } });
+  const createInvoice = useCreateInvoice();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [customerName,   setCustomerName]   = useState("");
+  const [customerMobile, setCustomerMobile] = useState("");
+  const [stockDesc,      setStockDesc]      = useState("");
+  const [customName,     setCustomName]     = useState("");
+  const [grossWeightStr, setGrossWeightStr] = useState("");
+  const [metalRateStr,   setMetalRateStr]   = useState("");
+  const [paymentMethod,  setPaymentMethod]  = useState<InvoiceInputPaymentMethod>(InvoiceInputPaymentMethod.cash);
+
+  const isCustom    = stockDesc === "__new_custom__";
+  const displayDesc = isCustom ? customName : stockDesc;
+  const purityFactor = isCustom ? 1 : (QUICK_PURITY[stockDesc] ?? 1);
+  const grossWt     = parseFloat(grossWeightStr) || 0;
+  const metalRate   = parseFloat(metalRateStr)   || 0;
+  const pureWt      = round3(grossWt * purityFactor);
+  const goldValue   = round2(pureWt * metalRate);
+  const vatAmt      = round2(goldValue * 0.05);
+  const total       = round2(goldValue + vatAmt);
+
+  // Auto-fill rate from live feed whenever stock item or live price changes
+  useEffect(() => {
+    if (!stockDesc || isCustom) return;
+    const rate = resolveQuickRate(stockDesc, liveRates.aedPerGram, liveRates.laborCostPercent ?? 0, prices);
+    if (rate > 0) setMetalRateStr(rate.toFixed(3));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockDesc, liveRates.aedPerGram, prices]);
+
+  const reset = () => {
+    setCustomerName(""); setCustomerMobile(""); setStockDesc(""); setCustomName("");
+    setGrossWeightStr(""); setMetalRateStr("");
+    setPaymentMethod(InvoiceInputPaymentMethod.cash);
+  };
+
+  const handleCreate = () => {
+    if (!customerName.trim()) {
+      toast({ title: "Customer name is required", variant: "destructive" }); return;
+    }
+    if (!displayDesc.trim()) {
+      toast({ title: "Stock item / description is required", variant: "destructive" }); return;
+    }
+    if (!grossWt || !metalRate) {
+      toast({ title: "Weight and rate are required", variant: "destructive" }); return;
+    }
+
+    createInvoice.mutate({
+      data: {
+        customerName: customerName.trim(),
+        customerMobile: customerMobile.trim() || undefined,
+        paymentMethod,
+        metalRate,
+        vatRate: 5,
+        vatAmount: vatAmt,
+        subtotal: goldValue,
+        discount: 0,
+        total,
+        totalBeforeVat: goldValue,
+        totalIncludingVat: total,
+        roundOffDiscount: 0,
+        items: [{
+          description: displayDesc || "-",
+          category: isCustom ? "custom" : quickCategory(stockDesc),
+          quantity: 1,
+          grossWeight: grossWt || undefined,
+          purity: isCustom ? undefined : String(purityFactor),
+          purityMultiplier: isCustom ? undefined : purityFactor,
+          pureWeight: pureWt || undefined,
+          unitPrice: metalRate,
+          totalPrice: goldValue,
+        }],
+      },
+    }, {
+      onSuccess: (inv) => {
+        toast({ title: "Invoice created!", description: `#${(inv as any).invoiceNumber ?? inv.id} — opening for print…` });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+        window.open(`/invoices/${inv.id}`, "_blank");
+        reset();
+      },
+      onError: () => {
+        toast({ title: "Failed to create invoice", description: "Please try again.", variant: "destructive" });
+      },
+    });
+  };
+
+  const fmt = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isLive = liveRates.isLive;
+  const hasPreview = grossWt > 0 && metalRate > 0;
+
+  return (
+    <Card className="border-primary/20 shadow-sm">
+      <CardHeader className="pb-3 pt-4">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Zap className="w-4 h-4 text-amber-500" />
+          Quick Invoice Builder
+          {isLive && (
+            <span className="text-[11px] font-normal text-emerald-600 flex items-center gap-1 ml-1">
+              <span className="text-emerald-500 animate-pulse">●</span> Live rates active
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Row 1: Customer + Stock + Payment */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Customer Name <span className="text-destructive">*</span></Label>
+            <Input
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+              placeholder="e.g. Ahmed Al-Rashid"
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Phone</Label>
+            <Input
+              value={customerMobile}
+              onChange={e => setCustomerMobile(e.target.value)}
+              placeholder="+971 50 123 4567"
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Stock Item <span className="text-destructive">*</span></Label>
+            <Select
+              value={stockDesc}
+              onValueChange={val => { setStockDesc(val); if (val !== "__new_custom__") setCustomName(""); }}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Select item" />
+              </SelectTrigger>
+              <SelectContent>
+                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Live-Priced Assets
+                </div>
+                {QUICK_STOCK_ITEMS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">
+                  Other
+                </div>
+                <SelectItem value="__new_custom__">⊕ New Custom Item</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Payment</Label>
+            <Select value={paymentMethod} onValueChange={val => setPaymentMethod(val as InvoiceInputPaymentMethod)}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={InvoiceInputPaymentMethod.cash}>Cash</SelectItem>
+                <SelectItem value={InvoiceInputPaymentMethod.card}>Card</SelectItem>
+                <SelectItem value={InvoiceInputPaymentMethod.bank_transfer}>Bank Transfer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Custom item name — only shown when ⊕ New Custom Item is selected */}
+        {isCustom && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Item Name / Description <span className="text-destructive">*</span></Label>
+            <Input
+              autoFocus
+              value={customName}
+              onChange={e => setCustomName(e.target.value)}
+              placeholder="e.g. Antique Necklace, Custom Ring…"
+              className="h-9"
+            />
+          </div>
+        )}
+
+        {/* Row 2: Weight + Rate + live preview */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Weight (g) <span className="text-destructive">*</span></Label>
+            <Input
+              type="number" min="0" step="0.001"
+              value={grossWeightStr}
+              onChange={e => setGrossWeightStr(e.target.value)}
+              placeholder="0.000"
+              className="h-9 font-mono text-right"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1">
+              Rate (AED/g)
+              {!isCustom && stockDesc && isLive && (
+                <span className="text-[10px] text-emerald-600 font-normal">auto</span>
+              )}
+            </Label>
+            <Input
+              type="number" min="0" step="0.001"
+              value={metalRateStr}
+              onChange={e => setMetalRateStr(e.target.value)}
+              placeholder="0.000"
+              className="h-9 font-mono text-right"
+            />
+          </div>
+
+          {/* Inline totals preview */}
+          {hasPreview ? (
+            <div className="col-span-2 bg-muted/40 rounded-lg px-3 py-2 text-xs space-y-1">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Pure Wt.</span>
+                <span className="font-mono font-medium">{pureWt.toFixed(3)} g</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Gold Value</span>
+                <span className="font-mono">AED {fmt(goldValue)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>VAT (5%)</span>
+                <span className="font-mono">AED {fmt(vatAmt)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-primary border-t border-border/60 pt-1 mt-0.5">
+                <span>Total</span>
+                <span className="font-mono">AED {fmt(total)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="col-span-2 rounded-lg border border-dashed border-border/60 flex items-center justify-center h-[76px] text-xs text-muted-foreground">
+              Enter weight &amp; rate to preview total
+            </div>
+          )}
+        </div>
+
+        {/* Action row */}
+        <div className="flex items-center justify-between pt-1">
+          <p className="text-[11px] text-muted-foreground">
+            Invoice opens in a new tab for printing. Form clears automatically after creation.
+          </p>
+          <Button
+            onClick={handleCreate}
+            disabled={createInvoice.isPending}
+            className="h-10 px-6 font-semibold gap-2 shrink-0"
+            style={{ backgroundColor: NAVY }}
+          >
+            {createInvoice.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Zap className="w-4 h-4 text-amber-400" />
+            }
+            {createInvoice.isPending ? "Creating…" : "Create & Print Invoice"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function fmtAED(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -545,6 +866,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Invoice Builder */}
+      <QuickInvoiceBuilder />
 
       {/* Live Price Tuning */}
       <LivePriceTuning />
