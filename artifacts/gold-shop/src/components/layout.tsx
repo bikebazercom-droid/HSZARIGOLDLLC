@@ -3,16 +3,16 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Package,
   DollarSign, Settings, LogOut, Menu, X, FilePlus,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { useGetSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/context/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const ADMIN_NAV = [
+const ADMIN_SETTINGS_SUB = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
-  { href: "/invoices/new", label: "New Invoice", icon: FilePlus },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
   { href: "/prices", label: "Prices", icon: DollarSign },
@@ -25,11 +25,9 @@ const STAFF_NAV = [
 ];
 
 const ADMIN_BOTTOM_NAV = [
-  { href: "/", label: "Home", icon: LayoutDashboard },
-  { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/invoices/new", label: "New Invoice", icon: FilePlus },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/prices", label: "Prices", icon: DollarSign },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -37,6 +35,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsManualOpen, setSettingsManualOpen] = useState(false);
 
   const { data: settings } = useGetSettings({
     query: { queryKey: getGetSettingsQueryKey(), staleTime: 60_000 }
@@ -47,9 +46,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const logoImageUrl = settings?.logoImageUrl ?? "";
   const companyName = settings?.companyName ?? "Hazari Gold L.L.C";
 
-  const navItems = user?.role === "admin" ? ADMIN_NAV : STAFF_NAV;
-  const bottomNavItems = user?.role === "admin" ? ADMIN_BOTTOM_NAV : STAFF_NAV;
-
   const isActive = (href: string) => {
     if (href === "/") return location === "/";
     if (href === "/invoices") {
@@ -58,6 +54,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
     return location === href || location.startsWith(href + "/");
   };
+
+  const isNewInvoiceActive = location === "/invoices/new";
+  const isSubActive = ADMIN_SETTINGS_SUB.some(i => isActive(i.href));
+  const settingsOpen = settingsManualOpen || isSubActive;
 
   const LogoMark = () => (
     logoType === "image" && logoImageUrl ? (
@@ -69,6 +69,116 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <span style={{ color: "#c8a43a", fontFamily: "serif" }}>{logoInitial}</span>
       </div>
     )
+  );
+
+  const AdminNav = ({ onNavigate }: { onNavigate?: () => void }) => (
+    <nav className="flex-1 space-y-1.5">
+      {/* New Invoice — primary CTA */}
+      <Link href="/invoices/new" onClick={onNavigate}>
+        <div
+          className="flex items-center gap-3 px-4 py-3 rounded-md transition-colors cursor-pointer font-semibold text-sm"
+          style={
+            isNewInvoiceActive
+              ? { backgroundColor: "#c8a43a", color: "#1e3a5f" }
+              : { backgroundColor: "rgba(200,164,58,0.12)", color: "#c8a43a" }
+          }
+        >
+          <FilePlus className="w-5 h-5" />
+          New Invoice
+        </div>
+      </Link>
+
+      {/* Settings collapsible group */}
+      <div>
+        <button
+          onClick={() => setSettingsManualOpen(v => !v)}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-md transition-colors cursor-pointer text-sm ${
+            isSubActive
+              ? "bg-sidebar-accent text-sidebar-foreground"
+              : "hover:bg-sidebar-accent"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <Settings className="w-5 h-5" />
+            <span className="font-medium">Settings</span>
+          </div>
+          {settingsOpen
+            ? <ChevronDown className="w-4 h-4 opacity-60" />
+            : <ChevronRight className="w-4 h-4 opacity-60" />
+          }
+        </button>
+
+        {settingsOpen && (
+          <div className="mt-1 ml-3 pl-3 border-l border-sidebar-border/50 space-y-0.5">
+            {ADMIN_SETTINGS_SUB.map(item => {
+              const Icon = item.icon;
+              const active = isActive(item.href);
+              return (
+                <Link key={item.href} href={item.href} onClick={onNavigate}>
+                  <div className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer text-sm ${
+                    active
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                      : "hover:bg-sidebar-accent"
+                  }`}>
+                    <Icon className="w-4 h-4" />
+                    {item.label}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+
+  const StaffNav = ({ onNavigate }: { onNavigate?: () => void }) => (
+    <nav className="flex-1 space-y-1">
+      {STAFF_NAV.map(item => {
+        const Icon = item.icon;
+        const active = isActive(item.href);
+        return (
+          <Link key={item.href} href={item.href} onClick={onNavigate}>
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors cursor-pointer text-sm ${
+              active ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium" : "hover:bg-sidebar-accent"
+            }`}>
+              <Icon className="w-5 h-5" />
+              {item.label}
+            </div>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
+  const UserFooter = ({ onLogout }: { onLogout: () => void }) => (
+    <div className="mt-4 pt-4 border-t border-sidebar-border space-y-2">
+      {user && (
+        <div className="px-2 flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+            style={{ backgroundColor: "#c8a43a", color: "#1e3a5f" }}
+          >
+            {user.fullName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate">{user.fullName}</div>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+              {user.role === "admin" ? "Admin" : "Staff"}
+            </Badge>
+          </div>
+        </div>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-2 text-[#DFB15B] hover:text-[#f0cc7a] hover:bg-sidebar-accent transition-colors"
+        onClick={onLogout}
+      >
+        <LogOut className="w-4 h-4" />
+        Sign Out
+      </Button>
+    </div>
   );
 
   return (
@@ -99,10 +209,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── MOBILE DRAWER OVERLAY ── */}
       {drawerOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setDrawerOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} />
           <aside className="relative w-72 max-w-[85vw] bg-sidebar text-sidebar-foreground flex flex-col p-6 shadow-2xl h-full">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
@@ -121,53 +228,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </button>
             </div>
 
-            <nav className="flex-1 space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-                return (
-                  <Link key={item.href} href={item.href} onClick={() => setDrawerOpen(false)}>
-                    <div className={`flex items-center gap-3 px-4 py-3.5 rounded-md transition-colors cursor-pointer text-base ${
-                      active ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold" : "hover:bg-sidebar-accent"
-                    }`}>
-                      <Icon className="w-5 h-5" />
-                      {item.label}
-                    </div>
-                  </Link>
-                );
-              })}
-            </nav>
+            {user?.role === "admin"
+              ? <AdminNav onNavigate={() => setDrawerOpen(false)} />
+              : <StaffNav onNavigate={() => setDrawerOpen(false)} />
+            }
 
-            <div className="mt-4 pt-4 border-t border-sidebar-border space-y-3">
-              {user && (
-                <div className="px-2 flex items-center gap-2 mb-1">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0" style={{ backgroundColor: "#c8a43a", color: "#1e3a5f" }}>
-                    {user.fullName.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{user.fullName}</div>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                      {user.role === "admin" ? "Admin" : "Staff"}
-                    </Badge>
-                  </div>
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2 text-[#DFB15B] hover:text-[#f0cc7a] hover:bg-sidebar-accent transition-colors"
-                onClick={() => { setDrawerOpen(false); logout(); }}
-              >
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </Button>
-            </div>
+            <UserFooter onLogout={() => { setDrawerOpen(false); logout(); }} />
           </aside>
         </div>
       )}
 
       {/* ── DESKTOP SIDEBAR ── */}
-      <aside className="hidden md:flex md:w-64 bg-sidebar text-sidebar-foreground p-6 flex-col no-print">
+      <aside className="hidden md:flex md:w-60 bg-sidebar text-sidebar-foreground p-5 flex-col no-print">
         <div className="mb-8 flex items-center gap-3">
           <LogoMark />
           <div>
@@ -180,49 +252,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            return (
-              <Link key={item.href} href={item.href}>
-                <div className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors cursor-pointer ${
-                  active ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium" : "hover:bg-sidebar-accent"
-                }`}>
-                  <Icon className="w-5 h-5" />
-                  {item.label}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
+        {user?.role === "admin" ? <AdminNav /> : <StaffNav />}
 
-        <div className="mt-4 pt-4 border-t border-sidebar-border space-y-3">
-          {user && (
-            <div className="px-2">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ backgroundColor: "#c8a43a", color: "#1e3a5f" }}>
-                  {user.fullName.charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{user.fullName}</div>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                    {user.role === "admin" ? "Admin" : "Staff"}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-[#DFB15B] hover:text-[#f0cc7a] hover:bg-sidebar-accent transition-colors"
-            onClick={logout}
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </Button>
-        </div>
+        <UserFooter onLogout={logout} />
       </aside>
 
       {/* ── MAIN CONTENT ── */}
@@ -231,19 +263,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* ── MOBILE BOTTOM TAB BAR ── */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-sidebar text-sidebar-foreground border-t border-sidebar-border no-print z-40"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 bg-sidebar text-sidebar-foreground border-t border-sidebar-border no-print z-40"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         <div className="flex">
-          {bottomNavItems.map((item) => {
+          {(user?.role === "admin" ? ADMIN_BOTTOM_NAV : STAFF_NAV).map(item => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
               <Link key={item.href} href={item.href}>
-                <div className="flex flex-col items-center justify-center py-2 px-1 min-w-0 transition-colors"
-                  style={{ width: `${100 / bottomNavItems.length}vw` }}>
+                <div
+                  className="flex flex-col items-center justify-center py-2 px-1 min-w-0 transition-colors"
+                  style={{ width: `${100 / (user?.role === "admin" ? ADMIN_BOTTOM_NAV.length : STAFF_NAV.length)}vw` }}
+                >
                   <Icon className="w-5 h-5 mb-0.5" style={{ color: active ? "#c8a43a" : undefined }} />
-                  <span className="text-[10px] leading-none font-medium truncate"
-                    style={{ color: active ? "#c8a43a" : undefined }}>
+                  <span className="text-[10px] leading-none font-medium truncate" style={{ color: active ? "#c8a43a" : undefined }}>
                     {item.label}
                   </span>
                 </div>
