@@ -8,15 +8,20 @@ import {
   PriceItem,
 } from "@workspace/api-client-react";
 
-const GOLD       = "#d4af37";
-const ASK_COLOR  = "#f87171";   // coral/red for ASK side
-const BID_COLOR  = "#4ade80";   // green for BID side
-const GREEN_TICK = "#22c55e";
-const RED_TICK   = "#ef4444";
-const HEADER_BG  = "#3b2409";   // dark brown/copper for table header
-const HEADER_BORDER = "#b97a30";
+// ── Design tokens ──────────────────────────────────────────────────────────────
+const GOLD        = "#d4af37";
+const GOLD_LIGHT  = "#f0d060";
+const GOLD_DIM    = "#a07820";
+const GREEN       = "#22c55e";
+const RED         = "#ef4444";
+const CYAN        = "#22d3ee";
+const AMBER       = "#f59e0b";
+const BG_DEEP     = "#080808";
+const BG_CARD     = "#0f0f0f";
+const BG_ROW      = "#111111";
+const BORDER      = `${GOLD}33`;
 
-// ── Clock — uses device's own locale + timezone automatically ─────────────────
+// ── Clock ─────────────────────────────────────────────────────────────────────
 function useTicker() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -26,7 +31,6 @@ function useTicker() {
   return now;
 }
 
-// Pass `undefined` as locale so the browser uses the device's own locale/region.
 function formatDate(d: Date) {
   return d.toLocaleDateString(undefined, {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
@@ -38,113 +42,66 @@ function formatClock(d: Date) {
   });
 }
 
-// ── Screen Wake Lock — keeps the display on while /tv is open ─────────────────
-// Uses the HTML5 Screen Wake Lock API (supported in Chrome 84+, Edge 84+,
-// Safari 16.4+). Silently no-ops on unsupported browsers.
-// Re-acquires automatically when the page becomes visible again after being
-// hidden (tab switch, window minimise, etc.).
+// ── Screen Wake Lock ──────────────────────────────────────────────────────────
 function useWakeLock() {
   const sentinelRef = useRef<WakeLockSentinel | null>(null);
-
   useEffect(() => {
-    if (!("wakeLock" in navigator)) return; // API not supported — silent no-op
-
+    if (!("wakeLock" in navigator)) return;
     async function acquire() {
       try {
-        // Release any existing sentinel before requesting a new one
-        if (sentinelRef.current) {
-          await sentinelRef.current.release().catch(() => {});
-          sentinelRef.current = null;
-        }
+        if (sentinelRef.current) { await sentinelRef.current.release().catch(() => {}); sentinelRef.current = null; }
         sentinelRef.current = await navigator.wakeLock.request("screen");
-      } catch {
-        // Request can fail if the document is hidden at the time — the
-        // visibilitychange listener below will retry when it becomes visible.
-      }
+      } catch { /* hidden tab — visibilitychange will retry */ }
     }
-
-    // Initial acquisition
     acquire();
-
-    // Re-acquire whenever the tab becomes active again
-    function onVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        acquire();
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      sentinelRef.current?.release().catch(() => {});
-      sentinelRef.current = null;
-    };
+    const onVis = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { document.removeEventListener("visibilitychange", onVis); sentinelRef.current?.release().catch(() => {}); sentinelRef.current = null; };
   }, []);
 }
 
+// ── Formatting ─────────────────────────────────────────────────────────────────
 function fmt(n: number | null | undefined, decimals = 2) {
   if (n == null || !Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-AE", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  return n.toLocaleString("en-AE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-// ── Price item formula engine (mirrors server-side logic) ─────────────────────
-// formulaType "spot_bar"      → baseAedPerGram × weightGrams × purityFactor + offset
-// formulaType "spot_per_gram" → baseAedPerGram × purityFactor + offset
-// formulaType "manual"        → manualRateAed + offset
-const round2tv = (n: number) => Math.round(n * 100) / 100;
+// ── Price item formula engine ─────────────────────────────────────────────────
+// spot_bar      → baseAedPerGram × weightGrams × purityFactor + offset
+// spot_per_gram → baseAedPerGram × purityFactor + offset
+// manual        → manualRateAed + offset
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
-function computeItemPrice(item: PriceItem, baseAedPerGram: number | null): number | null {
-  if (item.formulaType === "manual") {
-    if (item.manualRateAed == null) return null;
-    return round2tv(item.manualRateAed + item.premiumOffsetAed);
-  }
-  if (baseAedPerGram == null) return null;
-  if (item.formulaType === "spot_bar") {
-    return round2tv(baseAedPerGram * (item.weightGrams ?? 0) * item.purityFactor + item.premiumOffsetAed);
-  }
-  // spot_per_gram
-  return round2tv(baseAedPerGram * item.purityFactor + item.premiumOffsetAed);
+function computeItemPrice(item: PriceItem, base: number | null): number | null {
+  if (item.formulaType === "manual") return item.manualRateAed == null ? null : r2(item.manualRateAed + item.premiumOffsetAed);
+  if (base == null) return null;
+  if (item.formulaType === "spot_bar") return r2(base * (item.weightGrams ?? 0) * item.purityFactor + item.premiumOffsetAed);
+  return r2(base * item.purityFactor + item.premiumOffsetAed);
 }
 
-// ── Icon selection per item ────────────────────────────────────────────────────
-// spot_bar → gold bar; spot_per_gram high purity → gold bricks; else → necklace
-function iconForItem(item: PriceItem): React.ReactNode {
-  if (item.formulaType === "spot_bar") return <IconGoldBar />;
-  if (item.purityFactor >= 0.99) return <IconGoldBricks />;
-  return <IconNecklace />;
-}
+// ── Direction tracking ────────────────────────────────────────────────────────
+type Dir = "up" | "down" | "neutral";
 
-// ── Direction tracking (for row flash animations) — keyed by item ID ──────────
-type Direction = "up" | "down" | "neutral";
-
-function useItemDirections(priceMap: Map<number, number | null>) {
-  const prevRef = useRef<Map<number, number | null>>(new Map());
-  const [dirs, setDirs] = useState<Map<number, Direction>>(new Map());
+function useItemDirs(priceMap: Map<number, number | null>) {
+  const prevRef  = useRef<Map<number, number | null>>(new Map());
+  const [dirs, setDirs] = useState<Map<number, Dir>>(new Map());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const prev = prevRef.current;
-    const next = new Map<number, Direction>();
+    const next  = new Map<number, Dir>();
     let changed = false;
     for (const [id, price] of priceMap) {
       const p = prev.get(id) ?? null;
-      let dir: Direction = "neutral";
-      if (price != null && p != null) {
-        if (price > p) dir = "up";
-        else if (price < p) dir = "down";
-      }
+      let dir: Dir = "neutral";
+      if (price != null && p != null) { if (price > p) dir = "up"; else if (price < p) dir = "down"; }
       next.set(id, dir);
       if (dir !== "neutral" && dir !== (dirs.get(id) ?? "neutral")) changed = true;
     }
     if (changed) {
       setDirs(next);
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        setDirs(new Map([...priceMap.keys()].map(id => [id, "neutral" as Direction])));
-      }, 1800);
+      timerRef.current = setTimeout(() => setDirs(new Map([...priceMap.keys()].map(id => [id, "neutral" as Dir]))), 2000);
     }
     prevRef.current = new Map(priceMap);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,332 +111,299 @@ function useItemDirections(priceMap: Map<number, number | null>) {
   return dirs;
 }
 
-// ── Keyframes ─────────────────────────────────────────────────────────────────
-const STYLE_ID = "tv-tick-anims";
+// ── Inject keyframes once ────────────────────────────────────────────────────
+const STYLE_ID = "hg-tv-anims";
 function ensureKeyframes() {
   if (document.getElementById(STYLE_ID)) return;
   const s = document.createElement("style");
   s.id = STYLE_ID;
   s.textContent = `
-    @keyframes tvTickUp {
-      0%   { color: ${GREEN_TICK}; text-shadow: 0 0 20px ${GREEN_TICK}cc, 0 0 50px ${GREEN_TICK}55; }
-      40%  { color: ${GREEN_TICK}; text-shadow: 0 0 32px ${GREEN_TICK}ff, 0 0 80px ${GREEN_TICK}77; }
-      100% { color: #ffffff;       text-shadow: none; }
+    @keyframes hgUp {
+      0%   { color:${GREEN}; text-shadow:0 0 24px ${GREEN}cc,0 0 60px ${GREEN}55; }
+      50%  { color:${GREEN}; text-shadow:0 0 40px ${GREEN}ff,0 0 90px ${GREEN}77; }
+      100% { color:#ffffff;  text-shadow:none; }
     }
-    @keyframes tvTickDown {
-      0%   { color: ${RED_TICK}; text-shadow: 0 0 20px ${RED_TICK}cc, 0 0 50px ${RED_TICK}55; }
-      40%  { color: ${RED_TICK}; text-shadow: 0 0 32px ${RED_TICK}ff, 0 0 80px ${RED_TICK}77; }
-      100% { color: #ffffff;     text-shadow: none; }
+    @keyframes hgDown {
+      0%   { color:${RED}; text-shadow:0 0 24px ${RED}cc,0 0 60px ${RED}55; }
+      50%  { color:${RED}; text-shadow:0 0 40px ${RED}ff,0 0 90px ${RED}77; }
+      100% { color:#ffffff; text-shadow:none; }
     }
-    @keyframes tvRowUp {
-      0%   { border-color: ${GREEN_TICK}; box-shadow: 0 0 0 1px ${GREEN_TICK}44 inset, 0 0 28px -6px ${GREEN_TICK}88; }
-      100% { border-color: ${GOLD}44;     box-shadow: none; }
+    @keyframes hgRowUp {
+      0%   { background: linear-gradient(90deg,#041804 0%,#0b1e0b 40%,${BG_ROW} 100%); border-left-color:${GREEN}; }
+      100% { background: linear-gradient(90deg,${BG_CARD} 0%,${BG_ROW} 100%);          border-left-color:${GOLD}55; }
     }
-    @keyframes tvRowDown {
-      0%   { border-color: ${RED_TICK}; box-shadow: 0 0 0 1px ${RED_TICK}44 inset, 0 0 28px -6px ${RED_TICK}88; }
-      100% { border-color: ${GOLD}44;   box-shadow: none; }
+    @keyframes hgRowDown {
+      0%   { background: linear-gradient(90deg,#1a0404 0%,#1e0b0b 40%,${BG_ROW} 100%); border-left-color:${RED}; }
+      100% { background: linear-gradient(90deg,${BG_CARD} 0%,${BG_ROW} 100%);           border-left-color:${GOLD}55; }
+    }
+    @keyframes hgPulse {
+      0%,100% { opacity:1; }
+      50%     { opacity:0.4; }
+    }
+    @keyframes hgSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
   `;
   document.head.appendChild(s);
 }
 
-// ── SVG Icons ─────────────────────────────────────────────────────────────────
-function IconGoldBar() {
+// ── SVG icon helpers ─────────────────────────────────────────────────────────
+function IconBar() {
   return (
-    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none">
+    <svg viewBox="0 0 40 28" fill="none" width="100%" height="100%">
       <defs>
-        <linearGradient id="gb1" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#f9e97a" />
-          <stop offset="55%" stopColor="#d4af37" />
-          <stop offset="100%" stopColor="#7a5a10" />
+        <linearGradient id="bar-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={GOLD_LIGHT}/>
+          <stop offset="60%" stopColor={GOLD}/>
+          <stop offset="100%" stopColor="#7a5a10"/>
         </linearGradient>
       </defs>
-      <polygon points="7,32 13,16 41,16 35,32" fill="url(#gb1)" />
-      <polygon points="13,16 15,13 39,13 41,16" fill="#f9e97a" opacity="0.7" />
-      <line x1="20" y1="24" x2="28" y2="24" stroke="#7a5a10" strokeWidth="1" opacity="0.6" />
+      <polygon points="3,24 8,8 36,8 31,24" fill="url(#bar-g)"/>
+      <polygon points="8,8 10,5 34,5 36,8" fill={GOLD_LIGHT} opacity="0.6"/>
+      <line x1="14" y1="16" x2="26" y2="16" stroke="#7a5a10" strokeWidth="1" opacity="0.5"/>
+    </svg>
+  );
+}
+function IconGem() {
+  return (
+    <svg viewBox="0 0 40 36" fill="none" width="100%" height="100%">
+      <defs>
+        <linearGradient id="gem-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={GOLD_LIGHT}/>
+          <stop offset="100%" stopColor={GOLD}/>
+        </linearGradient>
+      </defs>
+      <polygon points="20,4 36,14 28,32 12,32 4,14" stroke="url(#gem-g)" strokeWidth="2" fill={`${GOLD}22`}/>
+      <polygon points="20,4 36,14 20,20" fill={`${GOLD}44`}/>
+      <polygon points="20,4 4,14 20,20"  fill={`${GOLD}33`}/>
+    </svg>
+  );
+}
+function IconRing() {
+  return (
+    <svg viewBox="0 0 40 40" fill="none" width="100%" height="100%">
+      <defs>
+        <linearGradient id="ring-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={GOLD_LIGHT}/>
+          <stop offset="100%" stopColor="#7a5a10"/>
+        </linearGradient>
+      </defs>
+      <circle cx="20" cy="24" r="12" stroke="url(#ring-g)" strokeWidth="4" fill="none"/>
+      <path d="M13 18 Q20 8 27 18" stroke="url(#ring-g)" strokeWidth="4" fill="none" strokeLinecap="round"/>
+      <circle cx="20" cy="33" r="2.5" fill={GOLD}/>
     </svg>
   );
 }
 
-function IconNecklace() {
-  return (
-    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none">
-      <defs>
-        <linearGradient id="nk1" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#f9e97a" />
-          <stop offset="100%" stopColor="#7a5a10" />
-        </linearGradient>
-      </defs>
-      <circle cx="24" cy="28" r="13" stroke="url(#nk1)" strokeWidth="4.5" fill="none" />
-      <path d="M16 20 Q24 10 32 20" stroke="url(#nk1)" strokeWidth="4.5" fill="none" strokeLinecap="round" />
-      <circle cx="24" cy="38" r="3" fill="#d4af37" />
-    </svg>
-  );
+function iconForItem(item: PriceItem): React.ReactNode {
+  if (item.formulaType === "spot_bar") return <IconBar />;
+  if (item.purityFactor >= 0.99) return <IconGem />;
+  return <IconRing />;
 }
 
-function IconGoldBricks() {
-  return (
-    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none">
-      <defs>
-        <linearGradient id="gi1" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f9e97a" />
-          <stop offset="100%" stopColor="#d4af37" />
-        </linearGradient>
-        <linearGradient id="gi2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#d4af37" />
-          <stop offset="100%" stopColor="#7a5a10" />
-        </linearGradient>
-      </defs>
-      <rect x="6" y="27" width="36" height="14" rx="2" fill="url(#gi2)" />
-      <rect x="10" y="17" width="28" height="13" rx="2" fill="url(#gi1)" />
-      <rect x="14" y="8" width="20" height="12" rx="2" fill="#f9e97a" />
-      <line x1="6" y1="34" x2="42" y2="34" stroke="#7a5a10" strokeWidth="0.75" opacity="0.5" />
-      <line x1="10" y1="23" x2="38" y2="23" stroke="#7a5a10" strokeWidth="0.75" opacity="0.5" />
-    </svg>
-  );
-}
+// ── Spot value card ───────────────────────────────────────────────────────────
+interface SpotCardProps { label: string; sub: string; value: number | null; color: string; icon: string; }
 
-// ── Gold Spot Panel ───────────────────────────────────────────────────────────
-// Four equal dark rounded boxes in a 2×2 grid:
-//   [BID oz]   [ASK oz]
-//   [Low ↓]    [High ↑]
-// All values come from the live livepriceofgold.com Socket.IO feed (1s cadence).
-interface GoldSpotPanelProps {
-  ask: number | null;
-  bid: number | null;
-  low: number | null;
-  high: number | null;
-}
-
-interface SpotBoxProps {
-  label: string;
-  icon: React.ReactNode;
-  value: number | null;
-  accentColor: string;
-  bg: string;
-}
-
-function SpotBox({ label, icon, value, accentColor, bg }: SpotBoxProps) {
+function SpotCard({ label, sub, value, color, icon }: SpotCardProps) {
   return (
     <div
       style={{
-        background: bg,
-        border: `1px solid ${accentColor}45`,
-        borderRadius: "clamp(0.6rem, 1.2vw, 1.25rem)",
-        padding: "clamp(0.55rem, 1.3vh, 1.1rem) clamp(0.7rem, 1.8vw, 1.6rem)",
-        boxShadow: `0 0 0 1px ${accentColor}12 inset, 0 6px 32px -10px #00000099`,
+        flex: 1,
+        background: `linear-gradient(145deg, #0e0e0e 0%, #0a0a0a 100%)`,
+        border: `1px solid ${color}33`,
+        borderTop: `2px solid ${color}`,
+        borderRadius: "clamp(0.5rem,1vw,1rem)",
+        padding: "clamp(0.6rem,1.4vh,1.2rem) clamp(0.8rem,1.8vw,1.6rem)",
+        boxShadow: `0 0 40px -15px ${color}55, 0 8px 32px -10px #000000bb`,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
+        gap: "clamp(0.25rem,0.6vh,0.5rem)",
+        minWidth: 0,
       }}
     >
-      {/* Label row */}
-      <div
-        className="flex items-center gap-2 font-bold uppercase tracking-widest"
-        style={{
-          color: accentColor,
-          fontSize: "clamp(0.6rem, calc(0.55vh + 0.6vw), 1.05rem)",
-          letterSpacing: "0.18em",
-          marginBottom: "clamp(0.3rem, 0.7vh, 0.6rem)",
-        }}
-      >
-        <span style={{ fontSize: "1.15em", lineHeight: 1 }}>{icon}</span>
-        {label}
+      {/* Label */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4em" }}>
+        <span style={{ fontSize: "clamp(0.9rem,1.6vh,1.5rem)", lineHeight: 1 }}>{icon}</span>
+        <span
+          style={{
+            color,
+            fontWeight: 900,
+            fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </span>
+        <span
+          style={{
+            color: `${color}88`,
+            fontSize: "clamp(0.5rem,calc(0.4vh + 0.4vw),0.75rem)",
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            marginLeft: "0.2em",
+          }}
+        >
+          {sub}
+        </span>
       </div>
 
       {/* Value */}
       <div
-        className="tabular-nums font-black"
+        className="tabular-nums"
         style={{
           color: "#ffffff",
-          fontSize: "clamp(1.5rem, calc(2.1vh + 2.1vw), 4.4rem)",
           fontFamily: "monospace",
+          fontWeight: 900,
+          fontSize: "clamp(1.4rem,calc(2vh + 2vw),4rem)",
           lineHeight: 1,
           letterSpacing: "-0.03em",
-          textShadow: `0 2px 24px #00000099, 0 0 40px ${accentColor}22`,
+          textShadow: `0 2px 20px #00000099`,
         }}
       >
-        {fmt(value)}
+        {fmt(value, 2)}
       </div>
 
-      {/* Bottom tint bar */}
-      <div
-        style={{
-          height: "2px",
-          borderRadius: "1px",
-          background: `linear-gradient(90deg, ${accentColor}55 0%, ${accentColor}00 100%)`,
-          marginTop: "clamp(0.3rem, 0.7vh, 0.6rem)",
-        }}
-      />
+      {/* Bottom accent bar */}
+      <div style={{ height: "2px", background: `linear-gradient(90deg,${color}66 0%,${color}00 100%)`, borderRadius: "1px" }} />
     </div>
   );
 }
 
-function GoldSpotPanel({ ask, bid, low, high }: GoldSpotPanelProps) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gridTemplateRows: "1fr 1fr",
-        gap: "clamp(0.4rem, 1.1vw, 1.1rem)",
-      }}
-    >
-      {/* Top-Left: BID oz — green */}
-      <SpotBox
-        label="BID oz"
-        icon="↑"
-        value={bid}
-        accentColor={BID_COLOR}
-        bg="linear-gradient(135deg, #051205 0%, #030b04 100%)"
-      />
-
-      {/* Top-Right: ASK oz — coral/red */}
-      <SpotBox
-        label="ASK oz"
-        icon="↓"
-        value={ask}
-        accentColor={ASK_COLOR}
-        bg="linear-gradient(135deg, #1a0808 0%, #0f0404 100%)"
-      />
-
-      {/* Bottom-Left: Low ↓ — red */}
-      <SpotBox
-        label="Low"
-        icon={<span style={{ color: ASK_COLOR }}>↓</span>}
-        value={low}
-        accentColor={ASK_COLOR}
-        bg="linear-gradient(135deg, #160606 0%, #0c0303 100%)"
-      />
-
-      {/* Bottom-Right: High ↑ — green */}
-      <SpotBox
-        label="High"
-        icon={<span style={{ color: BID_COLOR }}>↑</span>}
-        value={high}
-        accentColor={BID_COLOR}
-        bg="linear-gradient(135deg, #041204 0%, #020a02 100%)"
-      />
-    </div>
-  );
-}
-
-// ── Metals Table ──────────────────────────────────────────────────────────────
-interface MetalRowData {
-  icon: React.ReactNode;
-  name: string;
-  weight: string;
+// ── Price row ─────────────────────────────────────────────────────────────────
+interface RowProps {
+  item: PriceItem;
   price: number | null;
-  direction: Direction;
+  dir: Dir;
+  rowIndex: number;
 }
 
-function MetalRow({ icon, name, weight, price, direction }: MetalRowData) {
+function PriceRow({ item, price, dir, rowIndex }: RowProps) {
   useEffect(() => { ensureKeyframes(); }, []);
-  const isUp   = direction === "up";
-  const isDown = direction === "down";
+  const isUp   = dir === "up";
+  const isDown = dir === "down";
   const isTick = isUp || isDown;
 
+  const oddBg = rowIndex % 2 === 1
+    ? `linear-gradient(90deg,#0c0c0c 0%,${BG_ROW} 100%)`
+    : `linear-gradient(90deg,${BG_CARD} 0%,${BG_ROW} 100%)`;
+
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1fr auto auto",
+        gridTemplateColumns: "auto 1fr auto auto",
         alignItems: "center",
-        gap: "clamp(0.5rem, 1.5vw, 1.75rem)",
-        background: "linear-gradient(90deg, #161616 0%, #0e0e0e 100%)",
-        border: `1px solid ${GOLD}44`,
-        borderRadius: "clamp(0.5rem, 1vw, 1rem)",
-        padding: "clamp(0.45rem, 1.1vh, 1rem) clamp(0.75rem, 2vw, 1.75rem)",
+        gap: "clamp(0.5rem,1.2vw,1.4rem)",
+        background: oddBg,
+        borderLeft: `3px solid ${isTick ? (isUp ? GREEN : RED) : `${GOLD}55`}`,
+        borderBottom: `1px solid ${GOLD}18`,
+        padding: "clamp(0.5rem,1.1vh,1rem) clamp(0.8rem,2vw,2rem)",
         animation: isTick
-          ? `${isUp ? "tvRowUp" : "tvRowDown"} 1.8s ease-out forwards`
+          ? `${isUp ? "hgRowUp" : "hgRowDown"} 2s ease-out forwards`
           : undefined,
-        willChange: isTick ? "border-color, box-shadow" : undefined,
+        transition: "border-left-color 0.3s",
       }}
     >
-      {/* ── METALS column ── */}
+      {/* Icon */}
       <div
-        className="flex items-center min-w-0"
-        style={{ gap: "clamp(0.5rem, 1.3vw, 1.25rem)" }}
+        style={{
+          width: "clamp(1.8rem,calc(2.8vh + 1vw),3.2rem)",
+          height: "clamp(1.8rem,calc(2.8vh + 1vw),3.2rem)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: `${GOLD}12`,
+          border: `1px solid ${GOLD}33`,
+          borderRadius: "clamp(0.35rem,0.7vw,0.7rem)",
+          flexShrink: 0,
+          padding: "clamp(0.25rem,0.5vh,0.45rem)",
+        }}
       >
-        <div
-          className="shrink-0 flex items-center justify-center rounded-full"
-          style={{
-            width: "clamp(2rem, calc(3vh + 1.2vw), 3.5rem)",
-            height: "clamp(2rem, calc(3vh + 1.2vw), 3.5rem)",
-            padding: "clamp(0.3rem, 0.7vh, 0.6rem)",
-            background: "#1c1c1c",
-            border: `1px solid ${GOLD}44`,
-          }}
-        >
-          {icon}
-        </div>
-        <div
-          className="font-black uppercase tracking-wider text-white truncate"
-          style={{ fontSize: "clamp(0.9rem, calc(1vh + 0.9vw), 1.8rem)", letterSpacing: "0.04em" }}
-        >
-          {name}
-        </div>
+        {iconForItem(item)}
       </div>
 
-      {/* ── WEIGHT column ── */}
+      {/* Name */}
       <div
-        className="font-black uppercase tracking-widest shrink-0"
         style={{
-          color: GOLD,
-          fontSize: "clamp(0.8rem, calc(0.9vh + 0.8vw), 1.55rem)",
-          letterSpacing: "0.2em",
-          background: `${GOLD}14`,
-          border: `1px solid ${GOLD}44`,
-          borderRadius: "0.45rem",
-          padding: "clamp(0.2rem, 0.5vh, 0.45rem) clamp(0.6rem, 1.5vw, 1.2rem)",
+          fontWeight: 900,
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          color: "#f5f5f5",
+          fontSize: "clamp(0.85rem,calc(0.9vh + 0.9vw),1.75rem)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
           whiteSpace: "nowrap",
         }}
       >
-        {weight}
+        {item.name}
       </div>
 
-      {/* ── PRICE column ── */}
+      {/* Weight badge */}
       <div
-        className="flex items-center justify-end shrink-0"
-        style={{ gap: "0.35em" }}
+        style={{
+          fontWeight: 800,
+          textTransform: "uppercase",
+          letterSpacing: "0.18em",
+          color: GOLD,
+          fontSize: "clamp(0.7rem,calc(0.75vh + 0.7vw),1.3rem)",
+          background: `${GOLD}14`,
+          border: `1px solid ${GOLD}44`,
+          borderRadius: "0.4rem",
+          padding: "clamp(0.15rem,0.4vh,0.35rem) clamp(0.5rem,1.2vw,1rem)",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+        }}
+      >
+        {item.weightLabel}
+      </div>
+
+      {/* Price + tick arrow */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: "0.3em",
+          flexShrink: 0,
+          minWidth: "clamp(5rem,14vw,16rem)",
+        }}
       >
         {isTick && (
           <span
             style={{
-              color: isUp ? GREEN_TICK : RED_TICK,
-              fontSize: "clamp(1rem, calc(1.3vh + 1.1vw), 2.2rem)",
+              color: isUp ? GREEN : RED,
               fontWeight: 900,
+              fontSize: "clamp(0.9rem,calc(1.2vh + 1vw),2rem)",
               lineHeight: 1,
-              animation: `${isUp ? "tvTickUp" : "tvTickDown"} 1.8s ease-out forwards`,
-              willChange: "color",
+              animation: `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`,
               userSelect: "none",
             }}
           >
-            {isUp ? "↑" : "↓"}
+            {isUp ? "▲" : "▼"}
           </span>
         )}
-        <div
-          className="tabular-nums font-extrabold"
-          style={{
-            color: "#ffffff",
-            fontSize: "clamp(1.1rem, calc(1.5vh + 1.4vw), 2.8rem)",
-            fontFamily: "monospace",
-            lineHeight: 1,
-            letterSpacing: "-0.02em",
-            whiteSpace: "nowrap",
-            animation: isTick
-              ? `${isUp ? "tvTickUp" : "tvTickDown"} 1.8s ease-out forwards`
-              : undefined,
-            willChange: isTick ? "color, text-shadow" : undefined,
-          }}
-        >
-          {fmt(price)}{" "}
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.3em" }}>
+          <span
+            className="tabular-nums"
+            style={{
+              color: isTick ? (isUp ? GREEN : RED) : "#ffffff",
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(1rem,calc(1.4vh + 1.3vw),2.6rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              whiteSpace: "nowrap",
+              animation: isTick ? `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards` : undefined,
+            }}
+          >
+            {fmt(price)}
+          </span>
           <span
             style={{
-              fontSize: "0.42em",
-              fontFamily: "sans-serif",
-              fontWeight: 700,
               color: GOLD,
+              fontWeight: 700,
+              fontSize: "clamp(0.6rem,calc(0.6vh + 0.55vw),1.1rem)",
+              fontFamily: "sans-serif",
               opacity: 0.85,
             }}
           >
@@ -491,71 +415,45 @@ function MetalRow({ icon, name, weight, price, direction }: MetalRowData) {
   );
 }
 
-function MetalsTable({
-  rows,
-}: {
-  rows: MetalRowData[];
-}) {
+// ── Separator ornament ────────────────────────────────────────────────────────
+function GoldDivider() {
   return (
-    <div
-      className="flex flex-col w-full"
-      style={{ gap: 0 }}
-    >
-      {/* ── Header ── */}
+    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0 0.5rem" }}>
+      <div style={{ flex: 1, height: "1px", background: `linear-gradient(90deg,transparent,${GOLD}44,transparent)` }} />
+      <span style={{ color: GOLD, fontSize: "0.8rem", opacity: 0.6, userSelect: "none" }}>◆</span>
+      <div style={{ flex: 1, height: "1px", background: `linear-gradient(90deg,transparent,${GOLD}44,transparent)` }} />
+    </div>
+  );
+}
+
+// ── Live indicator dot ────────────────────────────────────────────────────────
+function LiveDot({ isLive, isStale }: { isLive: boolean; isStale: boolean }) {
+  const color = !isLive ? "#555" : isStale ? AMBER : GREEN;
+  const label = !isLive ? "OFFLINE" : isStale ? "CACHED" : "LIVE";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.45em" }}>
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr auto auto",
-          gap: "clamp(0.5rem, 1.5vw, 1.75rem)",
-          background: `linear-gradient(90deg, ${HEADER_BG} 0%, #2e1a06 100%)`,
-          border: `1px solid ${HEADER_BORDER}`,
-          borderRadius: "clamp(0.5rem, 1vw, 1rem) clamp(0.5rem, 1vw, 1rem) 0 0",
-          padding: "clamp(0.35rem, 0.9vh, 0.8rem) clamp(0.75rem, 2vw, 1.75rem)",
+          width: "clamp(0.45rem,0.9vw,0.75rem)",
+          height: "clamp(0.45rem,0.9vw,0.75rem)",
+          borderRadius: "50%",
+          background: color,
+          boxShadow: isLive && !isStale ? `0 0 8px 2px ${GREEN}88` : undefined,
+          animation: isLive && !isStale ? "hgPulse 2s ease-in-out infinite" : undefined,
+          flexShrink: 0,
+        }}
+      />
+      <span
+        style={{
+          color,
+          fontWeight: 800,
+          fontSize: "clamp(0.55rem,calc(0.5vh + 0.5vw),0.9rem)",
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
         }}
       >
-        <div
-          className="font-black uppercase tracking-widest"
-          style={{
-            color: GOLD,
-            fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
-            letterSpacing: "0.2em",
-          }}
-        >
-          METALS
-        </div>
-        <div
-          className="font-black uppercase tracking-widest text-right"
-          style={{
-            color: GOLD,
-            fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
-            letterSpacing: "0.2em",
-            whiteSpace: "nowrap",
-          }}
-        >
-          WEIGHT
-        </div>
-        <div
-          className="font-black uppercase tracking-widest text-right"
-          style={{
-            color: GOLD,
-            fontSize: "clamp(0.65rem, calc(0.6vh + 0.65vw), 1.15rem)",
-            letterSpacing: "0.2em",
-            whiteSpace: "nowrap",
-          }}
-        >
-          PRICE (AED)
-        </div>
-      </div>
-
-      {/* ── Rows ── */}
-      <div
-        className="flex flex-col"
-        style={{ gap: "clamp(0.2rem, 0.5vh, 0.45rem)", paddingTop: "clamp(0.2rem, 0.5vh, 0.45rem)" }}
-      >
-        {rows.map((row, i) => (
-          <MetalRow key={i} {...row} />
-        ))}
-      </div>
+        {label}
+      </span>
     </div>
   );
 }
@@ -564,7 +462,10 @@ function MetalsTable({
 export default function ShowroomBoard() {
   const now = useTicker();
   useWakeLock();
+  useEffect(() => { ensureKeyframes(); }, []);
+
   const { liveRates } = useLivePrice();
+
   const { data: publicSettings } = useGetPublicSettings({
     query: {
       queryKey: getGetPublicSettingsQueryKey(),
@@ -572,6 +473,7 @@ export default function ShowroomBoard() {
       refetchIntervalInBackground: true,
     },
   });
+
   const { data: priceItems } = useGetPublicPriceItems({
     query: {
       queryKey: getGetPublicPriceItemsQueryKey(),
@@ -579,150 +481,310 @@ export default function ShowroomBoard() {
       refetchIntervalInBackground: true,
     },
   });
-  const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
 
-  // Compute per-item prices from baseAedPerGram + each item's own formula.
-  // Items are sorted by displayOrder (server returns them pre-sorted).
-  // Only tvVisible items are shown.
+  const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
+  const shopName        = "HAZARI GOLD";
+
   const visibleItems = useMemo(
-    () => (priceItems ?? []).filter(item => item.tvVisible),
+    () => (priceItems ?? []).filter(i => i.tvVisible),
     [priceItems],
   );
 
   const priceMap = useMemo<Map<number, number | null>>(() => {
     const m = new Map<number, number | null>();
-    for (const item of visibleItems) {
-      m.set(item.id, computeItemPrice(item, liveRates.baseAedPerGram));
-    }
+    for (const item of visibleItems) m.set(item.id, computeItemPrice(item, liveRates.baseAedPerGram));
     return m;
   }, [visibleItems, liveRates.baseAedPerGram]);
 
-  const dirs = useItemDirections(priceMap);
-
-  const rows: MetalRowData[] = visibleItems.map(item => ({
-    icon: iconForItem(item),
-    name: item.name,
-    weight: item.weightLabel,
-    price: priceMap.get(item.id) ?? null,
-    direction: dirs.get(item.id) ?? "neutral",
-  }));
+  const dirs = useItemDirs(priceMap);
 
   return (
     <div
-      className="w-full min-h-screen lg:h-screen lg:overflow-hidden flex flex-col"
       style={{
-        background: `
-          linear-gradient(160deg, #0b0b0b 0%, #111111 100%),
-          repeating-linear-gradient(0deg,  ${GOLD}09 0px, ${GOLD}09 1px, transparent 1px, transparent 72px),
-          repeating-linear-gradient(90deg, ${GOLD}09 0px, ${GOLD}09 1px, transparent 1px, transparent 72px)
+        width: "100%",
+        minHeight: "100vh",
+        background: BG_DEEP,
+        backgroundImage: `
+          radial-gradient(ellipse 80% 40% at 50% 0%, ${GOLD}08 0%, transparent 70%),
+          repeating-linear-gradient(0deg,  ${GOLD}06 0px, ${GOLD}06 1px, transparent 1px, transparent 80px),
+          repeating-linear-gradient(90deg, ${GOLD}06 0px, ${GOLD}06 1px, transparent 1px, transparent 80px)
         `,
-        padding: "clamp(0.4rem, 1vh, 1.2rem) clamp(0.6rem, 2vw, 2.5rem)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}
     >
       <div
-        className="w-full mx-auto flex flex-col lg:h-full lg:min-h-0"
-        style={{ maxWidth: 1500, flex: 1 }}
+        style={{
+          maxWidth: 1600,
+          width: "100%",
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          padding: "clamp(0.6rem,1.5vh,1.4rem) clamp(0.8rem,2.5vw,2.5rem)",
+          gap: "clamp(0.4rem,1vh,0.9rem)",
+          boxSizing: "border-box",
+        }}
       >
 
-        {/* ── Header: logo + date/clock ── */}
+        {/* ── HEADER ───────────────────────────────────────────────────────── */}
         <div
-          className="flex items-center justify-between shrink-0"
           style={{
-            gap: "clamp(0.5rem, 1.5vw, 1.5rem)",
-            paddingBottom: "clamp(0.35rem, 0.9vh, 0.8rem)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+            paddingBottom: "clamp(0.4rem,0.9vh,0.8rem)",
+            borderBottom: `1px solid ${GOLD}28`,
+            flexShrink: 0,
           }}
         >
-          {/* Logo or shop name */}
-          {showroomLogoUrl ? (
-            <img
-              src={showroomLogoUrl}
-              alt="Showroom logo"
-              style={{
-                height: "clamp(2.5rem, 7vh, 64px)",
-                maxWidth: "min(50vw, 220px)",
-                objectFit: "contain",
-                filter: `drop-shadow(0 0 22px ${GOLD}66)`,
-              }}
-            />
-          ) : (
-            <div
-              className="font-black uppercase"
-              style={{
-                color: GOLD,
-                fontSize: "clamp(1rem, calc(1.2vh + 1.2vw), 2.2rem)",
-                letterSpacing: "0.14em",
-                textShadow: `0 0 30px ${GOLD}55`,
-                fontFamily: "serif",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Hazari Gold
-            </div>
-          )}
+          {/* Brand */}
+          <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.5rem,1.2vw,1.1rem)" }}>
+            {showroomLogoUrl ? (
+              <img
+                src={showroomLogoUrl}
+                alt="Logo"
+                style={{
+                  height: "clamp(2.4rem,7vh,5.5rem)",
+                  maxWidth: "min(45vw,220px)",
+                  objectFit: "contain",
+                  filter: `drop-shadow(0 0 20px ${GOLD}66)`,
+                }}
+              />
+            ) : (
+              <>
+                {/* Ornamental diamond */}
+                <div
+                  style={{
+                    width:  "clamp(2rem,5vh,4.5rem)",
+                    height: "clamp(2rem,5vh,4.5rem)",
+                    border: `2px solid ${GOLD}`,
+                    transform: "rotate(45deg)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    boxShadow: `0 0 24px ${GOLD}44, 0 0 60px ${GOLD}22`,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "55%", height: "55%",
+                      background: GOLD,
+                      transform: "rotate(0deg)",
+                    }}
+                  />
+                </div>
 
-          {/* Date + clock pill */}
-          <div
-            className="flex items-center rounded-full"
-            style={{
-              border: `1px solid ${GOLD}55`,
-              background: "#141414",
-              padding: "clamp(0.25rem, 0.6vh, 0.55rem) clamp(0.9rem, 2vw, 2rem)",
-              gap: "clamp(0.6rem, 1.5vw, 2rem)",
-            }}
-          >
-            <span
-              className="text-neutral-300 font-semibold"
-              style={{ fontSize: "clamp(0.6rem, calc(0.55vh + 0.5vw), 1rem)" }}
+                {/* Shop name */}
+                <div>
+                  <div
+                    style={{
+                      color: GOLD,
+                      fontWeight: 900,
+                      fontSize: "clamp(1.2rem,calc(1.8vh + 1.6vw),4rem)",
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      lineHeight: 1,
+                      textShadow: `0 0 40px ${GOLD}66, 0 2px 8px #00000099`,
+                    }}
+                  >
+                    {shopName}
+                  </div>
+                  <div
+                    style={{
+                      color: `${GOLD}88`,
+                      fontWeight: 600,
+                      fontSize: "clamp(0.5rem,calc(0.5vh + 0.5vw),0.9rem)",
+                      letterSpacing: "0.35em",
+                      textTransform: "uppercase",
+                      marginTop: "0.1em",
+                    }}
+                  >
+                    LIVE GOLD PRICE BOARD
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Clock + live indicator */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35em", flexShrink: 0 }}>
+            <LiveDot isLive={liveRates.isLive} isStale={liveRates.isStale} />
+            <div
+              style={{
+                color: "#cccccc",
+                fontWeight: 600,
+                fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)",
+                letterSpacing: "0.06em",
+              }}
             >
               {formatDate(now)}
-            </span>
-            <span
-              className="font-bold tabular-nums"
+            </div>
+            <div
+              className="tabular-nums"
               style={{
-                color: GOLD,
-                fontSize: "clamp(0.7rem, calc(0.65vh + 0.6vw), 1.2rem)",
+                color: GOLD_LIGHT,
                 fontFamily: "monospace",
+                fontWeight: 900,
+                fontSize: "clamp(1.1rem,calc(1.6vh + 1.4vw),3.2rem)",
+                letterSpacing: "0.04em",
+                lineHeight: 1,
+                textShadow: `0 0 30px ${GOLD}55`,
               }}
             >
               {formatClock(now)}
-            </span>
+            </div>
           </div>
         </div>
 
-        {/* ── Gold Spot Panel ── */}
-        <div className="shrink-0">
-          <GoldSpotPanel
-            ask={liveRates.askUsdPerOz}
-            bid={liveRates.bidUsdPerOz}
-            low={liveRates.dailyLowUsdPerOz}
-            high={liveRates.dailyHighUsdPerOz}
+        {/* ── SPOT PANEL (BID / ASK / LOW / HIGH) ─────────────────────────── */}
+        <div
+          style={{
+            display: "flex",
+            gap: "clamp(0.4rem,1vw,1rem)",
+            flexShrink: 0,
+          }}
+        >
+          <SpotCard
+            label="BID oz"
+            sub="USD"
+            value={liveRates.bidUsdPerOz}
+            color={GREEN}
+            icon="⬆"
+          />
+          <SpotCard
+            label="ASK oz"
+            sub="USD"
+            value={liveRates.askUsdPerOz}
+            color={RED}
+            icon="⬇"
+          />
+          <SpotCard
+            label="LOW"
+            sub="TODAY"
+            value={liveRates.dailyLowUsdPerOz}
+            color={AMBER}
+            icon="↙"
+          />
+          <SpotCard
+            label="HIGH"
+            sub="TODAY"
+            value={liveRates.dailyHighUsdPerOz}
+            color={CYAN}
+            icon="↗"
           />
         </div>
 
-        {/* ── Metals Table ── */}
-        <div
-          className="lg:flex-1 lg:min-h-0 flex flex-col justify-start"
-          style={{ marginTop: "clamp(0.4rem, 1vh, 1rem)" }}
-        >
-          <MetalsTable rows={rows} />
-        </div>
+        {/* ── DIVIDER ──────────────────────────────────────────────────────── */}
+        <GoldDivider />
 
-        {/* ── Live status footer ── */}
+        {/* ── TABLE HEADER ─────────────────────────────────────────────────── */}
         <div
-          className="text-center shrink-0"
           style={{
-            color: liveRates.isLive ? (liveRates.isStale ? "#886633" : "#555") : "#774",
-            fontSize: "clamp(0.5rem, calc(0.4vh + 0.35vw), 0.8rem)",
-            paddingTop: "clamp(0.2rem, 0.5vh, 0.5rem)",
-            letterSpacing: "0.05em",
+            display: "grid",
+            gridTemplateColumns: "auto 1fr auto auto",
+            gap: "clamp(0.5rem,1.2vw,1.4rem)",
+            padding: "clamp(0.3rem,0.7vh,0.6rem) clamp(0.8rem,2vw,2rem)",
+            background: `linear-gradient(90deg,#1a1000 0%,#130d00 50%,#0e0900 100%)`,
+            borderRadius: "clamp(0.4rem,0.8vw,0.8rem)",
+            border: `1px solid ${GOLD}44`,
+            flexShrink: 0,
           }}
         >
-          {liveRates.isLive
-            ? liveRates.isStale
-              ? `◎ Last Close Price · Market Closed${liveRates.updatedAt ? " · As of " + new Date(liveRates.updatedAt).toLocaleTimeString("en-AE") : ""}`
-              : `((●)) Live · Real-time Free Market Feed${liveRates.updatedAt ? " · " + new Date(liveRates.updatedAt).toLocaleTimeString("en-AE") : ""}`
-            : "Connecting to live feed…"}
+          <div style={{ width: "clamp(1.8rem,calc(2.8vh + 1vw),3.2rem)" }} />
+          <div style={{ color: GOLD, fontWeight: 800, fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)", letterSpacing: "0.25em", textTransform: "uppercase" }}>
+            METAL
+          </div>
+          <div style={{ color: GOLD, fontWeight: 800, fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)", letterSpacing: "0.25em", textTransform: "uppercase", textAlign: "right" }}>
+            WEIGHT
+          </div>
+          <div style={{ color: GOLD, fontWeight: 800, fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)", letterSpacing: "0.25em", textTransform: "uppercase", textAlign: "right", minWidth: "clamp(5rem,14vw,16rem)" }}>
+            PRICE (AED)
+          </div>
         </div>
+
+        {/* ── PRICE ROWS ───────────────────────────────────────────────────── */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            borderRadius: "clamp(0.4rem,0.8vw,0.8rem)",
+            border: `1px solid ${GOLD}22`,
+            background: BG_ROW,
+          }}
+        >
+          {visibleItems.length === 0 ? (
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: `${GOLD}55`,
+                fontSize: "clamp(1rem,2.5vw,2rem)",
+                fontWeight: 700,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+              }}
+            >
+              {liveRates.isLive ? "No items configured" : "Connecting to live feed…"}
+            </div>
+          ) : (
+            visibleItems.map((item, i) => (
+              <PriceRow
+                key={item.id}
+                item={item}
+                price={priceMap.get(item.id) ?? null}
+                dir={dirs.get(item.id) ?? "neutral"}
+                rowIndex={i}
+              />
+            ))
+          )}
+        </div>
+
+        {/* ── FOOTER ───────────────────────────────────────────────────────── */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexShrink: 0,
+            paddingTop: "clamp(0.2rem,0.5vh,0.4rem)",
+            borderTop: `1px solid ${GOLD}18`,
+          }}
+        >
+          <span
+            style={{
+              color: `${GOLD}55`,
+              fontSize: "clamp(0.5rem,calc(0.45vh + 0.45vw),0.8rem)",
+              fontWeight: 600,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+            }}
+          >
+            Prices in AED · Formula: (XAU/USD ÷ 31.1034768) × 3.6725 · Rates update every second
+          </span>
+          {liveRates.baseAedPerGram != null && (
+            <span
+              className="tabular-nums"
+              style={{
+                color: `${GOLD}88`,
+                fontSize: "clamp(0.5rem,calc(0.45vh + 0.45vw),0.8rem)",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                fontFamily: "monospace",
+              }}
+            >
+              BASE 24K: AED {fmt(liveRates.baseAedPerGram, 4)}/g
+            </span>
+          )}
+        </div>
+
       </div>
     </div>
   );

@@ -1,0 +1,28 @@
+Hey Agent, the user wants to completely redesign the Live TV Display Board (/tv or showroom-board.tsx) to match a premium dark UI similar to the attached screenshot, while integrating his specific 8 items with 100% accurate live calculations.
+
+Please implement the following changes immediately:
+
+1. **Premium Dark UI Theme Setup:**
+   - **Header:** Display the "Hazari Gold" logo/text, current live Date, and a ticking Time (updated every second).
+   - **Top Matrix Grid:** Create 4 distinct premium cards displaying:
+     * BID oz (Live USD Spot Bid converted to AED if preferred, or raw USD Spot Bid)
+     * ASK oz (Live USD Spot Ask)
+     * Today's LOW (Daily lowest spot)
+     * Today's HIGH (Daily highest spot)
+   - **Styling:** Use a sleek dark background (#121212 or textured black) with gold borders (#D4AF37) and crisp white/gold typography.
+
+2. **Dynamic 8-Item Live List (Per-Second Streaming):**
+   Render a clean vertical list for these exact 8 items, computing their total prices dynamically every second based on the active spot formula `rawAedPerGram = (SpotAsk / 31.1034768) * 3.6725`:
+   - **TT. BAR (0.995):** Price = rawAedPerGram * 116.638038 * 0.995 (Label: TTB / 10 Tola)
+   - **TT. BAR (0.9999):** Price = rawAedPerGram * 116.638038 * 0.9999 (Label: TTB / 10 Tola)
+   - **GOLD (0.9999):** Price = rawAedPerGram * 0.9999 (Label: 1 GM)
+   - **KG BAR (0.995):** Price = rawAedPerGram * 1000 * 0.995 (Label: 1 KG)
+   - **KG BAR (0.9999):** Price = rawAedPerGram * 1000 * 0.9999 (Label: 1 KG)
+   - **Gold Jewelry 22K:** Price = rawAedPerGram * 0.9200 (Label: 1 GM - Dubai Standard)
+   - **Gold Jewelry 21K:** Price = rawAedPerGram * 0.8750 (Label: 1 GM)
+   - **Gold Jewelry 18K:** Price = rawAedPerGram * 0.7500 (Label: 1 GM)
+
+3. **Admin Sync Isolation:**
+   Ensure the TV frontend subscribes directly to the active live data-stream (WebSocket/Interval state) so it ticks instantly. The visibility of these rows on the TV screen should still respect the "Show on TV Screen" active toggle states from the admin panel.
+
+Please rewrite the TV component layout now, verify no component crashes, and make it look visually stunning!
