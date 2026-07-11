@@ -50,7 +50,7 @@ interface AssetCardProps {
 function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChange, onSave, liveLocked, liveValue, tvVisibilityKey, tvVisible, onToggleTvVisible }: AssetCardProps) {
   const [saving, setSaving] = useState(false);
   const changed = value !== savedValue;
-  const handleSave = async () => { setSaving(true); await onSave(fieldKey, value); setSaving(false); };
+  const handleSave = async () => { setSaving(true); try { await onSave(fieldKey, value); } finally { setSaving(false); } };
   const displayValue = liveLocked && liveValue != null ? liveValue : value;
   return (
     <Card
@@ -355,12 +355,12 @@ export default function Prices() {
         description: `AED ${value}/g is far below realistic gold market rates. Please double-check before saving.`,
         variant: "destructive",
       });
-      return Promise.reject(new Error("Rate below realistic threshold"));
+      return;
     }
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
       updatePrices.mutate({ data: { [field]: value } as any }, {
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() }); toast({ title: "Rate updated" }); resolve(); },
-        onError: (err: any) => { toast({ title: "Failed", description: err.message, variant: "destructive" }); reject(err); },
+        onError: (err: any) => { toast({ title: "Failed to save rate", description: err.message, variant: "destructive" }); resolve(); },
       });
     });
   };
