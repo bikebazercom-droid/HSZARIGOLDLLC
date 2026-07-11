@@ -15,7 +15,7 @@ const RED_TICK   = "#ef4444";
 const HEADER_BG  = "#3b2409";   // dark brown/copper for table header
 const HEADER_BORDER = "#b97a30";
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
+// ── Clock — uses device's own locale + timezone automatically ─────────────────
 function useTicker() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -25,15 +25,60 @@ function useTicker() {
   return now;
 }
 
+// Pass `undefined` as locale so the browser uses the device's own locale/region.
 function formatDate(d: Date) {
-  return d.toLocaleDateString("en-AE", {
+  return d.toLocaleDateString(undefined, {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
   });
 }
 function formatClock(d: Date) {
-  return d.toLocaleTimeString("en-US", {
+  return d.toLocaleTimeString(undefined, {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
   });
+}
+
+// ── Screen Wake Lock — keeps the display on while /tv is open ─────────────────
+// Uses the HTML5 Screen Wake Lock API (supported in Chrome 84+, Edge 84+,
+// Safari 16.4+). Silently no-ops on unsupported browsers.
+// Re-acquires automatically when the page becomes visible again after being
+// hidden (tab switch, window minimise, etc.).
+function useWakeLock() {
+  const sentinelRef = useRef<WakeLockSentinel | null>(null);
+
+  useEffect(() => {
+    if (!("wakeLock" in navigator)) return; // API not supported — silent no-op
+
+    async function acquire() {
+      try {
+        // Release any existing sentinel before requesting a new one
+        if (sentinelRef.current) {
+          await sentinelRef.current.release().catch(() => {});
+          sentinelRef.current = null;
+        }
+        sentinelRef.current = await navigator.wakeLock.request("screen");
+      } catch {
+        // Request can fail if the document is hidden at the time — the
+        // visibilitychange listener below will retry when it becomes visible.
+      }
+    }
+
+    // Initial acquisition
+    acquire();
+
+    // Re-acquire whenever the tab becomes active again
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        acquire();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      sentinelRef.current?.release().catch(() => {});
+      sentinelRef.current = null;
+    };
+  }, []);
 }
 
 function fmt(n: number | null | undefined, decimals = 2) {
@@ -484,6 +529,7 @@ function MetalsTable({
 // ── ShowroomBoard ─────────────────────────────────────────────────────────────
 export default function ShowroomBoard() {
   const now = useTicker();
+  useWakeLock();
   const { liveRates } = useLivePrice();
   const { data: publicSettings } = useGetPublicSettings({
     query: {
