@@ -126,6 +126,33 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+
+            {/* Admin profile + sign-out inside the Settings group */}
+            <div className="pt-2 mt-1 border-t border-sidebar-border/40 space-y-1">
+              {user && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md">
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                    style={{ backgroundColor: "#c8a43a", color: "#1e3a5f" }}
+                  >
+                    {user.fullName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium truncate leading-tight">{user.fullName}</div>
+                    <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 mt-0.5">
+                      {user.role === "admin" ? "Admin" : "Staff"}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => { onNavigate?.(); logout(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer text-sm hover:bg-sidebar-accent text-[#DFB15B] hover:text-[#f0cc7a]"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -230,10 +257,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
             {user?.role === "admin"
               ? <AdminNav onNavigate={() => setDrawerOpen(false)} />
-              : <StaffNav onNavigate={() => setDrawerOpen(false)} />
+              : <>
+                  <StaffNav onNavigate={() => setDrawerOpen(false)} />
+                  <UserFooter onLogout={() => { setDrawerOpen(false); logout(); }} />
+                </>
             }
-
-            <UserFooter onLogout={() => { setDrawerOpen(false); logout(); }} />
           </aside>
         </div>
       )}
@@ -252,9 +280,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {user?.role === "admin" ? <AdminNav /> : <StaffNav />}
-
-        <UserFooter onLogout={logout} />
+        {user?.role === "admin"
+          ? <AdminNav />
+          : <>
+              <StaffNav />
+              <UserFooter onLogout={logout} />
+            </>
+        }
       </aside>
 
       {/* ── MAIN CONTENT ── */}
