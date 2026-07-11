@@ -1,0 +1,230 @@
+import { Router, type IRouter } from "express";
+import { db, priceItemsTable } from "@workspace/db";
+import { eq, asc } from "drizzle-orm";
+import { broadcast } from "../lib/socket.js";
+import { logger } from "../lib/logger.js";
+import type { InsertPriceItem } from "@workspace/db";
+
+const TROY = 31.1034768;
+
+// ── Default core items (seeded when the table is empty) ───────────────────────
+const CORE_DEFAULTS: InsertPriceItem[] = [
+  {
+    name: "TT. BAR 995",
+    displayOrder: 1,
+    formulaType: "spot_bar",
+    weightGrams: String(3.75 * TROY),
+    weightLabel: "TTB",
+    purityFactor: "0.9950000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "TT. BAR 9999",
+    displayOrder: 2,
+    formulaType: "spot_bar",
+    weightGrams: String(3.75 * TROY),
+    weightLabel: "TTB",
+    purityFactor: "0.9999000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "GOLD 9999",
+    displayOrder: 3,
+    formulaType: "spot_per_gram",
+    weightGrams: null,
+    weightLabel: "1GM",
+    purityFactor: "0.9999000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "KG BAR 995",
+    displayOrder: 4,
+    formulaType: "spot_bar",
+    weightGrams: "1000",
+    weightLabel: "1KG",
+    purityFactor: "0.9950000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "KG BAR 9999",
+    displayOrder: 5,
+    formulaType: "spot_bar",
+    weightGrams: "1000",
+    weightLabel: "1KG",
+    purityFactor: "0.9999000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "JEWELLERY 22K",
+    displayOrder: 6,
+    formulaType: "spot_per_gram",
+    weightGrams: null,
+    weightLabel: "1GM",
+    purityFactor: "0.9200000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "JEWELLERY 21K",
+    displayOrder: 7,
+    formulaType: "spot_per_gram",
+    weightGrams: null,
+    weightLabel: "1GM",
+    purityFactor: "0.8750000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+  {
+    name: "JEWELLERY 18K",
+    displayOrder: 8,
+    formulaType: "spot_per_gram",
+    weightGrams: null,
+    weightLabel: "1GM",
+    purityFactor: "0.7500000",
+    premiumOffsetAed: "0",
+    tvVisible: true,
+    isCore: true,
+  },
+];
+
+async function seedIfEmpty(): Promise<void> {
+  try {
+    const existing = await db.select({ id: priceItemsTable.id }).from(priceItemsTable).limit(1);
+    if (existing.length === 0) {
+      await db.insert(priceItemsTable).values(CORE_DEFAULTS);
+      logger.info("[price-items] Seeded default core items");
+    }
+  } catch (err) {
+    logger.warn({ err }, "[price-items] Seed failed");
+  }
+}
+
+seedIfEmpty();
+
+// ── Serialisation helper ──────────────────────────────────────────────────────
+function toJson(row: typeof priceItemsTable.$inferSelect) {
+  return {
+    id:               row.id,
+    name:             row.name,
+    displayOrder:     row.displayOrder,
+    formulaType:      row.formulaType,
+    weightGrams:      row.weightGrams != null ? Number(row.weightGrams) : null,
+    weightLabel:      row.weightLabel,
+    purityFactor:     Number(row.purityFactor),
+    premiumOffsetAed: Number(row.premiumOffsetAed),
+    manualRateAed:    row.manualRateAed != null ? Number(row.manualRateAed) : null,
+    tvVisible:        row.tvVisible,
+    isCore:           row.isCore,
+    createdAt:        row.createdAt.toISOString(),
+    updatedAt:        row.updatedAt.toISOString(),
+  };
+}
+
+// ── Public router (no auth) ───────────────────────────────────────────────────
+export const publicPriceItemsRouter: IRouter = Router();
+
+publicPriceItemsRouter.get("/prices/items/public", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(priceItemsTable)
+    .orderBy(asc(priceItemsTable.displayOrder), asc(priceItemsTable.id));
+  res.json(rows.map(toJson));
+});
+
+// ── Admin router (mounted after requireAuth) ──────────────────────────────────
+const router: IRouter = Router();
+
+router.get("/prices/items", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(priceItemsTable)
+    .orderBy(asc(priceItemsTable.displayOrder), asc(priceItemsTable.id));
+  res.json(rows.map(toJson));
+});
+
+router.post("/prices/items", async (req, res): Promise<void> => {
+  const body = req.body as Record<string, unknown>;
+  const [row] = await db
+    .insert(priceItemsTable)
+    .values({
+      name:             String(body.name ?? ""),
+      displayOrder:     Number(body.displayOrder ?? 99),
+      formulaType:      String(body.formulaType ?? "spot_per_gram"),
+      weightGrams:      body.weightGrams != null ? String(body.weightGrams) : null,
+      weightLabel:      String(body.weightLabel ?? "1GM"),
+      purityFactor:     String(body.purityFactor ?? "1.0"),
+      premiumOffsetAed: String(body.premiumOffsetAed ?? "0"),
+      manualRateAed:    body.manualRateAed != null ? String(body.manualRateAed) : null,
+      tvVisible:        typeof body.tvVisible === "boolean" ? body.tvVisible : true,
+      isCore:           false,
+    })
+    .returning();
+  broadcast("PRICE_MUTATION");
+  res.status(201).json(toJson(row));
+});
+
+router.put("/prices/items/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const body = req.body as Record<string, unknown>;
+
+  const [existing] = await db.select().from(priceItemsTable).where(eq(priceItemsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Price item not found" });
+    return;
+  }
+
+  const updates: Partial<InsertPriceItem> & { updatedAt: Date } = {
+    updatedAt: new Date(),
+  };
+
+  if (body.name       != null) updates.name        = String(body.name);
+  if (body.displayOrder != null) updates.displayOrder = Number(body.displayOrder);
+  if (body.formulaType  != null) updates.formulaType  = String(body.formulaType);
+  if ("weightGrams" in body) updates.weightGrams   = body.weightGrams != null ? String(body.weightGrams) : null;
+  if (body.weightLabel  != null) updates.weightLabel  = String(body.weightLabel);
+  if (body.purityFactor != null) updates.purityFactor = String(body.purityFactor);
+  if (body.premiumOffsetAed != null) updates.premiumOffsetAed = String(body.premiumOffsetAed);
+  if ("manualRateAed" in body) updates.manualRateAed = body.manualRateAed != null ? String(body.manualRateAed) : null;
+  if (typeof body.tvVisible === "boolean") updates.tvVisible = body.tvVisible;
+
+  const [updated] = await db
+    .update(priceItemsTable)
+    .set(updates)
+    .where(eq(priceItemsTable.id, id))
+    .returning();
+
+  broadcast("PRICE_MUTATION");
+  res.json(toJson(updated));
+});
+
+router.delete("/prices/items/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+
+  const [existing] = await db.select().from(priceItemsTable).where(eq(priceItemsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Price item not found" });
+    return;
+  }
+  if (existing.isCore) {
+    res.status(400).json({ error: "Core items cannot be deleted" });
+    return;
+  }
+
+  await db.delete(priceItemsTable).where(eq(priceItemsTable.id, id));
+  broadcast("PRICE_MUTATION");
+  res.status(204).send();
+});
+
+export default router;

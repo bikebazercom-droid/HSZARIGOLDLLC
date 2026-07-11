@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLivePrice } from "@/context/live-price";
 import {
   useGetPublicSettings,
   getGetPublicSettingsQueryKey,
-  useGetPublicPrices,
-  getGetPublicPricesQueryKey,
+  useGetPublicPriceItems,
+  getGetPublicPriceItemsQueryKey,
+  PriceItem,
 } from "@workspace/api-client-react";
 
 const GOLD       = "#d4af37";
@@ -89,32 +90,65 @@ function fmt(n: number | null | undefined, decimals = 2) {
   });
 }
 
-// ── Direction tracking (for row flash animations) ─────────────────────────────
+// ── Price item formula engine (mirrors server-side logic) ─────────────────────
+// formulaType "spot_bar"      → baseAedPerGram × weightGrams × purityFactor + offset
+// formulaType "spot_per_gram" → baseAedPerGram × purityFactor + offset
+// formulaType "manual"        → manualRateAed + offset
+const round2tv = (n: number) => Math.round(n * 100) / 100;
+
+function computeItemPrice(item: PriceItem, baseAedPerGram: number | null): number | null {
+  if (item.formulaType === "manual") {
+    if (item.manualRateAed == null) return null;
+    return round2tv(item.manualRateAed + item.premiumOffsetAed);
+  }
+  if (baseAedPerGram == null) return null;
+  if (item.formulaType === "spot_bar") {
+    return round2tv(baseAedPerGram * (item.weightGrams ?? 0) * item.purityFactor + item.premiumOffsetAed);
+  }
+  // spot_per_gram
+  return round2tv(baseAedPerGram * item.purityFactor + item.premiumOffsetAed);
+}
+
+// ── Icon selection per item ────────────────────────────────────────────────────
+// spot_bar → gold bar; spot_per_gram high purity → gold bricks; else → necklace
+function iconForItem(item: PriceItem): React.ReactNode {
+  if (item.formulaType === "spot_bar") return <IconGoldBar />;
+  if (item.purityFactor >= 0.99) return <IconGoldBricks />;
+  return <IconNecklace />;
+}
+
+// ── Direction tracking (for row flash animations) — keyed by item ID ──────────
 type Direction = "up" | "down" | "neutral";
 
-function useDirections(values: (number | null)[]) {
-  const prevRef = useRef<(number | null)[]>(values.map(() => null));
-  const [dirs, setDirs] = useState<Direction[]>(values.map(() => "neutral"));
+function useItemDirections(priceMap: Map<number, number | null>) {
+  const prevRef = useRef<Map<number, number | null>>(new Map());
+  const [dirs, setDirs] = useState<Map<number, Direction>>(new Map());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const prev = prevRef.current;
-    const next: Direction[] = values.map((v, i) => {
-      const p = prev[i];
-      if (v == null || p == null) return "neutral";
-      if (v > p) return "up";
-      if (v < p) return "down";
-      return "neutral";
-    });
-    const changed = next.some((d, i) => d !== "neutral" && d !== dirs[i]);
+    const next = new Map<number, Direction>();
+    let changed = false;
+    for (const [id, price] of priceMap) {
+      const p = prev.get(id) ?? null;
+      let dir: Direction = "neutral";
+      if (price != null && p != null) {
+        if (price > p) dir = "up";
+        else if (price < p) dir = "down";
+      }
+      next.set(id, dir);
+      if (dir !== "neutral" && dir !== (dirs.get(id) ?? "neutral")) changed = true;
+    }
     if (changed) {
       setDirs(next);
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setDirs(values.map(() => "neutral")), 1800);
+      timerRef.current = setTimeout(() => {
+        setDirs(new Map([...priceMap.keys()].map(id => [id, "neutral" as Direction])));
+      }, 1800);
     }
-    prevRef.current = [...values];
+    prevRef.current = new Map(priceMap);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values]);
+  }, [priceMap]);
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   return dirs;
@@ -538,96 +572,40 @@ export default function ShowroomBoard() {
       refetchIntervalInBackground: true,
     },
   });
-  const { data: publicPrices } = useGetPublicPrices({
+  const { data: priceItems } = useGetPublicPriceItems({
     query: {
-      queryKey: getGetPublicPricesQueryKey(),
-      refetchInterval: 5_000,
+      queryKey: getGetPublicPriceItemsQueryKey(),
+      refetchInterval: 30_000,
       refetchIntervalInBackground: true,
     },
   });
   const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
 
-  // Stable 8-value array for direction tracking — order matches rows below.
-  // TV board uses raw market rates (no spread, no labor markup) so the
-  // displayed prices mirror the international spot exactly.
-  const priceValues: (number | null)[] = [
-    liveRates.rawTtBar995Total,   // 0
-    liveRates.rawTtBar9999Total,  // 1
-    liveRates.rawGold9999Rate,    // 2
-    liveRates.rawKgBar995Total,   // 3
-    liveRates.rawGoldKg9999Total, // 4
-    liveRates.rawGold22kRate,     // 5
-    liveRates.rawGold21kRate,     // 6
-    liveRates.rawGold18kRate,     // 7
-  ];
-  const dirs = useDirections(priceValues);
+  // Compute per-item prices from baseAedPerGram + each item's own formula.
+  // Items are sorted by displayOrder (server returns them pre-sorted).
+  // Only tvVisible items are shown.
+  const visibleItems = useMemo(
+    () => (priceItems ?? []).filter(item => item.tvVisible),
+    [priceItems],
+  );
 
-  const rows: MetalRowData[] = [
-    {
-      icon: <IconGoldBar />,
-      name: "TT. BAR 995",
-      weight: "TTB",
-      price: liveRates.rawTtBar995Total,
-      direction: dirs[0],
-      visible: publicPrices?.tvShowTtBar995 ?? true,
-    },
-    {
-      icon: <IconGoldBar />,
-      name: "TT. BAR 9999",
-      weight: "TTB",
-      price: liveRates.rawTtBar9999Total,
-      direction: dirs[1],
-      visible: publicPrices?.tvShowTtBar999 ?? true,
-    },
-    {
-      icon: <IconGoldBricks />,
-      name: "GOLD 9999",
-      weight: "1GM",
-      price: liveRates.rawGold9999Rate,
-      direction: dirs[2],
-      visible: publicPrices?.tvShowGold9999 ?? true,
-    },
-    {
-      icon: <IconGoldBar />,
-      name: "KG BAR 995",
-      weight: "1KG",
-      price: liveRates.rawKgBar995Total,
-      direction: dirs[3],
-      visible: publicPrices?.tvShowKgBar995 ?? true,
-    },
-    {
-      icon: <IconGoldBricks />,
-      name: "KG BAR 9999",
-      weight: "1KG",
-      price: liveRates.rawGoldKg9999Total,
-      direction: dirs[4],
-      visible: publicPrices?.tvShowGoldKg9999 ?? true,
-    },
-    {
-      icon: <IconNecklace />,
-      name: "JEWELLERY 22K",
-      weight: "1GM",
-      price: liveRates.rawGold22kRate,
-      direction: dirs[5],
-      visible: publicPrices?.tvShowGold22k ?? true,
-    },
-    {
-      icon: <IconNecklace />,
-      name: "JEWELLERY 21K",
-      weight: "1GM",
-      price: liveRates.rawGold21kRate,
-      direction: dirs[6],
-      visible: publicPrices?.tvShowGold21k ?? true,
-    },
-    {
-      icon: <IconNecklace />,
-      name: "JEWELLERY 18K",
-      weight: "1GM",
-      price: liveRates.rawGold18kRate,
-      direction: dirs[7],
-      visible: publicPrices?.tvShowGold18k ?? true,
-    },
-  ].filter(r => (r as any).visible) as MetalRowData[];
+  const priceMap = useMemo<Map<number, number | null>>(() => {
+    const m = new Map<number, number | null>();
+    for (const item of visibleItems) {
+      m.set(item.id, computeItemPrice(item, liveRates.baseAedPerGram));
+    }
+    return m;
+  }, [visibleItems, liveRates.baseAedPerGram]);
+
+  const dirs = useItemDirections(priceMap);
+
+  const rows: MetalRowData[] = visibleItems.map(item => ({
+    icon: iconForItem(item),
+    name: item.name,
+    weight: item.weightLabel,
+    price: priceMap.get(item.id) ?? null,
+    direction: dirs.get(item.id) ?? "neutral",
+  }));
 
   return (
     <div

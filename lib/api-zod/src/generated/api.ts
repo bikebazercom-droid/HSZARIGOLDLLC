@@ -377,6 +377,126 @@ export const GetPublicPricesResponse = zod.object({
 
 
 /**
+ * @summary Get all TV-board price items with their formula parameters (public, no authentication required).
+ */
+export const GetPublicPriceItemsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "displayOrder": zod.number(),
+  "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
+  "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
+  "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
+  "manualRateAed": zod.number().nullish().describe('Fixed AED rate used when formulaType = manual.'),
+  "tvVisible": zod.boolean().describe('Whether this item is shown on the showroom TV board.'),
+  "isCore": zod.boolean().describe('Core system items cannot be deleted.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const GetPublicPriceItemsResponse = zod.array(GetPublicPriceItemsResponseItem)
+
+
+/**
+ * @summary List all price items (admin)
+ */
+export const ListPriceItemsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "displayOrder": zod.number(),
+  "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
+  "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
+  "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
+  "manualRateAed": zod.number().nullish().describe('Fixed AED rate used when formulaType = manual.'),
+  "tvVisible": zod.boolean().describe('Whether this item is shown on the showroom TV board.'),
+  "isCore": zod.boolean().describe('Core system items cannot be deleted.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPriceItemsResponse = zod.array(ListPriceItemsResponseItem)
+
+
+/**
+ * @summary Create a new price item
+ */
+export const CreatePriceItemBody = zod.object({
+  "name": zod.string(),
+  "displayOrder": zod.number().optional(),
+  "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']),
+  "weightGrams": zod.number().nullish(),
+  "weightLabel": zod.string(),
+  "purityFactor": zod.number(),
+  "premiumOffsetAed": zod.number().optional(),
+  "manualRateAed": zod.number().nullish(),
+  "tvVisible": zod.boolean().optional()
+})
+
+export const CreatePriceItemResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "displayOrder": zod.number(),
+  "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
+  "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
+  "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
+  "manualRateAed": zod.number().nullish().describe('Fixed AED rate used when formulaType = manual.'),
+  "tvVisible": zod.boolean().describe('Whether this item is shown on the showroom TV board.'),
+  "isCore": zod.boolean().describe('Core system items cannot be deleted.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a price item
+ */
+export const UpdatePriceItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePriceItemBody = zod.object({
+  "name": zod.string(),
+  "displayOrder": zod.number().optional(),
+  "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']),
+  "weightGrams": zod.number().nullish(),
+  "weightLabel": zod.string(),
+  "purityFactor": zod.number(),
+  "premiumOffsetAed": zod.number().optional(),
+  "manualRateAed": zod.number().nullish(),
+  "tvVisible": zod.boolean().optional()
+})
+
+export const UpdatePriceItemResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "displayOrder": zod.number(),
+  "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
+  "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
+  "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
+  "manualRateAed": zod.number().nullish().describe('Fixed AED rate used when formulaType = manual.'),
+  "tvVisible": zod.boolean().describe('Whether this item is shown on the showroom TV board.'),
+  "isCore": zod.boolean().describe('Core system items cannot be deleted.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a non-core price item
+ */
+export const DeletePriceItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePriceItemResponse = zod.void()
+
+
+/**
  * @summary List all customers
  */
 export const ListCustomersQueryParams = zod.object({

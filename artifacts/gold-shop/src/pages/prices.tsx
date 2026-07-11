@@ -4,6 +4,13 @@ import {
   useGetPrices,
   getGetPricesQueryKey,
   useUpdatePrices,
+  useListPriceItems,
+  getListPriceItemsQueryKey,
+  useCreatePriceItem,
+  useUpdatePriceItem,
+  useDeletePriceItem,
+  PriceItem,
+  PriceItemInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -439,6 +446,81 @@ export default function Prices() {
     toast({ title: `"${name}" removed` });
   };
 
+  /* ── TV Board Items ─────────────────────────────────────────────────────── */
+  const { data: priceItemsList } = useListPriceItems({
+    query: { queryKey: getListPriceItemsQueryKey(), refetchInterval: 10_000 },
+  });
+  const createItemMutation = useCreatePriceItem();
+  const updateItemMutation = useUpdatePriceItem();
+  const deleteItemMutation = useDeletePriceItem();
+  const [itemDialogOpen, setItemDialogOpen] = useState(false);
+  const [editingPriceItem, setEditingPriceItem] = useState<PriceItem | null>(null);
+  type ItemForm = {
+    name: string; formulaType: PriceItemInput["formulaType"]; purityFactor: number;
+    weightGrams: number; weightLabel: string; premiumOffsetAed: number;
+    manualRateAed: number; tvVisible: boolean;
+  };
+  const defaultItemForm: ItemForm = {
+    name: "", formulaType: "spot_per_gram", purityFactor: 0.9999,
+    weightGrams: 1, weightLabel: "1GM", premiumOffsetAed: 0, manualRateAed: 0, tvVisible: true,
+  };
+  const [itemForm, setItemForm] = useState<ItemForm>(defaultItemForm);
+
+  const openItemDialog = (item: PriceItem | null) => {
+    setEditingPriceItem(item);
+    setItemForm(item ? {
+      name: item.name, formulaType: item.formulaType as ItemForm["formulaType"],
+      purityFactor: item.purityFactor, weightGrams: item.weightGrams ?? 1,
+      weightLabel: item.weightLabel, premiumOffsetAed: item.premiumOffsetAed,
+      manualRateAed: item.manualRateAed ?? 0, tvVisible: item.tvVisible,
+    } : defaultItemForm);
+    setItemDialogOpen(true);
+  };
+
+  const handleSaveItemDialog = () => {
+    if (!itemForm.name.trim()) return;
+    const payload: PriceItemInput = {
+      name: itemForm.name.trim(), formulaType: itemForm.formulaType,
+      purityFactor: itemForm.purityFactor, weightGrams: itemForm.weightGrams,
+      weightLabel: itemForm.weightLabel, premiumOffsetAed: itemForm.premiumOffsetAed,
+      manualRateAed: itemForm.formulaType === "manual" ? itemForm.manualRateAed : undefined,
+      tvVisible: itemForm.tvVisible,
+    };
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: getListPriceItemsQueryKey() });
+    if (editingPriceItem) {
+      updateItemMutation.mutate({ id: editingPriceItem.id, data: payload }, {
+        onSuccess: () => { invalidate(); toast({ title: `"${payload.name}" updated` }); setItemDialogOpen(false); },
+        onError: (e: any) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
+      });
+    } else {
+      createItemMutation.mutate({ data: payload }, {
+        onSuccess: () => { invalidate(); toast({ title: `"${payload.name}" added to TV Board` }); setItemDialogOpen(false); },
+        onError: (e: any) => toast({ title: "Create failed", description: e.message, variant: "destructive" }),
+      });
+    }
+  };
+
+  const handleToggleItemVisible = (item: PriceItem) => {
+    const payload = {
+      name: item.name, formulaType: item.formulaType as PriceItemInput["formulaType"],
+      purityFactor: item.purityFactor, weightGrams: item.weightGrams,
+      weightLabel: item.weightLabel, premiumOffsetAed: item.premiumOffsetAed,
+      manualRateAed: item.manualRateAed ?? undefined,
+      tvVisible: !item.tvVisible,
+    };
+    updateItemMutation.mutate({ id: item.id, data: payload }, {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListPriceItemsQueryKey() }),
+      onError: (e: any) => toast({ title: "Toggle failed", description: e.message, variant: "destructive" }),
+    });
+  };
+
+  const handleDeletePriceItem = (item: PriceItem) => {
+    deleteItemMutation.mutate({ id: item.id }, {
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPriceItemsQueryKey() }); toast({ title: `"${item.name}" removed` }); },
+      onError: (e: any) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+    });
+  };
+
   if (isLoading || !prices) {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
@@ -567,6 +649,240 @@ export default function Prices() {
         {/* Always-visible add button */}
         <AddItemCard onClick={openDialog} />
       </div>
+
+      {/* ── TV Board Items Section ────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <span>📺</span> TV Board Items
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Configure which items appear on the showroom display board and their pricing formula
+            </p>
+          </div>
+          <Button onClick={() => openItemDialog(null)}
+            className="flex items-center gap-2" style={{ background: NAVY }}>
+            <Plus className="w-4 h-4" /> Add Custom Item
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(priceItemsList ?? []).map(item => {
+            const formulaLabel =
+              item.formulaType === "spot_bar"
+                ? `Spot × ${item.weightGrams}g × ${(item.purityFactor * 100).toFixed(2)}%`
+                : item.formulaType === "spot_per_gram"
+                ? `Spot × ${(item.purityFactor * 100).toFixed(2)}%`
+                : "Manual rate";
+            return (
+              <Card key={item.id} className="relative overflow-hidden">
+                <div
+                  style={{
+                    position: "absolute", top: 0, left: 0, right: 0, height: "3px",
+                    background: item.tvVisible ? "#10b981" : "#9ca3af",
+                  }}
+                />
+                <CardHeader className="pb-2 pt-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm font-bold leading-tight truncate">{item.name}</CardTitle>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span
+                          className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
+                          style={{ background: `${NAVY}15`, color: NAVY, border: `1px solid ${NAVY}30` }}
+                        >
+                          {item.weightLabel}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{formulaLabel}</span>
+                        {item.premiumOffsetAed !== 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {item.premiumOffsetAed > 0 ? `+${item.premiumOffsetAed}` : item.premiumOffsetAed} AED
+                          </span>
+                        )}
+                        {item.isCore && (
+                          <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                            Core
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => openItemDialog(item)}
+                        className="text-muted-foreground hover:text-primary transition-colors p-1"
+                        title="Edit formula"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"/>
+                        </svg>
+                      </button>
+                      {!item.isCore && (
+                        <button
+                          onClick={() => handleDeletePriceItem(item)}
+                          className="text-muted-foreground hover:text-red-500 transition-colors p-1"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div
+                    className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+                    style={{
+                      background: item.tvVisible ? "#f0fdf4" : "#fafafa",
+                      border: `1px solid ${item.tvVisible ? "#10b98144" : "#e5e7eb"}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs" aria-hidden>📺</span>
+                      <div className="text-xs font-semibold text-foreground">
+                        {item.tvVisible ? "Visible on board" : "Hidden from board"}
+                      </div>
+                    </div>
+                    <Switch
+                      checked={item.tvVisible}
+                      onCheckedChange={() => handleToggleItemVisible(item)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── TV Board Item edit/create dialog ─────────────────────── */}
+      <Dialog open={itemDialogOpen} onOpenChange={open => setItemDialogOpen(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {editingPriceItem ? "Edit TV Board Item" : "Add Custom TV Board Item"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div>
+              <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Name</div>
+              <Input
+                placeholder="e.g. GOLD 22K BANGLE"
+                value={itemForm.name}
+                onChange={e => setItemForm(f => ({ ...f, name: e.target.value }))}
+                disabled={!!editingPriceItem?.isCore}
+              />
+            </div>
+
+            <div>
+              <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Weight Label</div>
+              <Input
+                placeholder="e.g. 1GM, TTB, 1KG"
+                value={itemForm.weightLabel}
+                onChange={e => setItemForm(f => ({ ...f, weightLabel: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Formula Type</div>
+              <select
+                value={itemForm.formulaType}
+                onChange={e => setItemForm(f => ({ ...f, formulaType: e.target.value as ItemForm["formulaType"] }))}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={!!editingPriceItem?.isCore}
+              >
+                <option value="spot_per_gram">Spot × Purity per gram</option>
+                <option value="spot_bar">Spot × Weight × Purity (bar total)</option>
+                <option value="manual">Manual fixed rate</option>
+              </select>
+            </div>
+
+            {itemForm.formulaType !== "manual" && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">
+                  Purity Factor (e.g. 0.9999 = 24K, 0.9200 = 22K)
+                </div>
+                <Input
+                  type="number" step="0.0001" min="0" max="1"
+                  value={itemForm.purityFactor}
+                  onChange={e => setItemForm(f => ({ ...f, purityFactor: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+            )}
+
+            {itemForm.formulaType === "spot_bar" && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">
+                  Weight in Grams
+                </div>
+                <Input
+                  type="number" step="0.001" min="0"
+                  value={itemForm.weightGrams}
+                  onChange={e => setItemForm(f => ({ ...f, weightGrams: parseFloat(e.target.value) || 0 }))}
+                  disabled={!!editingPriceItem?.isCore}
+                />
+              </div>
+            )}
+
+            {itemForm.formulaType === "manual" && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">
+                  Fixed Rate (AED)
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm select-none">AED</span>
+                  <Input
+                    type="number" step="0.01" min="0"
+                    value={itemForm.manualRateAed || ""}
+                    onChange={e => setItemForm(f => ({ ...f, manualRateAed: parseFloat(e.target.value) || 0 }))}
+                    className="pl-14"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">
+                Premium / Discount Offset (AED)
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm select-none">AED</span>
+                <Input
+                  type="number" step="0.01"
+                  value={itemForm.premiumOffsetAed}
+                  onChange={e => setItemForm(f => ({ ...f, premiumOffsetAed: parseFloat(e.target.value) || 0 }))}
+                  className="pl-14"
+                />
+              </div>
+            </div>
+
+            <div
+              className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+              style={{
+                background: itemForm.tvVisible ? "#f0fdf4" : "#fafafa",
+                border: `1px solid ${itemForm.tvVisible ? "#10b98144" : "#e5e7eb"}`,
+              }}
+            >
+              <div className="text-sm font-semibold">Show on TV Board</div>
+              <Switch
+                checked={itemForm.tvVisible}
+                onCheckedChange={v => setItemForm(f => ({ ...f, tvVisible: v }))}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                className="flex-1" style={{ background: NAVY }}
+                onClick={handleSaveItemDialog}
+                disabled={!itemForm.name.trim() || createItemMutation.isPending || updateItemMutation.isPending}
+              >
+                {createItemMutation.isPending || updateItemMutation.isPending ? "Saving..." : editingPriceItem ? "Update Item" : "Add Item"}
+              </Button>
+              <Button variant="outline" onClick={() => setItemDialogOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add new item dialog */}
       <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) { setNewName(""); setNewRate(0); } }}>

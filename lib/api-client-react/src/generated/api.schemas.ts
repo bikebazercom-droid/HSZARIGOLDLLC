@@ -536,6 +536,71 @@ export interface SpotPrice {
   updatedAt: string;
 }
 
+/**
+ * spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.
+ */
+export type PriceItemFormulaType = typeof PriceItemFormulaType[keyof typeof PriceItemFormulaType];
+
+
+export const PriceItemFormulaType = {
+  spot_per_gram: 'spot_per_gram',
+  spot_bar: 'spot_bar',
+  manual: 'manual',
+} as const;
+
+export interface PriceItem {
+  id: number;
+  name: string;
+  displayOrder: number;
+  /** spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed. */
+  formulaType: PriceItemFormulaType;
+  /**
+     * Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.
+     * @nullable
+     */
+  weightGrams?: number | null;
+  /** Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM). */
+  weightLabel: string;
+  /** Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950). */
+  purityFactor: number;
+  /** Fixed AED amount added after the spot formula (positive = premium, negative = discount). */
+  premiumOffsetAed: number;
+  /**
+     * Fixed AED rate used when formulaType = manual.
+     * @nullable
+     */
+  manualRateAed?: number | null;
+  /** Whether this item is shown on the showroom TV board. */
+  tvVisible: boolean;
+  /** Core system items cannot be deleted. */
+  isCore: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PriceItemInputFormulaType = typeof PriceItemInputFormulaType[keyof typeof PriceItemInputFormulaType];
+
+
+export const PriceItemInputFormulaType = {
+  spot_per_gram: 'spot_per_gram',
+  spot_bar: 'spot_bar',
+  manual: 'manual',
+} as const;
+
+export interface PriceItemInput {
+  name: string;
+  displayOrder?: number;
+  formulaType: PriceItemInputFormulaType;
+  /** @nullable */
+  weightGrams?: number | null;
+  weightLabel: string;
+  purityFactor: number;
+  premiumOffsetAed?: number;
+  /** @nullable */
+  manualRateAed?: number | null;
+  tvVisible?: boolean;
+}
+
 export interface MonthlySale {
   month: string;
   total: number;

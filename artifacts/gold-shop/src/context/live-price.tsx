@@ -35,15 +35,17 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export interface LiveRates {
   usdPerOz:           number | null;
   aedPerGram:         number | null;   // Adjusted_Base (spread applied server-side) — invoices/admin
-  baseAedPerGram:     number | null;   // Raw Base_24K_AED before spread
+  baseAedPerGram:     number | null;   // Raw Base_24K_AED before spread — TV board uses this
   bidUsdPerOz:        number | null;
   askUsdPerOz:        number | null;
   dailyLowUsdPerOz:   number | null;
   dailyHighUsdPerOz:  number | null;
-  spreadPercent:      number;          // currently active admin spread %
-  laborCostPercent:   number;          // currently active admin labor %
+  spreadPercent:      number;
+  laborCostPercent:   number;
 
-  // ── Spread+labor-adjusted rates (admin Prices page / invoice pricing) ───────
+  // ── Spread+labor-adjusted rates (admin Prices page / invoice pricing only) ──
+  // TV board computes per-item prices dynamically from baseAedPerGram +
+  // each item's own formula params fetched from /prices/items/public.
   ttBar995Total:      number | null;
   ttBar9999Total:     number | null;
   gold9999Rate:       number | null;
@@ -54,19 +56,7 @@ export interface LiveRates {
   gold21kRate:        number | null;
   gold18kRate:        number | null;
 
-  // ── Raw market rates (TV board public display — NO spread, NO labor) ─────────
-  rawTtBar995Total:   number | null;
-  rawTtBar9999Total:  number | null;
-  rawGold9999Rate:    number | null;
-  rawKgBar995Total:   number | null;
-  rawGoldKg9999Total: number | null;
-  rawGold22kRate:     number | null;
-  rawGold21kRate:     number | null;
-  rawGold18kRate:     number | null;
-
   isLive:             boolean;
-  /** True when prices are sourced from the DB last-close fallback rather than
-   *  a real-time feed (e.g. market closed on weekend, feed not yet connected). */
   isStale:            boolean;
   updatedAt:          string | null;
 }
@@ -94,14 +84,6 @@ const EMPTY_RATES: LiveRates = {
   gold22kRate:        null,
   gold21kRate:        null,
   gold18kRate:        null,
-  rawTtBar995Total:   null,
-  rawTtBar9999Total:  null,
-  rawGold9999Rate:    null,
-  rawKgBar995Total:   null,
-  rawGoldKg9999Total: null,
-  rawGold22kRate:     null,
-  rawGold21kRate:     null,
-  rawGold18kRate:     null,
   isLive:             false,
   isStale:            false,
   updatedAt:          null,
@@ -161,17 +143,6 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       gold22kRate:     round2(adjustedBase * PURITY_22K * laborMult),
       gold21kRate:     round2(adjustedBase * PURITY_21K * laborMult),
       gold18kRate:     round2(adjustedBase * PURITY_18K * laborMult),
-
-      // ── Raw market rates (TV board — pure spot, NO spread, NO labor) ──────────
-      // Formula: (XAU_USD / 31.1034768) × 3.6725 × purity  (jewelry: no labor)
-      rawTtBar995Total:   round2(marketBase * TOLA_BAR_GRAMS * PURITY_995),
-      rawTtBar9999Total:  round2(marketBase * TOLA_BAR_GRAMS * PURITY_9999),
-      rawGold9999Rate:    round2(marketBase * PURITY_9999),
-      rawKgBar995Total:   round2(marketBase * 1000 * PURITY_995),
-      rawGoldKg9999Total: round2(marketBase * 1000 * PURITY_9999),
-      rawGold22kRate:     round2(marketBase * PURITY_22K),
-      rawGold21kRate:     round2(marketBase * PURITY_21K),
-      rawGold18kRate:     round2(marketBase * PURITY_18K),
 
       // isStale = DB fallback (no real-time bid/ask available, market closed)
       isLive:    true,
