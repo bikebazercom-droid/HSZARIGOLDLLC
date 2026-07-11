@@ -66,6 +66,7 @@ function AdminRouter() {
     <AppLayout>
       <Switch>
         <Route path="/" component={NewInvoice} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={NewInvoice} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
