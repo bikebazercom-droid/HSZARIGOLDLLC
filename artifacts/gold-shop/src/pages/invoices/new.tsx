@@ -35,8 +35,6 @@ interface LineItem {
   makingRate: number;
   makingAmt: number;
   totalPrice: number;
-  isFullyCustom: boolean;
-  customRate: number;
 }
 
 // The Purity dropdown shows ONLY raw decimal numbers — no item names or text
@@ -261,21 +259,20 @@ function roundTo(num: number, decimals: number): number {
   return sign * rounded;
 }
 
-// Every standard line item reads from a SINGLE global Metal Rate (AED/g).
-// "New Custom Item" rows use their own per-row customRate instead and are
-// completely isolated from the global spot feed.
+// Every line item reads from a SINGLE global Metal Rate (AED/g) — the one
+// field in the Payment & Summary panel. There is no per-row rate; every
+// line item's Gold Value, and the invoice total, are always driven by this
+// one shared number.
 function calcItem(item: LineItem, metalRate: number): LineItem {
-  const effectiveRate = item.isFullyCustom ? (item.customRate || 0) : (metalRate || 0);
-  // Pure Wt. = Gross Wt. × Purity. For fully-custom rows with no purity,
-  // pureWeight equals grossWeight (the item is priced as entered).
+  // Pure Wt. = Gross Wt. × Purity, always computed by direct multiplication —
+  // no per-category exceptions. Rounded to 3 decimal places, recalculated live
+  // as either value changes (e.g. 92.50 × 0.999 = 92.408).
   const purityFactor = item.purity ? parsePurity(item.purity) : 0;
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
     ? roundTo(item.grossWeight * purityFactor, 3)
-    : item.isFullyCustom && item.grossWeight > 0
-      ? item.grossWeight
-      : item.pureWeight;
-  // Gold Value = Pure Weight × effective rate (global or per-item).
-  const goldValue = roundTo(pureWeight * effectiveRate, 2);
+    : item.pureWeight;
+  // Gold Value = Pure Weight × the single global Metal Rate, priced per gram.
+  const goldValue = roundTo(pureWeight * (metalRate || 0), 2);
   // Item Total = Gold Value + Making Amount
   const totalPrice = roundTo(goldValue + item.makingAmt, 2);
   return { ...item, pureWeight, totalPrice };
@@ -285,7 +282,6 @@ function calcItem(item: LineItem, metalRate: number): LineItem {
 // into the global Metal Rate field — resolved from the invoice's primary
 // item (the first row that has a description or purity chosen). Falls back
 // to the raw live spot rate when no item has been specified yet.
-// Fully-custom rows are skipped — they manage their own per-item rate.
 function resolvePrimaryRate(
   currentItems: LineItem[],
   prices: PricesData | undefined,
@@ -293,7 +289,7 @@ function resolvePrimaryRate(
   rawAedPerGram?: number | null,
   laborPct = 0,
 ): number {
-  const primary = currentItems.find(i => !i.isFullyCustom && (i.description || i.purity));
+  const primary = currentItems.find(i => i.description || i.purity);
   if (!primary) return fallback;
   if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborPct);
   return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram, laborPct);
@@ -403,8 +399,6 @@ export default function NewInvoice() {
       makingRate: 0,
       makingAmt: 0,
       totalPrice: 0,
-      isFullyCustom: false,
-      customRate: 0,
     }]);
     // The very first row added to a fresh invoice should immediately give the
     // global Metal Rate field a sensible starting value.
@@ -423,23 +417,21 @@ export default function NewInvoice() {
       // the single GLOBAL Metal Rate field. The user never types a per-row
       // rate anymore.
       if (field === "description") {
-        if (!updated.isFullyCustom) {
-          const autoCategory = descToCategory(value as string);
-          const autoPurity = DESC_TO_PURITY[value as string] ?? "";
-          if (value) {
-            pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent);
-          }
-          // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
-          // for a fresh line item) so every weight is entered manually.
-          updated = {
-            ...updated,
-            category: autoCategory,
-            purity: autoPurity,
-            purityIsCustom: false,
-            makingRate: 0,
-            makingAmt: 0,
-          };
+        const autoCategory = descToCategory(value as string);
+        const autoPurity = DESC_TO_PURITY[value as string] ?? "";
+        if (value) {
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent);
         }
+        // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
+        // for a fresh line item) so every weight is entered manually.
+        updated = {
+          ...updated,
+          category: autoCategory,
+          purity: autoPurity,
+          purityIsCustom: false,
+          makingRate: 0,
+          makingAmt: 0,
+        };
       }
       if (field === "purity" && value) {
         const currentCategory = updated.category ?? "gold_jewelry";
@@ -498,12 +490,7 @@ export default function NewInvoice() {
   // Total Before VAT = Gold Value + Σ(Making Amount)
   const totalGrossWeight = items.reduce((s, i) => s + (i.grossWeight || 0), 0);
   const totalPureWeight = items.reduce((s, i) => s + (i.pureWeight || 0), 0);
-  // Gold Value per item = pureWeight × effectiveRate (custom items use their own rate).
-  const totalGoldValue = roundTo(items.reduce((s, i) => {
-    const effectiveRate = i.isFullyCustom ? (i.customRate || 0) : metalRate;
-    return s + roundTo((i.pureWeight || 0) * effectiveRate, 2);
-  }, 0), 2);
-  const hasCustomItems = items.some(i => i.isFullyCustom);
+  const totalGoldValue = roundTo(items.reduce((s, i) => s + roundTo((i.pureWeight || 0) * metalRate, 2), 0), 2);
   const totalMakingAmount = items.reduce((s, i) => s + (i.makingAmt || 0), 0);
   const subtotal = roundTo(totalGoldValue + totalMakingAmount, 2);
   const totalBeforeVat = Math.max(0, subtotal);
@@ -565,9 +552,11 @@ export default function NewInvoice() {
           pureWeight: item.pureWeight || undefined,
           makingRate: item.makingRate || undefined,
           makingAmt: item.makingAmt || undefined,
-          // Frozen rate (AED/gram) locked in at sale time. For fully-custom
-          // rows use the per-item rate; for all others use the global rate.
-          unitPrice: item.isFullyCustom ? (item.customRate || 0) : (metalRate || goldRate),
+          // Literal frozen metal rate (AED/gram) locked in at sale time — the
+          // single global rate, written to the DB as a plain number and must
+          // never be recomputed from a live price feed when the invoice is
+          // viewed/printed later.
+          unitPrice: metalRate || goldRate,
           totalPrice: item.totalPrice,
         })),
       }
@@ -660,51 +649,7 @@ export default function NewInvoice() {
                     <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
                       <td className="py-2 px-3 text-center text-muted-foreground text-sm">{index + 1}</td>
                       <td className="py-2 px-3 min-w-[180px]">
-                        {item.isFullyCustom ? (
-                          /* ── New Custom Item mode: free description + per-row rate ── */
-                          <div className="space-y-1.5">
-                            <div className="flex gap-1 items-center">
-                              <Input
-                                autoFocus
-                                placeholder="Item name / description…"
-                                value={item.description}
-                                onChange={e => updateItem(index, "description", e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                              <button
-                                type="button"
-                                className="text-[10px] text-blue-500 hover:underline whitespace-nowrap"
-                                onClick={() => {
-                                  setItems(prev => {
-                                    const next = [...prev];
-                                    next[index] = {
-                                      ...next[index],
-                                      isFullyCustom: false,
-                                      descriptionIsCustom: false,
-                                      description: "",
-                                      customRate: 0,
-                                      category: "gold_jewelry",
-                                    };
-                                    return next;
-                                  });
-                                }}
-                              >← List</button>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] text-muted-foreground whitespace-nowrap">Rate (AED/g):</span>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.customRate || ""}
-                                onChange={e => updateItem(index, "customRate" as keyof LineItem, parseFloat(e.target.value) || 0)}
-                                placeholder="0.00"
-                                className="h-6 text-xs text-center w-24"
-                              />
-                            </div>
-                          </div>
-                        ) : item.descriptionIsCustom ? (
-                          /* ── Free-text mode (legacy "Custom…" option) ── */
+                        {item.descriptionIsCustom ? (
                           <div className="flex gap-1 items-center">
                             <Input
                               autoFocus
@@ -723,30 +668,10 @@ export default function NewInvoice() {
                             >List</button>
                           </div>
                         ) : (
-                          /* ── Standard dropdown ── */
                           <Select
                             value={item.description}
                             onValueChange={val => {
-                              if (val === "__new_custom__") {
-                                setItems(prev => {
-                                  const next = [...prev];
-                                  next[index] = {
-                                    ...next[index],
-                                    description: "",
-                                    descriptionIsCustom: true,
-                                    isFullyCustom: true,
-                                    customRate: 0,
-                                    category: "custom",
-                                    purity: "",
-                                    purityIsCustom: false,
-                                    makingRate: 0,
-                                    makingAmt: 0,
-                                    pureWeight: 0,
-                                    totalPrice: 0,
-                                  };
-                                  return next;
-                                });
-                              } else if (val === "__custom__") {
+                              if (val === "__new_custom__" || val === "__custom__") {
                                 updateItem(index, "descriptionIsCustom" as keyof LineItem, true);
                                 updateItem(index, "description", "");
                               } else {
@@ -762,11 +687,8 @@ export default function NewInvoice() {
                               {LIVE_ASSET_DESCRIPTIONS.map(d => (
                                 <SelectItem key={d} value={d}>{d}</SelectItem>
                               ))}
-                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Custom</div>
+                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Other</div>
                               <SelectItem value="__new_custom__">⊕ New Custom Item</SelectItem>
-                              {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).length > 0 && (
-                                <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Other</div>
-                              )}
                               {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
                                 <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
                               ))}
@@ -1067,10 +989,7 @@ export default function NewInvoice() {
               <div className="border rounded-md overflow-hidden">
                 <div className="p-3 space-y-2 text-sm">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>
-                      Gold Value
-                      {!hasCustomItems && ` (${fmt(totalPureWeight)}g pure × ${fmt(metalRate)}/g)`}
-                    </span>
+                    <span>Gold Value ({fmt(totalPureWeight)}g pure × {fmt(metalRate)}/g)</span>
                     <span>{fmt(totalGoldValue)} AED</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
