@@ -294,35 +294,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">
+      <main className="flex-1 p-4 md:p-6 overflow-auto">
         {children}
       </main>
-
-      {/* ── MOBILE BOTTOM TAB BAR ── */}
-      <nav
-        className="md:hidden fixed bottom-0 inset-x-0 bg-sidebar text-sidebar-foreground border-t border-sidebar-border no-print z-40"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="flex">
-          {(user?.role === "admin" ? ADMIN_BOTTOM_NAV : STAFF_NAV).map(item => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            return (
-              <Link key={item.href} href={item.href}>
-                <div
-                  className="flex flex-col items-center justify-center py-2 px-1 min-w-0 transition-colors"
-                  style={{ width: `${100 / (user?.role === "admin" ? ADMIN_BOTTOM_NAV.length : STAFF_NAV.length)}vw` }}
-                >
-                  <Icon className="w-5 h-5 mb-0.5" style={{ color: active ? "#c8a43a" : undefined }} />
-                  <span className="text-[10px] leading-none font-medium truncate" style={{ color: active ? "#c8a43a" : undefined }}>
-                    {item.label}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
 
     </div>
   );
