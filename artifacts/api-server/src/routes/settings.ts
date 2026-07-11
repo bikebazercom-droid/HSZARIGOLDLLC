@@ -3,6 +3,7 @@ import { db, companySettingsTable } from "@workspace/db";
 import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
 import { broadcast } from "../lib/socket.js";
+import { triggerGoldApiPoll } from "./prices.js";
 
 const router: IRouter = Router();
 
@@ -46,6 +47,9 @@ router.put("/settings", async (req, res): Promise<void> => {
     .returning();
   res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
   broadcast("SETTINGS_MUTATION");
+  // If a GoldAPI token was included, kick off an immediate poll so the TV board
+  // gets prices within seconds rather than waiting for the next 60-second tick.
+  if (body.goldApiToken) triggerGoldApiPoll();
 });
 
 // Public, unauthenticated router — mounted separately, before the requireAuth

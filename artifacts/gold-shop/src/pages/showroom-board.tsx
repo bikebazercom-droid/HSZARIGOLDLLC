@@ -731,14 +731,16 @@ export default function ShowroomBoard() {
         <div
           className="text-center shrink-0"
           style={{
-            color: liveRates.isLive ? "#555" : "#774",
+            color: liveRates.isLive ? (liveRates.isStale ? "#886633" : "#555") : "#774",
             fontSize: "clamp(0.5rem, calc(0.4vh + 0.35vw), 0.8rem)",
             paddingTop: "clamp(0.2rem, 0.5vh, 0.5rem)",
             letterSpacing: "0.05em",
           }}
         >
           {liveRates.isLive
-            ? `((●)) Live · Real-time Free Market Feed${liveRates.updatedAt ? " · " + new Date(liveRates.updatedAt).toLocaleTimeString("en-AE") : ""}`
+            ? liveRates.isStale
+              ? `◎ Last Close Price · Market Closed${liveRates.updatedAt ? " · As of " + new Date(liveRates.updatedAt).toLocaleTimeString("en-AE") : ""}`
+              : `((●)) Live · Real-time Free Market Feed${liveRates.updatedAt ? " · " + new Date(liveRates.updatedAt).toLocaleTimeString("en-AE") : ""}`
             : "Connecting to live feed…"}
         </div>
       </div>

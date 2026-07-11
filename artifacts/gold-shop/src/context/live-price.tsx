@@ -47,6 +47,9 @@ export interface LiveRates {
   gold21kRate:        number | null;
   gold18kRate:        number | null;
   isLive:             boolean;
+  /** True when prices are sourced from the DB last-close fallback rather than
+   *  a real-time feed (e.g. market closed on weekend, feed not yet connected). */
+  isStale:            boolean;
   updatedAt:          string | null;
 }
 
@@ -74,6 +77,7 @@ const EMPTY_RATES: LiveRates = {
   gold21kRate:       null,
   gold18kRate:       null,
   isLive:            false,
+  isStale:           false,
   updatedAt:         null,
 };
 
@@ -137,7 +141,9 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       gold21kRate: round2(rawBase * PURITY_21K * laborMult),
       gold18kRate: round2(rawBase * PURITY_18K * laborMult),
 
+      // isStale = DB fallback (no real-time bid/ask available, market closed)
       isLive:    true,
+      isStale:   spot.bidUsdPerOz == null,
       updatedAt: spot.updatedAt,
     };
   }, [spot]);

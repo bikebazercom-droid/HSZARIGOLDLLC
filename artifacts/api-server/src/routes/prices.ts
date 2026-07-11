@@ -120,6 +120,15 @@ liveSocket.on("connect_error", (err: Error) => {
 // so the /tv board and all admin clients receive the authoritative price.
 // Free tier: 1 req/min is enough — we poll every 60 s.
 // ─────────────────────────────────────────────────────────────────────────────
+interface GoldApiResponse {
+  price?:       number;
+  ask?:         number;
+  bid?:         number;
+  low_price?:   number;
+  high_price?:  number;
+  timestamp?:   number;
+}
+
 async function pollGoldApi(): Promise<void> {
   try {
     const [row] = await db
@@ -137,7 +146,7 @@ async function pollGoldApi(): Promise<void> {
       logger.warn({ status: resp.status }, "[goldapi] Request failed");
       return;
     }
-    const data = await resp.json() as { price?: number; timestamp?: number };
+    const data = await resp.json() as GoldApiResponse;
     const usdPerOz = data.price;
     if (!usdPerOz || !Number.isFinite(usdPerOz) || usdPerOz < 500) {
       logger.warn({ data }, "[goldapi] Unexpected response shape");
@@ -145,8 +154,23 @@ async function pollGoldApi(): Promise<void> {
     }
 
     await loadAdminConfig();
-    const askUsdPerOz   = usdPerOz + ASK_OFFSET_USD;
-    const bidUsdPerOz   = askUsdPerOz - BID_ASK_SPREAD_USD;
+
+    // Prefer the real ask/bid from GoldAPI.io; fall back to derived spread
+    const askUsdPerOz = (data.ask && Number.isFinite(data.ask) && data.ask > 500)
+      ? data.ask
+      : usdPerOz + ASK_OFFSET_USD;
+    const bidUsdPerOz = (data.bid && Number.isFinite(data.bid) && data.bid > 500)
+      ? data.bid
+      : askUsdPerOz - BID_ASK_SPREAD_USD;
+
+    // Use GoldAPI daily range when provided
+    if (data.low_price  && Number.isFinite(data.low_price)  && data.low_price  > 500) {
+      if (dailyLowUsdPerOz  == null || data.low_price  < dailyLowUsdPerOz)  dailyLowUsdPerOz  = data.low_price;
+    }
+    if (data.high_price && Number.isFinite(data.high_price) && data.high_price > 500) {
+      if (dailyHighUsdPerOz == null || data.high_price > dailyHighUsdPerOz) dailyHighUsdPerOz = data.high_price;
+    }
+
     const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
     const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
 
@@ -163,7 +187,10 @@ async function pollGoldApi(): Promise<void> {
       receivedAt: new Date(),
     };
 
-    logger.info({ usdPerOz, aedPerGram: aedPerGram.toFixed(4) }, "[goldapi] Price updated");
+    logger.info({ usdPerOz, askUsdPerOz, bidUsdPerOz, aedPerGram: aedPerGram.toFixed(4) }, "[goldapi] Price updated");
+
+    // Notify all connected clients (TV board, admin dashboard)
+    broadcast("PRICE_MUTATION");
 
     db.update(pricesTable)
       .set({ goldBullionRate: String(aedPerGram), goldPricePerGram: String(aedPerGram), liveModeConnected: true, updatedAt: new Date() })
@@ -176,6 +203,12 @@ async function pollGoldApi(): Promise<void> {
 // Start polling immediately, then every 60 seconds
 pollGoldApi();
 setInterval(pollGoldApi, 60_000);
+
+// Exported so the settings route can trigger an immediate poll when a new
+// GoldAPI token is saved — avoids up to 60 s of "Connecting…" on the TV.
+export function triggerGoldApiPoll(): void {
+  pollGoldApi().catch((err: unknown) => logger.warn({ err }, "[goldapi] Triggered poll failed"));
+}
 
 liveSocket.on("update", (raw: string) => {
   try {
@@ -304,14 +337,14 @@ router.post("/prices/spot/refresh", async (_req, res): Promise<void> => {
 // ── Public router (mounted before requireAuth) ────────────────────────────────
 export const publicPricesRouter: IRouter = Router();
 
-publicPricesRouter.get("/prices/spot", (_req, res): void => {
+publicPricesRouter.get("/prices/spot", async (_req, res): Promise<void> => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
 
   if (liveSpot) {
     res.json({
       usdPerOz:          liveSpot.usdPerOz,
-      aedPerGram:        liveSpot.aedPerGram,        // spread-adjusted base
-      baseAedPerGram:    liveSpot.rawAedPerGram,      // raw, unadjusted
+      aedPerGram:        liveSpot.aedPerGram,
+      baseAedPerGram:    liveSpot.rawAedPerGram,
       bidUsdPerOz:       liveSpot.bidUsdPerOz,
       askUsdPerOz:       liveSpot.askUsdPerOz,
       dailyLowUsdPerOz:  liveSpot.dailyLowUsdPerOz,
@@ -322,6 +355,37 @@ publicPricesRouter.get("/prices/spot", (_req, res): void => {
     });
     return;
   }
+
+  // ── DB fallback: market closed (weekend) or feed not yet connected ───────────
+  // When the Socket.IO feed is silent and GoldAPI.io has polled at least once,
+  // the last-known price is persisted in goldPricePerGram. Serve it so the TV
+  // board shows the closing price rather than "Connecting…" with all dashes.
+  // bid/ask/high/low are left null — the TV's fmt() renders them as "—".
+  try {
+    await loadAdminConfig();
+    const prices = await getOrCreate();
+    const base = parseFloat(String(prices.goldPricePerGram));
+    if (base && base > 50) {
+      const rawBase  = adminSpreadPercent > 0 ? base / (1 + adminSpreadPercent / 100) : base;
+      const usdPerOz = (rawBase / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
+      res.json({
+        usdPerOz,
+        aedPerGram:        base,
+        baseAedPerGram:    rawBase,
+        bidUsdPerOz:       null,
+        askUsdPerOz:       null,
+        dailyLowUsdPerOz:  null,
+        dailyHighUsdPerOz: null,
+        spreadPercent:     adminSpreadPercent,
+        laborCostPercent:  adminLaborPercent,
+        updatedAt:         prices.updatedAt.toISOString(),
+      });
+      return;
+    }
+  } catch (err) {
+    logger.warn({ err }, "[prices/spot] DB fallback failed");
+  }
+
   res.status(503).json({ error: "Live price feed connecting — please wait" });
 });
 
