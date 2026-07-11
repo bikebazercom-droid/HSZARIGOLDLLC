@@ -213,17 +213,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* ── MOBILE TOP HEADER ── */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 bg-sidebar text-sidebar-foreground no-print" style={{ minHeight: 56 }}>
-        <div className="flex items-center gap-2">
-          <LogoMark />
-          <div>
-            <div className="font-bold text-sm leading-tight" style={{ color: "#c8a43a" }}>
-              {companyName.split(" ").slice(0, 2).join(" ")}
-            </div>
-            <div className="text-[10px] text-muted-foreground leading-tight">
-              {companyName.split(" ").slice(2).join(" ") || "L.L.C"}
+        <Link href="/">
+          <div className="flex items-center gap-2 cursor-pointer">
+            <LogoMark />
+            <div>
+              <div className="font-bold text-sm leading-tight" style={{ color: "#c8a43a" }}>
+                {companyName.split(" ").slice(0, 2).join(" ")}
+              </div>
+              <div className="text-[10px] text-muted-foreground leading-tight">
+                {companyName.split(" ").slice(2).join(" ") || "L.L.C"}
+              </div>
             </div>
           </div>
-        </div>
+        </Link>
         <button
           onClick={() => setDrawerOpen(true)}
           className="p-2 rounded-md hover:bg-sidebar-accent transition-colors"
@@ -268,17 +270,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* ── DESKTOP SIDEBAR ── */}
       <aside className="hidden md:flex md:w-60 bg-sidebar text-sidebar-foreground p-5 flex-col no-print">
-        <div className="mb-8 flex items-center gap-3">
-          <LogoMark />
-          <div>
-            <div className="font-bold text-base leading-tight" style={{ color: "#c8a43a" }}>
-              {companyName.split(" ").slice(0, 2).join(" ")}
-            </div>
-            <div className="text-xs text-muted-foreground leading-tight">
-              {companyName.split(" ").slice(2).join(" ") || "L.L.C"}
+        <Link href="/">
+          <div className="mb-8 flex items-center gap-3 cursor-pointer">
+            <LogoMark />
+            <div>
+              <div className="font-bold text-base leading-tight" style={{ color: "#c8a43a" }}>
+                {companyName.split(" ").slice(0, 2).join(" ")}
+              </div>
+              <div className="text-xs text-muted-foreground leading-tight">
+                {companyName.split(" ").slice(2).join(" ") || "L.L.C"}
+              </div>
             </div>
           </div>
-        </div>
+        </Link>
 
         {user?.role === "admin"
           ? <AdminNav />
