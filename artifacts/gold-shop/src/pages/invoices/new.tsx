@@ -433,10 +433,10 @@ export default function NewInvoice() {
           makingAmt: 0,
         };
       }
-      if (field === "purity" && value) {
-        const currentCategory = updated.category ?? "gold_jewelry";
-        pushedRate = getRateForPurity(value as string, currentCategory, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent);
-      }
+      // Purity change is display-only — it does NOT recalculate or override the
+      // metal rate. The rate is locked to whatever was pulled from the price list
+      // when the item description was selected. Changing purity only affects the
+      // Pure Weight column (grossWeight × purityFactor) and is otherwise inert.
       // Auto-compute Making Amount = Gross Weight × Making Rate
       if (field === "makingRate") {
         updated.makingAmt = parseFloat((updated.grossWeight * (value as number)).toFixed(2));
@@ -461,7 +461,9 @@ export default function NewInvoice() {
   // `items` array reference itself) so this never fights with the recompute
   // effect below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const itemSignature = items.map(i => `${i.description}|${i.purity}|${i.category}`).join("~");
+  // Purity is intentionally excluded — purity changes must NOT re-trigger a
+  // rate recalculation. Only description/category changes should re-sync the rate.
+  const itemSignature = items.map(i => `${i.description}|${i.category}`).join("~");
   useEffect(() => {
     // In manual mode the live 1s tick must NOT override admin-set rates.
     if (!isLive || isManualMode) return;
