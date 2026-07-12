@@ -384,13 +384,14 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
       className="flex flex-row items-center justify-between"
       style={{
         flex: 1,
+        maxHeight: "clamp(4.5rem,13vh,8rem)",
         position: "relative",
         background: `linear-gradient(160deg,#111008 0%,#0a0a0a 60%,#0d0d0d 100%)`,
         border: `1px solid ${accent}33`,
         borderLeft: `5px solid ${accent}`,
         borderRadius: "clamp(0.5rem,1vw,1rem)",
         boxShadow: `0 0 80px -25px ${accent}33, 0 8px 40px -12px #000000cc`,
-        padding: "clamp(0.5rem,2.5vh,3rem) clamp(0.75rem,3vw,5rem)",
+        padding: "clamp(0.35rem,1.2vh,1.2rem) clamp(0.75rem,3vw,4rem)",
         overflow: "hidden",
       }}
     >
@@ -407,13 +408,13 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
       {/* ── LEFT: icon + name + weight badge (always horizontal) ──────────────── */}
       <div
         className="flex flex-row items-center flex-shrink-0"
-        style={{ gap: "clamp(0.35rem,1.5vw,3rem)", zIndex: 1 }}
+        style={{ gap: "clamp(0.3rem,1.2vw,2rem)", zIndex: 1 }}
       >
         {/* Icon */}
         <div
           style={{
-            width: "clamp(1.8rem,5vw,8rem)",
-            height: "clamp(1.8rem,5vw,8rem)",
+            width: "clamp(1.4rem,3.5vw,5rem)",
+            height: "clamp(1.4rem,3.5vw,5rem)",
             opacity: 0.8,
             flexShrink: 0,
           }}
@@ -426,7 +427,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
           style={{
             color: accent,
             fontWeight: 900,
-            fontSize: "clamp(0.65rem,calc(1.3vw+0.9vh),2.5rem)",
+            fontSize: "clamp(0.6rem,calc(1.1vw+0.7vh),2rem)",
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             textShadow: `0 0 50px ${accent}55`,
@@ -486,13 +487,13 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
           style={{
             color: GOLD,
             fontWeight: 800,
-            fontSize: "clamp(0.9rem,calc(1.1vh + 0.9vw),2rem)",
+            fontSize: "clamp(0.7rem,calc(0.85vh + 0.75vw),1.5rem)",
             letterSpacing: "0.3em",
             textTransform: "uppercase",
             background: "#0d0d0d",
             border: `1px solid ${GOLD}66`,
-            borderRadius: "0.5rem",
-            padding: "clamp(0.3rem,0.7vh,0.7rem) clamp(1rem,2vw,2.2rem)",
+            borderRadius: "0.4rem",
+            padding: "clamp(0.2rem,0.4vh,0.5rem) clamp(0.6rem,1.4vw,1.6rem)",
             textAlign: "center",
             whiteSpace: "nowrap",
             boxShadow: `0 0 20px ${GOLD}22`,
@@ -513,7 +514,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
             style={{
               color: tickColor,
               fontWeight: 900,
-              fontSize: "clamp(0.9rem,calc(1.8vw+1.5vh),6rem)",
+              fontSize: "clamp(0.75rem,calc(1.4vw+1.2vh),4rem)",
               lineHeight: 1,
               animation: `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`,
               userSelect: "none",
@@ -531,7 +532,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
               color: priceColor,
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(1.4rem,calc(3.5vw+2vh),9rem)",
+              fontSize: "clamp(1.2rem,calc(2.8vw+1.6vh),7rem)",
               lineHeight: 1,
               letterSpacing: "-0.03em",
               whiteSpace: "nowrap",
@@ -550,7 +551,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
               color: GOLD,
               fontWeight: 700,
               fontFamily: "sans-serif",
-              fontSize: "clamp(0.6rem,calc(1.2vw+0.9vh),2.5rem)",
+              fontSize: "clamp(0.55rem,calc(1vw+0.75vh),2rem)",
               opacity: 0.85,
               paddingBottom: "0.1em",
               whiteSpace: "nowrap",
@@ -767,7 +768,7 @@ export default function ShowroomBoard() {
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            gap: "clamp(0.6rem,1.2vh,1.2rem)",
+            gap: "clamp(0.4rem,0.8vh,0.9rem)",
             overflow: "hidden",
             minHeight: 0,
           }}
