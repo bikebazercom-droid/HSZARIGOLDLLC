@@ -253,18 +253,16 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
         Gold Spot
       </div>
 
-      {/* ── 2 × 2 grid: responsive — 1 col on mobile, 2 cols on sm+ ────────── */}
-      {/* DOM order: BID → Low → ASK → High
-          Mobile (1-col): stacks as BID, Low, ASK, High
-          Desktop (2-col): sm:order-* rearranges to BID(top-left), ASK(top-right),
-                           Low(bottom-left), High(bottom-right)                      */}
+      {/* ── Always a rigid 2 × 2 grid — same on every screen size ───────────── */}
+      {/* DOM order matches visual order: BID(top-left) → ASK(top-right) →
+          Low(bottom-left) → High(bottom-right).  No responsive reordering.     */}
       <div
-        className="grid grid-cols-1 sm:grid-cols-2"
+        className="grid grid-cols-2"
         style={{ gap: "clamp(0.4rem,0.9vw,0.85rem)" }}
       >
 
-        {/* ── BID PRICE (oz) — top-left on desktop ─────────────────────────── */}
-        <div className="sm:order-1" style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+        {/* ── BID PRICE (oz) — top-left ─────────────────────────────────────── */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
             <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
             <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
@@ -288,8 +286,33 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           </div>
         </div>
 
-        {/* ── Low — bottom-left on desktop, below BID on mobile ────────────── */}
-        <div className="sm:order-3" style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+        {/* ── ASK PRICE (oz) — top-right ────────────────────────────────────── */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+            <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+            <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+              ASK PRICE (oz)
+            </span>
+          </div>
+          <div
+            className="tabular-nums"
+            style={{
+              color: "#ffffff",
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textAlign: "center",
+              textShadow: "0 2px 20px #000000aa",
+            }}
+          >
+            {fmt(askUsdPerOz, 2)}
+          </div>
+        </div>
+
+        {/* ── Low — bottom-left ─────────────────────────────────────────────── */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
           <div
             style={{
               color: RED,
@@ -318,33 +341,8 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           </div>
         </div>
 
-        {/* ── ASK PRICE (oz) — top-right on desktop, after Low on mobile ───── */}
-        <div className="sm:order-2" style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
-            <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
-            <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-              ASK PRICE (oz)
-            </span>
-          </div>
-          <div
-            className="tabular-nums"
-            style={{
-              color: "#ffffff",
-              fontFamily: "monospace",
-              fontWeight: 900,
-              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
-              lineHeight: 1,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              textShadow: "0 2px 20px #000000aa",
-            }}
-          >
-            {fmt(askUsdPerOz, 2)}
-          </div>
-        </div>
-
-        {/* ── High — bottom-right on desktop, last on mobile ───────────────── */}
-        <div className="sm:order-4" style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+        {/* ── High — bottom-right ───────────────────────────────────────────── */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
           <div
             style={{
               color: GREEN,
