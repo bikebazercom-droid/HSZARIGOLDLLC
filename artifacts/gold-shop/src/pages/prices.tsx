@@ -105,30 +105,6 @@ function AssetCard({ label, sublabel, image, fieldKey, savedValue, value, onChan
             {saving ? "Saving..." : changed ? `Update ${label} Rate` : "Rate Saved ✓"}
           </Button>
         )}
-        {tvVisibilityKey && onToggleTvVisible && (
-          <div
-            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 mt-1"
-            style={{
-              background: tvVisible ? "#f0fdf4" : "#fafafa",
-              border: `1px solid ${tvVisible ? "#10b98144" : "#e5e7eb"}`,
-            }}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm" aria-hidden>📺</span>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-foreground leading-tight">Show on TV Screen</div>
-                <div className="text-[10px] text-muted-foreground leading-tight truncate">
-                  {tvVisible ? "Visible on showroom board" : "Hidden from showroom board"}
-                </div>
-              </div>
-            </div>
-            <Switch
-              checked={tvVisible ?? true}
-              onCheckedChange={v => onToggleTvVisible(tvVisibilityKey, v)}
-              className="flex-shrink-0"
-            />
-          </div>
-        )}
       </CardContent>
     </Card>
   );
