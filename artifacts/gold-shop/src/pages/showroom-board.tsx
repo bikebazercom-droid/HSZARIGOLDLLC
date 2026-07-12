@@ -253,23 +253,21 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
         Gold Spot
       </div>
 
-      {/* ── 2 × 2 grid: four fully independent boxes ────────────────────── */}
+      {/* ── 2 × 2 grid: responsive — 1 col on mobile, 2 cols on sm+ ────────── */}
+      {/* DOM order: BID → Low → ASK → High
+          Mobile (1-col): stacks as BID, Low, ASK, High
+          Desktop (2-col): sm:order-* rearranges to BID(top-left), ASK(top-right),
+                           Low(bottom-left), High(bottom-right)                      */}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridTemplateRows: "auto auto",
-          gap: "clamp(0.4rem,0.9vw,0.85rem)",
-        }}
+        className="grid grid-cols-1 sm:grid-cols-2"
+        style={{ gap: "clamp(0.4rem,0.9vw,0.85rem)" }}
       >
 
-        {/* ┌─────────────────────────────────────────┐
-            │  TOP-LEFT — BID PRICE (oz)              │
-            └─────────────────────────────────────────┘ */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+        {/* ── BID PRICE (oz) — top-left on desktop ─────────────────────────── */}
+        <div className="sm:order-1" style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
-            <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.7rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
-            <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.45rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.16em", textTransform: "uppercase" }}>
+            <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+            <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
               BID PRICE (oz)
             </span>
           </div>
@@ -279,7 +277,7 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
               color: "#ffffff",
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(1.2rem,calc(2vh + 2vw),4rem)",
+              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
               lineHeight: 1,
               letterSpacing: "-0.02em",
               textAlign: "center",
@@ -290,43 +288,14 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           </div>
         </div>
 
-        {/* ┌─────────────────────────────────────────┐
-            │  TOP-RIGHT — ASK PRICE (oz)             │
-            └─────────────────────────────────────────┘ */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
-            <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.7rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
-            <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.45rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.16em", textTransform: "uppercase" }}>
-              ASK PRICE (oz)
-            </span>
-          </div>
-          <div
-            className="tabular-nums"
-            style={{
-              color: "#ffffff",
-              fontFamily: "monospace",
-              fontWeight: 900,
-              fontSize: "clamp(1.2rem,calc(2vh + 2vw),4rem)",
-              lineHeight: 1,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              textShadow: "0 2px 20px #000000aa",
-            }}
-          >
-            {fmt(askUsdPerOz, 2)}
-          </div>
-        </div>
-
-        {/* ┌─────────────────────────────────────────┐
-            │  BOTTOM-LEFT — Low                      │
-            └─────────────────────────────────────────┘ */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+        {/* ── Low — bottom-left on desktop, below BID on mobile ────────────── */}
+        <div className="sm:order-3" style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
           <div
             style={{
               color: RED,
               fontWeight: 800,
-              fontSize: "clamp(0.5rem,calc(0.46vh + 0.46vw),0.85rem)",
-              letterSpacing: "0.22em",
+              fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)",
+              letterSpacing: "0.2em",
               textTransform: "uppercase",
             }}
           >
@@ -338,7 +307,7 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
               color: RED,
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(1rem,calc(1.5vh + 1.5vw),3rem)",
+              fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
               lineHeight: 1,
               letterSpacing: "-0.02em",
               textAlign: "center",
@@ -349,16 +318,39 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           </div>
         </div>
 
-        {/* ┌─────────────────────────────────────────┐
-            │  BOTTOM-RIGHT — High                    │
-            └─────────────────────────────────────────┘ */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+        {/* ── ASK PRICE (oz) — top-right on desktop, after Low on mobile ───── */}
+        <div className="sm:order-2" style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+            <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+            <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+              ASK PRICE (oz)
+            </span>
+          </div>
+          <div
+            className="tabular-nums"
+            style={{
+              color: "#ffffff",
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textAlign: "center",
+              textShadow: "0 2px 20px #000000aa",
+            }}
+          >
+            {fmt(askUsdPerOz, 2)}
+          </div>
+        </div>
+
+        {/* ── High — bottom-right on desktop, last on mobile ───────────────── */}
+        <div className="sm:order-4" style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
           <div
             style={{
               color: GREEN,
               fontWeight: 800,
-              fontSize: "clamp(0.5rem,calc(0.46vh + 0.46vw),0.85rem)",
-              letterSpacing: "0.22em",
+              fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)",
+              letterSpacing: "0.2em",
               textTransform: "uppercase",
             }}
           >
@@ -370,7 +362,7 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
               color: GREEN,
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(1rem,calc(1.5vh + 1.5vw),3rem)",
+              fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
               lineHeight: 1,
               letterSpacing: "-0.02em",
               textAlign: "center",
@@ -406,21 +398,17 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
 
   return (
     <div
+      className="flex flex-col sm:flex-row sm:items-center sm:justify-between min-h-36 sm:min-h-0"
       style={{
         flex: 1,
-        display: "flex",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
         position: "relative",
         background: `linear-gradient(160deg,#111008 0%,#0a0a0a 60%,#0d0d0d 100%)`,
         border: `1px solid ${accent}33`,
         borderLeft: `5px solid ${accent}`,
         borderRadius: "clamp(0.5rem,1vw,1rem)",
         boxShadow: `0 0 80px -25px ${accent}33, 0 8px 40px -12px #000000cc`,
-        padding: "clamp(1rem,3vh,3rem) clamp(2rem,4vw,5rem)",
+        padding: "clamp(0.75rem,3vh,3rem) clamp(1rem,4vw,5rem)",
         overflow: "hidden",
-        minHeight: 0,
       }}
     >
       {/* Background radial glow */}
@@ -433,49 +421,57 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         }}
       />
 
-      {/* ── LEFT: icon + item name ── */}
+      {/* ── TOP ROW (mobile) / LEFT (desktop): icon + name + mobile weight badge ── */}
       <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: "clamp(1rem,2.5vw,3rem)",
-          flexShrink: 0,
-          zIndex: 1,
-        }}
+        className="flex flex-row items-center justify-between sm:justify-start sm:flex-shrink-0"
+        style={{ gap: "clamp(0.6rem,2vw,3rem)", zIndex: 1 }}
       >
         {/* Icon */}
         <div
-          style={{
-            width: "clamp(3.5rem,7vh,8rem)",
-            height: "clamp(3.5rem,7vh,8rem)",
-            opacity: 0.8,
-            flexShrink: 0,
-          }}
+          className="w-10 h-10 sm:w-[clamp(3.5rem,7vh,8rem)] sm:h-[clamp(3.5rem,7vh,8rem)]"
+          style={{ opacity: 0.8, flexShrink: 0 }}
         >
           {iconForItem(item)}
         </div>
 
         {/* Item name */}
         <div
+          className="flex-1 sm:flex-none text-xl sm:text-[clamp(1.4rem,calc(1.8vh+1.3vw),2.5rem)]"
           style={{
             color: accent,
             fontWeight: 900,
-            fontSize: "clamp(1.4rem,calc(1.8vh + 1.3vw),2.5rem)",
-            letterSpacing: "0.18em",
+            letterSpacing: "0.15em",
             textTransform: "uppercase",
             textShadow: `0 0 50px ${accent}55`,
             lineHeight: 1,
-            whiteSpace: "nowrap",
           }}
         >
           {item.name}
         </div>
+
+        {/* Weight badge — mobile only (inline, right of name) */}
+        <div
+          className="sm:hidden flex-shrink-0"
+          style={{
+            color: GOLD,
+            fontWeight: 700,
+            fontSize: "0.7rem",
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            background: "#0d0d0d",
+            border: `1px solid ${GOLD}55`,
+            borderRadius: "0.35rem",
+            padding: "0.18rem 0.5rem",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.weightLabel}
+        </div>
       </div>
 
-      {/* ── CENTER: vertical divider + weight badge pinned to card midpoint ── */}
-      {/* Thin gold column separator */}
+      {/* ── CENTER: vertical divider + weight badge — desktop only ── */}
       <div
+        className="hidden sm:block"
         style={{
           position: "absolute",
           left: "50%",
@@ -487,8 +483,8 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
           pointerEvents: "none",
         }}
       />
-      {/* Badge floats over the divider at vertical center */}
       <div
+        className="hidden sm:block"
         style={{
           position: "absolute",
           left: "50%",
@@ -518,24 +514,18 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         </div>
       </div>
 
-      {/* ── RIGHT: direction arrow + price + AED ── */}
+      {/* ── BOTTOM ROW (mobile) / RIGHT (desktop): arrow + price + AED ── */}
       <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: "clamp(0.5rem,1.2vw,1.5rem)",
-          flexShrink: 0,
-          zIndex: 1,
-        }}
+        className="flex flex-row items-center justify-center sm:justify-end sm:flex-shrink-0 mt-2 sm:mt-0"
+        style={{ gap: "clamp(0.3rem,1vw,1.5rem)", zIndex: 1 }}
       >
         {/* Direction arrow */}
         {isTick && (
           <span
+            className="text-3xl sm:text-[clamp(1.8rem,5vh,6rem)]"
             style={{
               color: tickColor,
               fontWeight: 900,
-              fontSize: "clamp(1.8rem,5vh,6rem)",
               lineHeight: 1,
               animation: `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`,
               userSelect: "none",
@@ -546,14 +536,13 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         )}
 
         {/* Price + AED */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.4em" }}>
+        <div className="flex items-baseline" style={{ gap: "0.3em" }}>
           <span
-            className="tabular-nums"
+            className="tabular-nums text-5xl sm:text-[clamp(3rem,calc(5vh+4vw),9rem)]"
             style={{
               color: priceColor,
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(3rem,calc(5vh + 4vw),9rem)",
               lineHeight: 1,
               letterSpacing: "-0.03em",
               whiteSpace: "nowrap",
@@ -568,10 +557,10 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
             {fmt(price)}
           </span>
           <span
+            className="text-lg sm:text-[clamp(1rem,calc(1.5vh+1.2vw),2.5rem)]"
             style={{
               color: GOLD,
               fontWeight: 700,
-              fontSize: "clamp(1rem,calc(1.5vh + 1.2vw),2.5rem)",
               fontFamily: "sans-serif",
               opacity: 0.85,
               paddingBottom: "0.1em",
@@ -688,18 +677,18 @@ export default function ShowroomBoard() {
         `,
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        overflowX: "hidden",
       }}
     >
       <div
+        className="min-h-screen sm:h-screen overflow-y-auto sm:overflow-hidden"
         style={{
           maxWidth: 1600,
           width: "100%",
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
-          height: "100vh",
-          padding: "clamp(0.6rem,1.5vh,1.4rem) clamp(0.8rem,2.5vw,2.5rem)",
+          padding: "clamp(0.5rem,1.5vh,1.4rem) clamp(0.5rem,2.5vw,2.5rem)",
           gap: "clamp(0.4rem,1vh,0.9rem)",
           boxSizing: "border-box",
         }}
@@ -707,11 +696,9 @@ export default function ShowroomBoard() {
 
         {/* ── HEADER ───────────────────────────────────────────────────────── */}
         <div
+          className="flex flex-wrap items-center justify-between"
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
+            gap: "clamp(0.5rem,1vw,1rem)",
             paddingBottom: "clamp(0.4rem,0.9vh,0.8rem)",
             borderBottom: `1px solid ${GOLD}28`,
             flexShrink: 0,
@@ -870,16 +857,17 @@ export default function ShowroomBoard() {
 
         {/* ── FOOTER ───────────────────────────────────────────────────────── */}
         <div
+          className="flex items-center justify-between"
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
             flexShrink: 0,
             paddingTop: "clamp(0.2rem,0.5vh,0.4rem)",
             borderTop: `1px solid ${GOLD}18`,
+            gap: "0.5rem",
           }}
         >
+          {/* Formula text — hidden on mobile to save space */}
           <span
+            className="hidden sm:inline"
             style={{
               color: `${GOLD}55`,
               fontSize: "clamp(0.5rem,calc(0.45vh + 0.45vw),0.8rem)",
@@ -890,15 +878,29 @@ export default function ShowroomBoard() {
           >
             Prices in AED · Formula: (XAU/USD ÷ 31.1034768) × 3.6725 · Rates update every second
           </span>
+          {/* Mobile: just show "Prices in AED" */}
+          <span
+            className="sm:hidden"
+            style={{
+              color: `${GOLD}55`,
+              fontSize: "0.65rem",
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            Prices in AED
+          </span>
           {liveRates.adjustedBaseAedPerGram != null && (
             <span
               className="tabular-nums"
               style={{
                 color: `${GOLD}88`,
-                fontSize: "clamp(0.5rem,calc(0.45vh + 0.45vw),0.8rem)",
+                fontSize: "clamp(0.6rem,calc(0.45vh + 0.45vw),0.8rem)",
                 fontWeight: 700,
                 letterSpacing: "0.08em",
                 fontFamily: "monospace",
+                whiteSpace: "nowrap",
               }}
             >
               {liveRates.spreadPercent > 0
