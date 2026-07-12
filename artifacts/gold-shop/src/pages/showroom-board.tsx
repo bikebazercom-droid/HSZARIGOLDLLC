@@ -312,17 +312,13 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
       <div
         style={{
           position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%,-50%)",
-          width: "100%",
-          height: "100%",
+          inset: 0,
           background: `radial-gradient(ellipse 70% 80% at 20% 50%,${accent}08 0%,transparent 70%)`,
           pointerEvents: "none",
         }}
       />
 
-      {/* ── LEFT: icon + name + weight ── */}
+      {/* ── LEFT: icon + item name ── */}
       <div
         style={{
           display: "flex",
@@ -345,43 +341,69 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
           {iconForItem(item)}
         </div>
 
-        {/* Name + weight badge */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "clamp(0.4rem,1vh,1rem)" }}>
-          <div
-            style={{
-              color: accent,
-              fontWeight: 900,
-              fontSize: "clamp(1.4rem,calc(2vh + 1.5vw),3.5rem)",
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              textShadow: `0 0 50px ${accent}55`,
-              lineHeight: 1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {item.name}
-          </div>
-          <div
-            style={{
-              color: GOLD,
-              fontWeight: 800,
-              fontSize: "clamp(0.8rem,calc(1vh + 0.8vw),1.8rem)",
-              letterSpacing: "0.3em",
-              textTransform: "uppercase",
-              background: `${GOLD}14`,
-              border: `1px solid ${GOLD}44`,
-              borderRadius: "0.5rem",
-              padding: "clamp(0.2rem,0.5vh,0.5rem) clamp(0.8rem,1.5vw,1.5rem)",
-              display: "inline-block",
-              alignSelf: "flex-start",
-            }}
-          >
-            {item.weightLabel}
-          </div>
+        {/* Item name */}
+        <div
+          style={{
+            color: accent,
+            fontWeight: 900,
+            fontSize: "clamp(1.4rem,calc(1.8vh + 1.3vw),2.5rem)",
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            textShadow: `0 0 50px ${accent}55`,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.name}
         </div>
       </div>
 
-      {/* ── RIGHT: price ── */}
+      {/* ── CENTER: vertical divider + weight badge pinned to card midpoint ── */}
+      {/* Thin gold column separator */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: 0,
+          bottom: 0,
+          width: "1px",
+          transform: "translateX(-50%)",
+          background: `linear-gradient(180deg, transparent 0%, ${GOLD}28 25%, ${GOLD}28 75%, transparent 100%)`,
+          pointerEvents: "none",
+        }}
+      />
+      {/* Badge floats over the divider at vertical center */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%,-50%)",
+          zIndex: 2,
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          style={{
+            color: GOLD,
+            fontWeight: 800,
+            fontSize: "clamp(0.9rem,calc(1.1vh + 0.9vw),2rem)",
+            letterSpacing: "0.3em",
+            textTransform: "uppercase",
+            background: "#0d0d0d",
+            border: `1px solid ${GOLD}66`,
+            borderRadius: "0.5rem",
+            padding: "clamp(0.3rem,0.7vh,0.7rem) clamp(1rem,2vw,2.2rem)",
+            textAlign: "center",
+            whiteSpace: "nowrap",
+            boxShadow: `0 0 20px ${GOLD}22`,
+          }}
+        >
+          {item.weightLabel}
+        </div>
+      </div>
+
+      {/* ── RIGHT: direction arrow + price + AED ── */}
       <div
         style={{
           display: "flex",
