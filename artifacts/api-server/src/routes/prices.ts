@@ -66,6 +66,13 @@ interface LiveSpot {
 let liveSpot:   LiveSpot | null = null;
 let lastDbWriteAt: Date | null  = null;
 
+// True while a GoldAPI.io token is configured and the last poll succeeded.
+// When active, the Yahoo Finance fallback must NOT overwrite liveSpot — GoldAPI
+// is the authoritative source and Yahoo would introduce stale-price leakage
+// during the 15-second window between GoldAPI's 60s poll and Yahoo's 45s
+// staleness threshold.
+let goldApiActive = false;
+
 let dailyLowUsdPerOz:    number | null = null;
 let dailyHighUsdPerOz:   number | null = null;
 let dailyTrackingDateUTC: string | null = null;
@@ -143,6 +150,8 @@ async function pollGoldApi(): Promise<void> {
       signal: AbortSignal.timeout(15_000),
     });
     if (!resp.ok) {
+      // 401/403 means the token is invalid — deactivate so Yahoo can fill in
+      if (resp.status === 401 || resp.status === 403) goldApiActive = false;
       logger.warn({ status: resp.status }, "[goldapi] Request failed");
       return;
     }
@@ -186,6 +195,9 @@ async function pollGoldApi(): Promise<void> {
       dailyHighUsdPerOz,
       receivedAt: new Date(),
     };
+
+    // Mark GoldAPI as the active source — blocks Yahoo from overwriting liveSpot
+    goldApiActive = true;
 
     logger.info({ usdPerOz, askUsdPerOz, bidUsdPerOz, aedPerGram: aedPerGram.toFixed(4) }, "[goldapi] Price updated");
 
@@ -262,7 +274,9 @@ async function fetchYahooFinance(): Promise<void> {
       // ── Live spot fallback ─────────────────────────────────────────────────────
       // Use Yahoo's regularMarketPrice when Socket.IO is silent (stale or null).
       // Socket.IO ticks are always preferred — Yahoo is only the safety net.
-      if (price && Number.isFinite(price) && price > 1000) {
+      // NEVER overwrite liveSpot when GoldAPI is the active source: it polls
+      // every 60 s and Yahoo would clobber its price in the 45–60 s window.
+      if (price && Number.isFinite(price) && price > 1000 && !goldApiActive) {
         const isStale = !liveSpot || (Date.now() - liveSpot.receivedAt.getTime() > LIVE_SPOT_STALE_MS);
         if (isStale) {
           await loadAdminConfig();

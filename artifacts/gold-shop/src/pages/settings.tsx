@@ -18,6 +18,11 @@ import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key } 
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
 
+// Sentinel shown in the password input when a token is already stored in DB.
+// Any non-empty string works since the field renders bullet characters — this
+// constant is never sent to the API. It is ONLY used for UI state detection.
+const CONFIGURED_SENTINEL = "__token_configured__";
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -40,6 +45,9 @@ export default function SettingsPage() {
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
   const [showroomLogoUrl, setShowroomLogoUrl] = useState<string>("");
+  // goldApiToken holds the new token the user types, OR the sentinel when a
+  // token is already configured (so the password field shows bullet characters
+  // rather than appearing blank on page load / tab navigation).
   const [goldApiToken, setGoldApiToken] = useState<string>("");
 
   useEffect(() => {
@@ -56,17 +64,26 @@ export default function SettingsPage() {
       setLogoImageUrl(settings.logoImageUrl ?? "");
       setStampSignatureUrl(settings.stampSignatureUrl ?? "");
       setShowroomLogoUrl(settings.showroomLogoUrl ?? "");
+      // Pre-populate with sentinel so the password field shows bullet chars
+      // instead of an empty box — the raw token is never returned by the API.
+      setGoldApiToken(settings.goldApiTokenSet ? CONFIGURED_SENTINEL : "");
     }
   }, [settings]);
 
   const handleSaveGoldApi = () => {
+    // If the field still holds the sentinel (user never edited it), there is
+    // nothing to change — bail out to prevent an accidental no-op PATCH that
+    // could clear the token when the request body serialises "" for the field.
+    if (goldApiToken === CONFIGURED_SENTINEL) {
+      toast({
+        title: "No changes made",
+        description: "The existing token is already saved. Paste a new token to replace it, or clear the field to remove it.",
+      });
+      return;
+    }
     updateSettings.mutate({ data: { goldApiToken } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-        // Do NOT clear the field — keeping the masked value lets the user
-        // confirm their token is still present. On the next page load the
-        // field will be empty (we never return the raw token from the API)
-        // but the "Token configured" badge will confirm it is stored.
         toast({ title: "GoldAPI.io token saved", description: "Live pricing will use GoldAPI.io on the next 60-second tick." });
       },
       onError: (err: any) => {
@@ -563,8 +580,24 @@ export default function SettingsPage() {
               id="goldApiToken"
               type="password"
               value={goldApiToken}
+              onFocus={() => {
+                // When the user clicks into the field and it's showing the
+                // sentinel mask, clear it so they can type the new token.
+                if (goldApiToken === CONFIGURED_SENTINEL) setGoldApiToken("");
+              }}
+              onBlur={() => {
+                // If the user focused but typed nothing (accidentally clicked),
+                // restore the sentinel mask so the field doesn't look empty.
+                if (goldApiToken === "" && settings?.goldApiTokenSet) {
+                  setGoldApiToken(CONFIGURED_SENTINEL);
+                }
+              }}
               onChange={e => setGoldApiToken(e.target.value)}
-              placeholder={settings?.goldApiTokenSet ? "Enter new token to replace existing…" : "Paste your GoldAPI.io token here…"}
+              placeholder={
+                settings?.goldApiTokenSet
+                  ? "Paste new token to replace, or clear to remove…"
+                  : "Paste your GoldAPI.io token here…"
+              }
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground">
@@ -572,7 +605,7 @@ export default function SettingsPage() {
               <a href="https://www.goldapi.io" target="_blank" rel="noopener noreferrer" className="text-primary underline">
                 goldapi.io
               </a>
-              . To clear the token, save an empty field.
+              . To remove the token, clear the field and click Save API Settings.
             </p>
           </div>
 
