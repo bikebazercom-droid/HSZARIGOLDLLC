@@ -25,9 +25,9 @@ import {
 // Dubai local tola convention: 1 Tola = 11.664g → 10 Tola Bar = 116.64g
 const TOLA_BAR_GRAMS = 116.64;
 const PURITY_995     = 0.995;
-// livepriceofgold.com Dubai retail convention: 22K = 24K × 0.9180
-// (confirmed by reverse-engineering live sheet: 446.58 / 486.47 = 0.91800)
-const PURITY_22K     = 0.9180;
+// Scientific standard: 22K = 22/24 = 0.91666… ≈ 0.91667
+// Per the Dubai retail formula: Rate_22K = (Spot_USD × 3.6725 / 31.1034768) × (22/24)
+const PURITY_22K     = 22 / 24;  // 0.91666…
 const PURITY_21K     = 21 / 24;
 const PURITY_18K     = 18 / 24;
 

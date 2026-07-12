@@ -70,7 +70,7 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     formulaType: "spot_per_gram",
     weightGrams: null,
     weightLabel: "1GM",
-    purityFactor: "0.9180000",
+    purityFactor: "0.9166700",    // 22/24 = 0.91666… per scientific standard (Dubai retail)
     premiumOffsetAed: "0",
     tvVisible: true,
     isCore: true,
@@ -111,7 +111,30 @@ async function seedIfEmpty(): Promise<void> {
   }
 }
 
-seedIfEmpty();
+// ── One-time migration: correct JEWELLERY 22K purity from legacy 0.9180 → 0.91667 ─
+// The old seed used a Dubai-convention approximation (0.9180).
+// The scientifically correct value is 22/24 = 0.91666… (≈ 0.9166700).
+// This migration runs on every startup but is effectively a no-op once corrected.
+async function migratePurityFactors(): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ id: priceItemsTable.id, purityFactor: priceItemsTable.purityFactor })
+      .from(priceItemsTable)
+      .where(eq(priceItemsTable.name, "JEWELLERY 22K"))
+      .limit(1);
+    if (row && Math.abs(Number(row.purityFactor) - 0.9180) < 0.0001) {
+      await db
+        .update(priceItemsTable)
+        .set({ purityFactor: "0.9166700", updatedAt: new Date() })
+        .where(eq(priceItemsTable.id, row.id));
+      logger.info("[price-items] Migrated JEWELLERY 22K purity 0.9180 → 0.91667 (22/24)");
+    }
+  } catch (err) {
+    logger.warn({ err }, "[price-items] Purity migration failed");
+  }
+}
+
+seedIfEmpty().then(() => migratePurityFactors());
 
 // ── Serialisation helper ──────────────────────────────────────────────────────
 function toJson(row: typeof priceItemsTable.$inferSelect) {
