@@ -250,7 +250,7 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           textShadow: `0 0 20px ${GOLD}66`,
         }}
       >
-        Gold Spot
+        HAZARI GOLD LLC
       </div>
 
       {/* ── Always a rigid 2 × 2 grid — same on every screen size ───────────── */}
