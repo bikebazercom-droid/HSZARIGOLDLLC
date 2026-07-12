@@ -46,6 +46,16 @@ export interface SpotPrice {
      * @nullable
      */
   laborCostPercent?: number | null;
+  /**
+     * Fixed AED offset added to the live GOLD 9999 price on each tick.
+     * @nullable
+     */
+  gold9999Offset?: number | null;
+  /**
+     * Fixed AED offset added to the live Jewellery 22K price on each tick.
+     * @nullable
+     */
+  jewellery22kOffset?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

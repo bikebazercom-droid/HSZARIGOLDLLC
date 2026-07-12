@@ -45,6 +45,10 @@ export interface LiveRates {
   spreadPercent:      number;
   laborCostPercent:   number;
 
+  // ── Admin manual offsets (AED/g added after all formula math) ────────────────
+  gold9999Offset:     number;
+  jewellery22kOffset: number;
+
   // ── Spread+labor-adjusted rates (admin Prices page / invoice pricing only) ──
   // TV board computes per-item prices dynamically from baseAedPerGram +
   // each item's own formula params fetched from /prices/items/public.
@@ -78,6 +82,8 @@ const EMPTY_RATES: LiveRates = {
   dailyHighUsdPerOz:  null,
   spreadPercent:      0,
   laborCostPercent:   0,
+  gold9999Offset:     0,
+  jewellery22kOffset: 0,
   ttBar995Total:      null,
   ttBar9999Total:     null,
   gold9999Rate:       null,
@@ -119,11 +125,13 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
     //   marketBase   — pure (XAU_USD / 31.1034768) × 3.6725, no spread, no labor;
     //                  used by the TV board public display so it mirrors the
     //                  international spot exactly.
-    const adjustedBase = spot.aedPerGram;                               // full float
-    const marketBase   = spot.baseAedPerGram ?? spot.aedPerGram;        // raw before spread
-    const spreadPct    = spot.spreadPercent    ?? 0;
-    const laborPct     = spot.laborCostPercent ?? 0;
-    const laborMult    = 1 + laborPct / 100;
+    const adjustedBase    = spot.aedPerGram;                               // full float
+    const marketBase      = spot.baseAedPerGram ?? spot.aedPerGram;        // raw before spread
+    const spreadPct       = spot.spreadPercent    ?? 0;
+    const laborPct        = spot.laborCostPercent ?? 0;
+    const laborMult       = 1 + laborPct / 100;
+    const g9999Off        = spot.gold9999Offset      ?? 0;
+    const j22kOff         = spot.jewellery22kOffset  ?? 0;
 
     return {
       usdPerOz:          spot.usdPerOz ?? null,
@@ -136,16 +144,20 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       dailyHighUsdPerOz: spot.dailyHighUsdPerOz != null ? round2(spot.dailyHighUsdPerOz) : null,
       spreadPercent:     spreadPct,
       laborCostPercent:  laborPct,
+      gold9999Offset:    g9999Off,
+      jewellery22kOffset: j22kOff,
 
-      // ── Admin/invoice rates (spread + labor applied) ──────────────────────────
+      // ── Admin/invoice rates (spread + labor + manual offset applied) ──────────
       // Dubai convention: spot = 9999 rate, no 0.9999 factor; 995 discount applied only for 995 bars.
+      // Offsets are added AFTER all formula math so the admin's +/- adjustment is
+      // a simple flat AED amount on top of the fully computed price.
       ttBar995Total:   round2(adjustedBase * TOLA_BAR_GRAMS * PURITY_995),
       ttBar9999Total:  round2(adjustedBase * TOLA_BAR_GRAMS),
-      gold9999Rate:    round2(adjustedBase),
+      gold9999Rate:    round2(adjustedBase + g9999Off),
       goldKg9999Total: round2(adjustedBase * 1000),
       goldKg9999Rate:  round2(adjustedBase),
       kgBar995Total:   round2(adjustedBase * 1000 * PURITY_995),
-      gold22kRate:     round2(adjustedBase * PURITY_22K * laborMult),
+      gold22kRate:     round2(adjustedBase * PURITY_22K * laborMult + j22kOff),
       gold21kRate:     round2(adjustedBase * PURITY_21K * laborMult),
       gold18kRate:     round2(adjustedBase * PURITY_18K * laborMult),
 

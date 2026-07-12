@@ -61,6 +61,12 @@ export const pricesTable = pgTable("prices", {
   preLiveGold21kRate: numeric("pre_live_gold_21k_rate", { precision: 12, scale: 4 }),
   preLiveGold18kRate: numeric("pre_live_gold_18k_rate", { precision: 12, scale: 4 }),
   preLiveGold9999Rate: numeric("pre_live_gold_9999_rate", { precision: 12, scale: 4 }),
+  // ── Live rate manual offsets ───────────────────────────────────────────────
+  // AED amount added to the computed live price for each item type.
+  // Positive = premium, negative = discount. Applied after all spread/purity/labor.
+  gold9999Offset:    numeric("gold_9999_offset",    { precision: 12, scale: 4 }).notNull().default("0"),
+  jewellery22kOffset: numeric("jewellery_22k_offset", { precision: 12, scale: 4 }).notNull().default("0"),
+
   // TV board row visibility — admin can hide individual rows from the showroom TV
   tvShowTtBar995: boolean("tv_show_tt_bar_995").notNull().default(true),
   tvShowTtBar999: boolean("tv_show_tt_bar_999").notNull().default(true),

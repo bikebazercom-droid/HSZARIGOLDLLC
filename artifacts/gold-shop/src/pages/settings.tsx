@@ -3,6 +3,9 @@ import {
   useGetSettings,
   useUpdateSettings,
   getGetSettingsQueryKey,
+  useGetPrices,
+  useUpdatePrices,
+  getGetPricesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
@@ -14,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key, Power } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key, Power, Plus, Minus, Sliders } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
@@ -33,6 +36,9 @@ export default function SettingsPage() {
     query: { queryKey: getGetSettingsQueryKey() }
   });
   const updateSettings = useUpdateSettings();
+
+  const { data: prices } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
+  const updatePrices = useUpdatePrices();
 
   const [companyName, setCompanyName] = useState("");
   const [tagline, setTagline] = useState("");
@@ -53,6 +59,38 @@ export default function SettingsPage() {
   // goldApiEnabled mirrors the DB boolean — toggled immediately without a
   // separate "Save" click so it feels instantaneous.
   const [goldApiEnabled, setGoldApiEnabled] = useState<boolean>(true);
+
+  // ── Live rate manual offsets ───────────────────────────────────────────────
+  const [gold9999Offset, setGold9999Offset] = useState<number>(0);
+  const [jewellery22kOffset, setJewellery22kOffset] = useState<number>(0);
+  const [savingOffsets, setSavingOffsets] = useState(false);
+
+  useEffect(() => {
+    if (prices) {
+      setGold9999Offset((prices as any).gold9999Offset ?? 0);
+      setJewellery22kOffset((prices as any).jewellery22kOffset ?? 0);
+    }
+  }, [prices]);
+
+  const handleSaveOffsets = () => {
+    setSavingOffsets(true);
+    updatePrices.mutate(
+      { data: { gold9999Offset, jewellery22kOffset } as any },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+          toast({
+            title: "Live Rate Offsets Saved",
+            description: "The TV board and price cards will reflect the new adjustments on the next 1-second tick.",
+          });
+        },
+        onError: (err: any) => {
+          toast({ title: "Failed to save offsets", description: err.message, variant: "destructive" });
+        },
+        onSettled: () => setSavingOffsets(false),
+      },
+    );
+  };
 
   useEffect(() => {
     if (settings) {
@@ -667,6 +705,111 @@ export default function SettingsPage() {
             >
               <Key className="w-4 h-4" />
               {updateSettings.isPending ? "Saving…" : "Save API Settings"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Live Rate Manual Offset ──────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Sliders className="w-5 h-5 text-primary" />
+            <CardTitle>Live Rate Manual Offset</CardTitle>
+          </div>
+          <CardDescription>
+            Add or subtract a flat AED amount to the computed live price for each item type.
+            Applied every second — the TV board and price cards update instantly.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* GOLD 9999 */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">GOLD 9999 Live Adjust (AED/g)</Label>
+            <p className="text-xs text-muted-foreground">
+              Final Price = Live Dubai Rate + this offset. E.g. +2 adds AED 2.00 per gram.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setGold9999Offset(v => Math.round((v - 0.5) * 100) / 100)}
+                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <div className="relative flex-1 max-w-[180px]">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={gold9999Offset}
+                  onChange={e => setGold9999Offset(parseFloat(e.target.value) || 0)}
+                  className="pl-14 text-base font-bold h-10 text-center"
+                  style={{ fontFamily: "monospace" }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setGold9999Offset(v => Math.round((v + 0.5) * 100) / 100)}
+                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${gold9999Offset > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : gold9999Offset < 0 ? "bg-red-50 text-red-700 border border-red-200" : "bg-muted text-muted-foreground"}`}>
+                {gold9999Offset > 0 ? `+${gold9999Offset.toFixed(2)}` : gold9999Offset.toFixed(2)} AED
+              </span>
+            </div>
+          </div>
+
+          {/* JEWELLERY 22K */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">JEWELLERY 22K Live Adjust (AED/g)</Label>
+            <p className="text-xs text-muted-foreground">
+              Final Price = (Spot × 22/24 × labor%) + this offset. E.g. −1.5 subtracts AED 1.50 per gram.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setJewellery22kOffset(v => Math.round((v - 0.5) * 100) / 100)}
+                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <div className="relative flex-1 max-w-[180px]">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={jewellery22kOffset}
+                  onChange={e => setJewellery22kOffset(parseFloat(e.target.value) || 0)}
+                  className="pl-14 text-base font-bold h-10 text-center"
+                  style={{ fontFamily: "monospace" }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setJewellery22kOffset(v => Math.round((v + 0.5) * 100) / 100)}
+                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${jewellery22kOffset > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : jewellery22kOffset < 0 ? "bg-red-50 text-red-700 border border-red-200" : "bg-muted text-muted-foreground"}`}>
+                {jewellery22kOffset > 0 ? `+${jewellery22kOffset.toFixed(2)}` : jewellery22kOffset.toFixed(2)} AED
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <p className="text-xs text-muted-foreground">
+              Offset = 0 means no adjustment — the raw computed live price is used as-is.
+            </p>
+            <Button
+              onClick={handleSaveOffsets}
+              disabled={savingOffsets}
+              className="gap-2 min-w-36"
+            >
+              <Sliders className="w-4 h-4" />
+              {savingOffsets ? "Saving…" : "Save Offsets"}
             </Button>
           </div>
         </CardContent>

@@ -229,6 +229,8 @@ export const GetPricesResponse = zod.object({
   "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
   "spreadPremiumPercent": zod.number().describe('Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
   "laborCostPercent": zod.number().describe('Admin-configurable labor markup (%) applied to jewelry rows (22K\/21K\/18K) on top of the spread-adjusted base.'),
+  "gold9999Offset": zod.number().optional().describe('Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount).'),
+  "jewellery22kOffset": zod.number().optional().describe('Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount).'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -273,6 +275,8 @@ export const UpdatePricesBody = zod.object({
   "goldKg9999Rate": zod.number().optional(),
   "spreadPremiumPercent": zod.number().nullish().describe('Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
   "laborCostPercent": zod.number().nullish().describe('Labor markup percentage for jewelry rows (22K\/21K\/18K).'),
+  "gold9999Offset": zod.number().nullish().describe('Fixed AED offset added to live GOLD 9999 price.'),
+  "jewellery22kOffset": zod.number().nullish().describe('Fixed AED offset added to live Jewellery 22K price.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -304,6 +308,8 @@ export const UpdatePricesResponse = zod.object({
   "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
   "spreadPremiumPercent": zod.number().describe('Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
   "laborCostPercent": zod.number().describe('Admin-configurable labor markup (%) applied to jewelry rows (22K\/21K\/18K) on top of the spread-adjusted base.'),
+  "gold9999Offset": zod.number().optional().describe('Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount).'),
+  "jewellery22kOffset": zod.number().optional().describe('Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount).'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
@@ -343,6 +349,8 @@ export const GetPricesSpotResponse = zod.object({
   "dailyHighUsdPerOz": zod.number().nullish().describe('Highest usdPerOz tick observed since UTC midnight today.'),
   "spreadPercent": zod.number().nullish().describe('Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.'),
   "laborCostPercent": zod.number().nullish().describe('Currently active admin labor markup (%) for jewelry rows.'),
+  "gold9999Offset": zod.number().nullish().describe('Fixed AED offset added to the live GOLD 9999 price on each tick.'),
+  "jewellery22kOffset": zod.number().nullish().describe('Fixed AED offset added to the live Jewellery 22K price on each tick.'),
   "updatedAt": zod.string().describe('ISO-8601 timestamp of when this price was fetched.')
 })
 

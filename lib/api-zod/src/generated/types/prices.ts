@@ -26,6 +26,10 @@ export interface Prices {
   spreadPremiumPercent: number;
   /** Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base. */
   laborCostPercent: number;
+  /** Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount). */
+  gold9999Offset?: number;
+  /** Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount). */
+  jewellery22kOffset?: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;

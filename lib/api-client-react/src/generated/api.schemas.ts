@@ -192,6 +192,10 @@ export interface Prices {
   spreadPremiumPercent: number;
   /** Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base. */
   laborCostPercent: number;
+  /** Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount). */
+  gold9999Offset?: number;
+  /** Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount). */
+  jewellery22kOffset?: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
   liveModeConnected: boolean;
@@ -302,6 +306,16 @@ export interface PricesInput {
      * @nullable
      */
   laborCostPercent?: number | null;
+  /**
+     * Fixed AED offset added to live GOLD 9999 price.
+     * @nullable
+     */
+  gold9999Offset?: number | null;
+  /**
+     * Fixed AED offset added to live Jewellery 22K price.
+     * @nullable
+     */
+  jewellery22kOffset?: number | null;
   customDescriptions?: CustomDescription[];
   /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
   manualInvoiceMode?: boolean;
@@ -536,6 +550,16 @@ export interface SpotPrice {
      * @nullable
      */
   laborCostPercent?: number | null;
+  /**
+     * Fixed AED offset added to the live GOLD 9999 price on each tick.
+     * @nullable
+     */
+  gold9999Offset?: number | null;
+  /**
+     * Fixed AED offset added to the live Jewellery 22K price on each tick.
+     * @nullable
+     */
+  jewellery22kOffset?: number | null;
   /** ISO-8601 timestamp of when this price was fetched. */
   updatedAt: string;
 }

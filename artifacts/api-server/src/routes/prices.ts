@@ -29,20 +29,24 @@ const BID_ASK_SPREAD_USD = 0.30;
 
 // ── Admin-configurable spread & labor (loaded from DB, updated via PATCH/PUT) ─
 // spreadPremiumAed DB column is reused to store the spread percentage.
-let adminSpreadPercent = 0;
-let adminLaborPercent  = 0;
-let adminConfigLoaded  = false;
+let adminSpreadPercent     = 0;
+let adminLaborPercent      = 0;
+let adminGold9999Offset    = 0;
+let adminJewellery22kOffset = 0;
+let adminConfigLoaded      = false;
 
 async function loadAdminConfig(): Promise<void> {
   if (adminConfigLoaded) return;
   try {
     const [row] = await db.select().from(pricesTable).limit(1);
     if (row) {
-      adminSpreadPercent = parseFloat(String(row.spreadPremiumAed)) || 0;
-      adminLaborPercent  = parseFloat(String(row.laborCostPercent))  || 0;
+      adminSpreadPercent      = parseFloat(String(row.spreadPremiumAed))    || 0;
+      adminLaborPercent       = parseFloat(String(row.laborCostPercent))     || 0;
+      adminGold9999Offset     = parseFloat(String(row.gold9999Offset))       || 0;
+      adminJewellery22kOffset = parseFloat(String(row.jewellery22kOffset))   || 0;
     }
     adminConfigLoaded = true;
-    logger.info({ adminSpreadPercent, adminLaborPercent }, "[live-gold] Admin config loaded");
+    logger.info({ adminSpreadPercent, adminLaborPercent, adminGold9999Offset, adminJewellery22kOffset }, "[live-gold] Admin config loaded");
   } catch (err) {
     logger.warn({ err }, "[live-gold] Failed to load admin config — using 0,0");
   }
@@ -412,6 +416,8 @@ function parsePrices(p: typeof pricesTable.$inferSelect) {
     goldKg9999Rate:     Number(p.goldKg9999Rate),
     spreadPremiumPercent: parseFloat(String(p.spreadPremiumAed)) || 0,
     laborCostPercent:   parseFloat(String(p.laborCostPercent))   || 0,
+    gold9999Offset:     parseFloat(String(p.gold9999Offset))     || 0,
+    jewellery22kOffset: parseFloat(String(p.jewellery22kOffset)) || 0,
     customDescriptions,
     updatedAt:          p.updatedAt.toISOString(),
     liveModeConnected:  p.liveModeConnected,
@@ -471,9 +477,11 @@ publicPricesRouter.get("/prices/spot", async (_req, res): Promise<void> => {
       askUsdPerOz:       liveSpot.askUsdPerOz,
       dailyLowUsdPerOz:  liveSpot.dailyLowUsdPerOz,
       dailyHighUsdPerOz: liveSpot.dailyHighUsdPerOz,
-      spreadPercent:     adminSpreadPercent,
-      laborCostPercent:  adminLaborPercent,
-      updatedAt:         liveSpot.receivedAt.toISOString(),
+      spreadPercent:       adminSpreadPercent,
+      laborCostPercent:    adminLaborPercent,
+      gold9999Offset:      adminGold9999Offset,
+      jewellery22kOffset:  adminJewellery22kOffset,
+      updatedAt:           liveSpot.receivedAt.toISOString(),
     });
     return;
   }
@@ -492,15 +500,17 @@ publicPricesRouter.get("/prices/spot", async (_req, res): Promise<void> => {
       const usdPerOz = (rawBase / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
       res.json({
         usdPerOz,
-        aedPerGram:        base,
-        baseAedPerGram:    rawBase,
-        bidUsdPerOz:       null,
-        askUsdPerOz:       null,
-        dailyLowUsdPerOz:  null,
-        dailyHighUsdPerOz: null,
-        spreadPercent:     adminSpreadPercent,
-        laborCostPercent:  adminLaborPercent,
-        updatedAt:         prices.updatedAt.toISOString(),
+        aedPerGram:          base,
+        baseAedPerGram:      rawBase,
+        bidUsdPerOz:         null,
+        askUsdPerOz:         null,
+        dailyLowUsdPerOz:    null,
+        dailyHighUsdPerOz:   null,
+        spreadPercent:       adminSpreadPercent,
+        laborCostPercent:    adminLaborPercent,
+        gold9999Offset:      adminGold9999Offset,
+        jewellery22kOffset:  adminJewellery22kOffset,
+        updatedAt:           prices.updatedAt.toISOString(),
       });
       return;
     }
@@ -578,6 +588,20 @@ async function applyUpdates(body: Record<string, unknown>) {
     if (Number.isFinite(v)) {
       updates.laborCostPercent = String(v);
       adminLaborPercent = v;
+    }
+  }
+  if (body.gold9999Offset != null) {
+    const v = Number(body.gold9999Offset);
+    if (Number.isFinite(v)) {
+      updates.gold9999Offset = String(v);
+      adminGold9999Offset = v;
+    }
+  }
+  if (body.jewellery22kOffset != null) {
+    const v = Number(body.jewellery22kOffset);
+    if (Number.isFinite(v)) {
+      updates.jewellery22kOffset = String(v);
+      adminJewellery22kOffset = v;
     }
   }
 
