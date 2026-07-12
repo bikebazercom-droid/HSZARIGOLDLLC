@@ -430,7 +430,6 @@ export default function Prices() {
     label: string; sublabel: string; image: string;
     fieldKey: RateKey; tvVisibilityKey?: TvVisibilityKey;
   }> = [
-    { label: "TT. BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBarRate", tvVisibilityKey: "tvShowTtBar995" },
     { label: "TT. BAR (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
     { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate", tvVisibilityKey: "tvShowGold9999" },
     { label: "GOLD KG (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram (TV shows 1KG total)", image: singleGoldBarImg, fieldKey: "goldKg9999Rate", tvVisibilityKey: "tvShowGoldKg9999" },
