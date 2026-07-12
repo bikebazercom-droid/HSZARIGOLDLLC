@@ -72,16 +72,24 @@ interface PricesData {
 // Names use the "(purity)" suffix convention so staff can see the fineness
 // at a glance and the rate resolver can match unambiguously.
 const LIVE_ASSET_DESCRIPTIONS = [
-  "TT. BAR (0.995)",
   "TT. BAR (0.9999)",
   "GOLD (0.9999)",
-  "KG BAR (0.995)",
   "KG BAR (0.9999)",
+  "KG BAR (0.995)",
   "Gold Jewelry 22K",
   "Gold Jewelry 21K",
   "Gold Jewelry 18K",
   "Silver",
 ] as const;
+
+// Visual-only display labels for the dropdown — underlying values (above) stay
+// canonical so rate resolution is unaffected.
+const DESC_DISPLAY_LABEL: Record<string, string> = {
+  "TT. BAR (0.9999)": "TT. BAR",
+  "GOLD (0.9999)":    "GOLD",
+  "KG BAR (0.9999)":  "GOLD KG",
+  "KG BAR (0.995)":   "KG BAR",
+};
 
 // Gross Weight is always entered manually — no description ever auto-fills a
 // default weight. The user must type the exact weight for every line item.
@@ -671,9 +679,9 @@ export default function NewInvoice() {
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                             <SelectContent>
-                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Live-Priced Assets</div>
+                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Stock Description</div>
                               {LIVE_ASSET_DESCRIPTIONS.map(d => (
-                                <SelectItem key={d} value={d}>{d}</SelectItem>
+                                <SelectItem key={d} value={d}>{DESC_DISPLAY_LABEL[d] ?? d}</SelectItem>
                               ))}
                               <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">Other</div>
                               {(prices?.customDescriptions as {name:string;rate:number}[] ?? []).map(d => (
