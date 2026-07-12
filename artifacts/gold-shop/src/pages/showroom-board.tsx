@@ -396,7 +396,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
 
   return (
     <div
-      className="flex flex-col sm:flex-row sm:items-center sm:justify-between min-h-36 sm:min-h-0"
+      className="flex flex-row items-center justify-between"
       style={{
         flex: 1,
         position: "relative",
@@ -405,7 +405,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         borderLeft: `5px solid ${accent}`,
         borderRadius: "clamp(0.5rem,1vw,1rem)",
         boxShadow: `0 0 80px -25px ${accent}33, 0 8px 40px -12px #000000cc`,
-        padding: "clamp(0.75rem,3vh,3rem) clamp(1rem,4vw,5rem)",
+        padding: "clamp(0.5rem,2.5vh,3rem) clamp(0.75rem,3vw,5rem)",
         overflow: "hidden",
       }}
     >
@@ -419,47 +419,52 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         }}
       />
 
-      {/* ── TOP ROW (mobile) / LEFT (desktop): icon + name + mobile weight badge ── */}
+      {/* ── LEFT: icon + name + weight badge (always horizontal) ──────────────── */}
       <div
-        className="flex flex-row items-center justify-between sm:justify-start sm:flex-shrink-0"
-        style={{ gap: "clamp(0.6rem,2vw,3rem)", zIndex: 1 }}
+        className="flex flex-row items-center flex-shrink-0"
+        style={{ gap: "clamp(0.35rem,1.5vw,3rem)", zIndex: 1 }}
       >
         {/* Icon */}
         <div
-          className="w-10 h-10 sm:w-[clamp(3.5rem,7vh,8rem)] sm:h-[clamp(3.5rem,7vh,8rem)]"
-          style={{ opacity: 0.8, flexShrink: 0 }}
+          style={{
+            width: "clamp(1.8rem,5vw,8rem)",
+            height: "clamp(1.8rem,5vw,8rem)",
+            opacity: 0.8,
+            flexShrink: 0,
+          }}
         >
           {iconForItem(item)}
         </div>
 
         {/* Item name */}
         <div
-          className="flex-1 sm:flex-none text-xl sm:text-[clamp(1.4rem,calc(1.8vh+1.3vw),2.5rem)]"
           style={{
             color: accent,
             fontWeight: 900,
-            letterSpacing: "0.15em",
+            fontSize: "clamp(0.65rem,calc(1.3vw+0.9vh),2.5rem)",
+            letterSpacing: "0.12em",
             textTransform: "uppercase",
             textShadow: `0 0 50px ${accent}55`,
             lineHeight: 1,
+            whiteSpace: "nowrap",
           }}
         >
           {item.name}
         </div>
 
-        {/* Weight badge — mobile only (inline, right of name) */}
+        {/* Weight badge — always visible, inline right of name */}
         <div
           className="sm:hidden flex-shrink-0"
           style={{
             color: GOLD,
             fontWeight: 700,
-            fontSize: "0.7rem",
-            letterSpacing: "0.18em",
+            fontSize: "clamp(0.5rem,1.8vw,0.8rem)",
+            letterSpacing: "0.15em",
             textTransform: "uppercase",
             background: "#0d0d0d",
             border: `1px solid ${GOLD}55`,
-            borderRadius: "0.35rem",
-            padding: "0.18rem 0.5rem",
+            borderRadius: "0.3rem",
+            padding: "0.15rem 0.4rem",
             whiteSpace: "nowrap",
           }}
         >
@@ -512,18 +517,18 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         </div>
       </div>
 
-      {/* ── BOTTOM ROW (mobile) / RIGHT (desktop): arrow + price + AED ── */}
+      {/* ── RIGHT: arrow + price + AED (always horizontal, fluid sizing) ── */}
       <div
-        className="flex flex-row items-center justify-center sm:justify-end sm:flex-shrink-0 mt-2 sm:mt-0"
-        style={{ gap: "clamp(0.3rem,1vw,1.5rem)", zIndex: 1 }}
+        className="flex flex-row items-center justify-end flex-shrink-0"
+        style={{ gap: "clamp(0.2rem,0.8vw,1.5rem)", zIndex: 1 }}
       >
         {/* Direction arrow */}
         {isTick && (
           <span
-            className="text-3xl sm:text-[clamp(1.8rem,5vh,6rem)]"
             style={{
               color: tickColor,
               fontWeight: 900,
+              fontSize: "clamp(0.9rem,calc(1.8vw+1.5vh),6rem)",
               lineHeight: 1,
               animation: `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`,
               userSelect: "none",
@@ -534,13 +539,14 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         )}
 
         {/* Price + AED */}
-        <div className="flex items-baseline" style={{ gap: "0.3em" }}>
+        <div className="flex items-baseline" style={{ gap: "0.25em" }}>
           <span
-            className="tabular-nums text-5xl sm:text-[clamp(3rem,calc(5vh+4vw),9rem)]"
+            className="tabular-nums"
             style={{
               color: priceColor,
               fontFamily: "monospace",
               fontWeight: 900,
+              fontSize: "clamp(1.4rem,calc(3.5vw+2vh),9rem)",
               lineHeight: 1,
               letterSpacing: "-0.03em",
               whiteSpace: "nowrap",
@@ -555,13 +561,14 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
             {fmt(price)}
           </span>
           <span
-            className="text-lg sm:text-[clamp(1rem,calc(1.5vh+1.2vw),2.5rem)]"
             style={{
               color: GOLD,
               fontWeight: 700,
               fontFamily: "sans-serif",
+              fontSize: "clamp(0.6rem,calc(1.2vw+0.9vh),2.5rem)",
               opacity: 0.85,
               paddingBottom: "0.1em",
+              whiteSpace: "nowrap",
             }}
           >
             AED
@@ -863,7 +870,7 @@ export default function ShowroomBoard() {
             gap: "0.5rem",
           }}
         >
-          {/* Formula text — hidden on mobile to save space */}
+          {/* Formula text — full on desktop, abbreviated on mobile */}
           <span
             className="hidden sm:inline"
             style={{
@@ -872,19 +879,22 @@ export default function ShowroomBoard() {
               fontWeight: 600,
               letterSpacing: "0.1em",
               textTransform: "uppercase",
+              whiteSpace: "nowrap",
             }}
           >
             Prices in AED · Formula: (XAU/USD ÷ 31.1034768) × 3.6725 · Rates update every second
           </span>
-          {/* Mobile: just show "Prices in AED" */}
           <span
             className="sm:hidden"
             style={{
               color: `${GOLD}55`,
-              fontSize: "0.65rem",
+              fontSize: "clamp(0.5rem,1.8vw,0.65rem)",
               fontWeight: 600,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             Prices in AED
