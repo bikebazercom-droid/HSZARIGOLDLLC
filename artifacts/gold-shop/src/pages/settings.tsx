@@ -63,7 +63,10 @@ export default function SettingsPage() {
     updateSettings.mutate({ data: { goldApiToken } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-        setGoldApiToken("");
+        // Do NOT clear the field — keeping the masked value lets the user
+        // confirm their token is still present. On the next page load the
+        // field will be empty (we never return the raw token from the API)
+        // but the "Token configured" badge will confirm it is stored.
         toast({ title: "GoldAPI.io token saved", description: "Live pricing will use GoldAPI.io on the next 60-second tick." });
       },
       onError: (err: any) => {

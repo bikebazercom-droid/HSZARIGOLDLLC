@@ -40,9 +40,31 @@ router.put("/settings", async (req, res): Promise<void> => {
     showroomLogoUrl?: string;
     goldApiToken?: string;
   };
+
+  // Build the patch explicitly — only include keys that were actually sent in
+  // the request body. Passing req.body directly to Drizzle's .set() can
+  // accidentally null out columns (e.g. goldApiToken) when the client omits
+  // them but Drizzle maps the missing key to NULL. This guards against that.
+  type Patch = Partial<typeof companySettingsTable.$inferInsert>;
+  const patch: Patch = {};
+  if (body.companyName       !== undefined) patch.companyName       = body.companyName;
+  if (body.tagline           !== undefined) patch.tagline           = body.tagline;
+  if (body.address           !== undefined) patch.address           = body.address;
+  if (body.phone             !== undefined) patch.phone             = body.phone;
+  if (body.email             !== undefined) patch.email             = body.email;
+  if (body.trn               !== undefined) patch.trn               = body.trn;
+  if (body.locationUrl       !== undefined) patch.locationUrl       = body.locationUrl;
+  if (body.logoType          !== undefined) patch.logoType          = body.logoType;
+  if (body.logoInitial       !== undefined) patch.logoInitial       = body.logoInitial;
+  if (body.logoImageUrl      !== undefined) patch.logoImageUrl      = body.logoImageUrl;
+  if (body.stampSignatureUrl !== undefined) patch.stampSignatureUrl = body.stampSignatureUrl;
+  if (body.showroomLogoUrl   !== undefined) patch.showroomLogoUrl   = body.showroomLogoUrl;
+  // goldApiToken: only touch when explicitly sent — empty string clears the token.
+  if (body.goldApiToken !== undefined) patch.goldApiToken = body.goldApiToken || null;
+
   const [updated] = await db
     .update(companySettingsTable)
-    .set(body)
+    .set(patch)
     .where(eq(companySettingsTable.id, settings.id))
     .returning();
   res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
