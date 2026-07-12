@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import hazariLogoImg from "@assets/photo_2026-07-12_18-20-48-removebg-preview_1783860252480.png";
+import hazariLogoImg from "@assets/11-removebg-preview_1783860859844.png";
 import { useLivePrice } from "@/context/live-price";
 import {
   useGetPublicSettings,
