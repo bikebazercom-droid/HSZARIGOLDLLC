@@ -430,10 +430,10 @@ export default function Prices() {
     label: string; sublabel: string; image: string;
     fieldKey: RateKey; tvVisibilityKey?: TvVisibilityKey;
   }> = [
-    { label: "TT. BAR (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
-    { label: "GOLD (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate", tvVisibilityKey: "tvShowGold9999" },
-    { label: "GOLD KG (0.9999)", sublabel: "Purity 0.9999 — Rate per 1 Gram (TV shows 1KG total)", image: singleGoldBarImg, fieldKey: "goldKg9999Rate", tvVisibilityKey: "tvShowGoldKg9999" },
-    { label: "KG BAR (0.995)", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate", tvVisibilityKey: "tvShowKgBar995" },
+    { label: "TT. BAR", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: tenTolaBarImg, fieldKey: "ttBar24kRate", tvVisibilityKey: "tvShowTtBar999" },
+    { label: "GOLD", sublabel: "Purity 0.9999 — Rate per 1 Gram", image: singleGoldBarImg, fieldKey: "gold9999Rate", tvVisibilityKey: "tvShowGold9999" },
+    { label: "GOLD KG", sublabel: "Purity 0.9999 — Rate per 1 Gram (TV shows 1KG total)", image: singleGoldBarImg, fieldKey: "goldKg9999Rate", tvVisibilityKey: "tvShowGoldKg9999" },
+    { label: "KG BAR", sublabel: "Purity 0.995 — Rate per 1 Gram", image: goldKiloBrickImg, fieldKey: "kgBarRate", tvVisibilityKey: "tvShowKgBar995" },
     { label: "Silver (0.999)", sublabel: "Purity 0.999 — Rate per 1 Gram", image: goldBarStackImg, fieldKey: "silverPricePerGram" },
     { label: "Gold Jewelry 22K", sublabel: "Purity 0.916 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold22kRate", tvVisibilityKey: "tvShowGold22k" },
     { label: "Gold Jewelry 21K", sublabel: "Purity 0.875 — Rate per 1 Gram", image: jewelryRingImg, fieldKey: "gold21kRate", tvVisibilityKey: "tvShowGold21k" },
@@ -447,7 +447,7 @@ export default function Prices() {
         <div className="flex items-center gap-3">
           <TrendingUp className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-primary">Live Prices</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">Stock Description</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Daily Rates — update each metal independently</p>
           </div>
         </div>
