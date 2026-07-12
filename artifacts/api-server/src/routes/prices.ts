@@ -228,7 +228,12 @@ interface YahooChartResponse {
 // Yahoo Finance v8 chart requires a browser-like User-Agent (v7/quote now returns 401)
 const YAHOO_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-async function fetchDailyHighLow(): Promise<void> {
+// LIVE_SPOT_STALE_MS: how long to wait for the Socket.IO feed before falling
+// back to Yahoo Finance. Socket.IO ticks every few seconds when connected;
+// 45 s of silence means the feed is down and we should use Yahoo.
+const LIVE_SPOT_STALE_MS = 45_000;
+
+async function fetchYahooFinance(): Promise<void> {
   const endpoints = [
     "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
     "https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
@@ -239,31 +244,61 @@ async function fetchDailyHighLow(): Promise<void> {
         headers: { "User-Agent": YAHOO_UA, "Accept": "application/json" },
         signal: AbortSignal.timeout(12_000),
       });
-      if (!resp.ok) { logger.warn({ status: resp.status, url }, "[daily-range] HTTP error"); continue; }
+      if (!resp.ok) { logger.warn({ status: resp.status, url }, "[yahoo] HTTP error"); continue; }
       const data = await resp.json() as YahooChartResponse;
-      const meta = data?.chart?.result?.[0]?.meta;
-      const high = meta?.regularMarketDayHigh;
-      const low  = meta?.regularMarketDayLow;
+      const meta  = data?.chart?.result?.[0]?.meta;
+      const high  = meta?.regularMarketDayHigh;
+      const low   = meta?.regularMarketDayLow;
+      const price = meta?.regularMarketPrice;
+
+      // ── Daily H/L ─────────────────────────────────────────────────────────────
       if (high && low && Number.isFinite(high) && Number.isFinite(low) && high > 1000 && low > 1000) {
-        // Expand running range — never shrink it (live ticks may already be wider)
         if (dailyHighUsdPerOz == null || high > dailyHighUsdPerOz) dailyHighUsdPerOz = high;
         if (dailyLowUsdPerOz  == null || low  < dailyLowUsdPerOz)  dailyLowUsdPerOz  = low;
-        // Sync the date guard so trackDailyRange doesn't zero out our seeded values
         dailyTrackingDateUTC = todayUTC();
-        logger.info({ high, low }, "[daily-range] Daily H/L seeded from Yahoo Finance GC=F");
-        return;
+        logger.info({ high, low }, "[yahoo] Daily H/L updated from GC=F");
       }
-      logger.warn({ meta }, "[daily-range] Unexpected Yahoo Finance shape");
+
+      // ── Live spot fallback ─────────────────────────────────────────────────────
+      // Use Yahoo's regularMarketPrice when Socket.IO is silent (stale or null).
+      // Socket.IO ticks are always preferred — Yahoo is only the safety net.
+      if (price && Number.isFinite(price) && price > 1000) {
+        const isStale = !liveSpot || (Date.now() - liveSpot.receivedAt.getTime() > LIVE_SPOT_STALE_MS);
+        if (isStale) {
+          await loadAdminConfig();
+          const askUsdPerOz   = price + ASK_OFFSET_USD;
+          const bidUsdPerOz   = askUsdPerOz - BID_ASK_SPREAD_USD;
+          const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+          const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
+          trackDailyRange(price);
+          liveSpot = {
+            rawAedPerGram,
+            aedPerGram,
+            baseAedPerGram: rawAedPerGram,
+            usdPerOz:       price,
+            bidUsdPerOz,
+            askUsdPerOz,
+            dailyLowUsdPerOz,
+            dailyHighUsdPerOz,
+            receivedAt: new Date(),
+          };
+          logger.info({ usdPerOz: price, aedPerGram: aedPerGram.toFixed(4) }, "[yahoo] liveSpot refreshed (Socket.IO fallback)");
+          broadcast("PRICE_MUTATION");
+        }
+      }
+      return;
     } catch (err) {
-      logger.warn({ err, url }, "[daily-range] fetch failed — trying next endpoint");
+      logger.warn({ err, url }, "[yahoo] fetch failed — trying next endpoint");
     }
   }
-  logger.warn("[daily-range] All Yahoo Finance endpoints failed — H/L will track from current session only");
+  logger.warn("[yahoo] All Yahoo Finance endpoints failed");
 }
 
-// Seed immediately on startup, then refresh every 5 minutes
-fetchDailyHighLow();
-setInterval(fetchDailyHighLow, 5 * 60 * 1000);
+// Fetch immediately on startup, then every 30 s.
+// — When Socket.IO is live: only the H/L fields are updated (liveSpot.receivedAt is fresh).
+// — When Socket.IO is silent: liveSpot is refreshed from Yahoo's regularMarketPrice.
+fetchYahooFinance();
+setInterval(fetchYahooFinance, 30_000);
 
 liveSocket.on("update", (raw: string) => {
   try {
