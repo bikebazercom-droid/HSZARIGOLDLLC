@@ -250,7 +250,7 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           textShadow: `0 0 20px ${GOLD}66`,
         }}
       >
-        HAZARI GOLD LLC
+        GOLD SPOT
       </div>
 
       {/* ── Always a rigid 2 × 2 grid — same on every screen size ───────────── */}
@@ -701,29 +701,42 @@ export default function ShowroomBoard() {
 
         {/* ── HEADER ───────────────────────────────────────────────────────── */}
         <div
-          className="flex flex-wrap items-center justify-between"
           style={{
-            gap: "clamp(0.5rem,1vw,1rem)",
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             paddingBottom: "clamp(0.4rem,0.9vh,0.8rem)",
             borderBottom: `1px solid ${GOLD}28`,
             flexShrink: 0,
+            minHeight: "clamp(4rem,12vh,9rem)",
           }}
         >
-          {/* Brand — Hazari Gold banner image */}
+          {/* Brand — full-width centered banner image */}
           <img
             src={`${import.meta.env.BASE_URL}hazari-gold-banner.jpg`}
             alt="Hazari Gold LLC"
             style={{
-              height: "clamp(2.8rem,8vh,6rem)",
-              maxWidth: "min(55vw,320px)",
+              height: "clamp(3.5rem,11vh,8.5rem)",
+              maxWidth: "min(80vw,600px)",
               objectFit: "contain",
-              objectPosition: "left center",
-              filter: `drop-shadow(0 0 16px ${GOLD}44)`,
+              objectPosition: "center",
+              filter: `drop-shadow(0 0 24px ${GOLD}44)`,
             }}
           />
 
-          {/* Clock + live indicator */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35em", flexShrink: 0 }}>
+          {/* Clock + live indicator — absolute top-right overlay */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: "0.35em",
+            }}
+          >
             <LiveDot isLive={liveRates.isLive} isStale={liveRates.isStale} />
             <div
               style={{
