@@ -202,71 +202,184 @@ function iconForItem(item: PriceItem): React.ReactNode {
   return <IconRing />;
 }
 
-// ── Spot value card ───────────────────────────────────────────────────────────
-interface SpotCardProps { label: string; sub: string; value: number | null; color: string; icon: string; }
+// ── Gold Spot Widget — dark matte card with ASK (left) and BID (right) boxes ──
+interface GoldSpotWidgetProps {
+  askUsdPerOz:       number | null;
+  bidUsdPerOz:       number | null;
+  dailyLowUsdPerOz:  number | null;
+  dailyHighUsdPerOz: number | null;
+}
 
-function SpotCard({ label, sub, value, color, icon }: SpotCardProps) {
+function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighUsdPerOz }: GoldSpotWidgetProps) {
   return (
     <div
       style={{
-        flex: 1,
-        background: `linear-gradient(145deg, #0e0e0e 0%, #0a0a0a 100%)`,
-        border: `1px solid ${color}33`,
-        borderTop: `2px solid ${color}`,
-        borderRadius: "clamp(0.5rem,1vw,1rem)",
-        padding: "clamp(0.6rem,1.4vh,1.2rem) clamp(0.8rem,1.8vw,1.6rem)",
-        boxShadow: `0 0 40px -15px ${color}55, 0 8px 32px -10px #000000bb`,
+        background: "#0d0d0d",
+        border: `1px solid ${GOLD}2a`,
+        borderRadius: "clamp(0.6rem,1.2vw,1.2rem)",
+        padding: "clamp(0.55rem,1.3vh,1.1rem) clamp(0.8rem,2vw,1.8rem)",
         display: "flex",
         flexDirection: "column",
-        gap: "clamp(0.25rem,0.6vh,0.5rem)",
-        minWidth: 0,
+        gap: "clamp(0.35rem,0.8vh,0.75rem)",
+        flexShrink: 0,
+        boxShadow: `0 4px 40px -12px #000000cc`,
       }}
     >
-      {/* Label */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.4em" }}>
-        <span style={{ fontSize: "clamp(0.9rem,1.6vh,1.5rem)", lineHeight: 1 }}>{icon}</span>
-        <span
-          style={{
-            color,
-            fontWeight: 900,
-            fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            color: `${color}88`,
-            fontSize: "clamp(0.5rem,calc(0.4vh + 0.4vw),0.75rem)",
-            fontWeight: 600,
-            letterSpacing: "0.1em",
-            marginLeft: "0.2em",
-          }}
-        >
-          {sub}
-        </span>
-      </div>
-
-      {/* Value */}
+      {/* Title */}
       <div
-        className="tabular-nums"
         style={{
-          color: "#ffffff",
-          fontFamily: "monospace",
+          textAlign: "center",
+          color: GOLD_LIGHT,
           fontWeight: 900,
-          fontSize: "clamp(1.4rem,calc(2vh + 2vw),4rem)",
-          lineHeight: 1,
-          letterSpacing: "-0.03em",
-          textShadow: `0 2px 20px #00000099`,
+          fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)",
+          letterSpacing: "0.28em",
+          textTransform: "uppercase",
+          textShadow: `0 0 18px ${GOLD}66`,
         }}
       >
-        {fmt(value, 2)}
+        Gold Spot
       </div>
 
-      {/* Bottom accent bar */}
-      <div style={{ height: "2px", background: `linear-gradient(90deg,${color}66 0%,${color}00 100%)`, borderRadius: "1px" }} />
+      {/* ASK + BID boxes */}
+      <div style={{ display: "flex", gap: "clamp(0.5rem,1.2vw,1.1rem)" }}>
+
+        {/* ── ASK PRICE (oz) ─────────────────────────────────────────────── */}
+        <div
+          style={{
+            flex: 1,
+            background: "#1c0e07",
+            border: `1px solid ${RED}40`,
+            borderRadius: "clamp(0.35rem,0.7vw,0.75rem)",
+            padding: "clamp(0.45rem,1.1vh,0.95rem) clamp(0.55rem,1.4vw,1.3rem)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "clamp(0.15rem,0.4vh,0.35rem)",
+            minWidth: 0,
+          }}
+        >
+          {/* Header row: $ icon + label */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35em" }}>
+            <span
+              style={{
+                color: RED,
+                fontWeight: 900,
+                fontSize: "clamp(0.65rem,1.2vh,1rem)",
+                lineHeight: 1,
+              }}
+            >
+              $
+            </span>
+            <span
+              style={{
+                color: RED,
+                fontWeight: 800,
+                fontSize: "clamp(0.45rem,calc(0.4vh + 0.4vw),0.78rem)",
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              ASK PRICE (oz)
+            </span>
+          </div>
+
+          {/* Main price */}
+          <div
+            className="tabular-nums"
+            style={{
+              color: "#ffffff",
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(1.1rem,calc(1.7vh + 1.7vw),3.4rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textShadow: "0 2px 16px #000000aa",
+            }}
+          >
+            {fmt(askUsdPerOz, 2)}
+          </div>
+
+          {/* Low */}
+          <div
+            style={{
+              color: RED,
+              fontWeight: 700,
+              fontSize: "clamp(0.45rem,calc(0.38vh + 0.38vw),0.75rem)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            Low&nbsp;&nbsp;{fmt(dailyLowUsdPerOz, 2)}
+          </div>
+        </div>
+
+        {/* ── BID PRICE (oz) ─────────────────────────────────────────────── */}
+        <div
+          style={{
+            flex: 1,
+            background: "#071c0d",
+            border: `1px solid ${GREEN}40`,
+            borderRadius: "clamp(0.35rem,0.7vw,0.75rem)",
+            padding: "clamp(0.45rem,1.1vh,0.95rem) clamp(0.55rem,1.4vw,1.3rem)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "clamp(0.15rem,0.4vh,0.35rem)",
+            minWidth: 0,
+          }}
+        >
+          {/* Header row: $ icon + label */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35em" }}>
+            <span
+              style={{
+                color: GREEN,
+                fontWeight: 900,
+                fontSize: "clamp(0.65rem,1.2vh,1rem)",
+                lineHeight: 1,
+              }}
+            >
+              $
+            </span>
+            <span
+              style={{
+                color: GREEN,
+                fontWeight: 800,
+                fontSize: "clamp(0.45rem,calc(0.4vh + 0.4vw),0.78rem)",
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              BID PRICE (oz)
+            </span>
+          </div>
+
+          {/* Main price */}
+          <div
+            className="tabular-nums"
+            style={{
+              color: "#ffffff",
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(1.1rem,calc(1.7vh + 1.7vw),3.4rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textShadow: "0 2px 16px #000000aa",
+            }}
+          >
+            {fmt(bidUsdPerOz, 2)}
+          </div>
+
+          {/* High */}
+          <div
+            style={{
+              color: GREEN,
+              fontWeight: 700,
+              fontSize: "clamp(0.45rem,calc(0.38vh + 0.38vw),0.75rem)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            High&nbsp;&nbsp;{fmt(dailyHighUsdPerOz, 2)}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
@@ -702,43 +815,13 @@ export default function ShowroomBoard() {
           </div>
         </div>
 
-        {/* ── SPOT PANEL (BID / ASK / LOW / HIGH) ─────────────────────────── */}
-        <div
-          style={{
-            display: "flex",
-            gap: "clamp(0.4rem,1vw,1rem)",
-            flexShrink: 0,
-          }}
-        >
-          <SpotCard
-            label="BID oz"
-            sub="USD"
-            value={liveRates.bidUsdPerOz}
-            color={GREEN}
-            icon="⬆"
-          />
-          <SpotCard
-            label="ASK oz"
-            sub="USD"
-            value={liveRates.askUsdPerOz}
-            color={RED}
-            icon="⬇"
-          />
-          <SpotCard
-            label="LOW"
-            sub="TODAY"
-            value={liveRates.dailyLowUsdPerOz}
-            color={RED}
-            icon="↓"
-          />
-          <SpotCard
-            label="HIGH"
-            sub="TODAY"
-            value={liveRates.dailyHighUsdPerOz}
-            color={GREEN}
-            icon="↑"
-          />
-        </div>
+        {/* ── GOLD SPOT WIDGET (ASK / BID with LOW / HIGH) ──────────────── */}
+        <GoldSpotWidget
+          askUsdPerOz={liveRates.askUsdPerOz}
+          bidUsdPerOz={liveRates.bidUsdPerOz}
+          dailyLowUsdPerOz={liveRates.dailyLowUsdPerOz}
+          dailyHighUsdPerOz={liveRates.dailyHighUsdPerOz}
+        />
 
         {/* ── DIVIDER ──────────────────────────────────────────────────────── */}
         <GoldDivider />
