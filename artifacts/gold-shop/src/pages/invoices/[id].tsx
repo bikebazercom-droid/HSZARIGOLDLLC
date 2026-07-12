@@ -129,10 +129,22 @@ export default function InvoiceDetail() {
     const html2pdf = (await import("html2pdf.js")).default;
     html2pdf()
       .set({
-        margin: [12, 10, 12, 10],
+        // Zero left/right margin so the 210mm invoice fills the full A4 width.
+        // Vertical margins give breathing room at top/bottom only.
+        margin: [8, 0, 8, 0],
         filename: `Invoice-${invoice.invoiceNumber}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          // Force html2canvas to render at A4 width (210mm @ 96 dpi = 794px)
+          // regardless of the current browser viewport width.  Without this,
+          // narrow viewports clip the right side of the invoice.
+          windowWidth: 794,
+          scrollX: 0,
+          scrollY: 0,
+        },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       })
       .from(invoiceRef.current)
@@ -140,7 +152,7 @@ export default function InvoiceDetail() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 px-2 sm:px-0 print:p-0 print:m-0" style={{ maxWidth: "210mm" }}>
+    <div className="mx-auto pb-20 px-2 sm:px-0 print:p-0 print:m-0 print:w-full print:max-w-full" style={{ maxWidth: "210mm" }}>
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6 no-print">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link href="/invoices">
@@ -159,7 +171,7 @@ export default function InvoiceDetail() {
           viewports it scrolls horizontally inside this contained wrapper
           instead of breaking the page's own layout. */}
       <div className="overflow-x-auto print:overflow-visible">
-      <div ref={invoiceRef} className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", maxWidth: "none", margin: "0 auto" }}>
+      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box" }}>
 
         {/* Gold top border */}
         <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
@@ -450,15 +462,24 @@ export default function InvoiceDetail() {
         @media print {
           @page {
             size: A4;
-            margin: 12mm 10mm 12mm 10mm;
+            margin: 10mm;
           }
           .no-print { display: none !important; }
           body {
+            width: 210mm;
+            max-width: 210mm;
+            margin: 0 !important;
+            padding: 0 !important;
             background: white !important;
-            margin: 0;
-            padding: 0;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          /* Scale the invoice to fit within the @page 10mm margins (190mm usable).
+             transform-origin top-left ensures the content anchors to the top-left
+             corner of the printable area rather than scaling from centre. */
+          [data-invoice-doc] {
+            transform: scale(0.905);
+            transform-origin: top left;
           }
         }
       `}</style>
