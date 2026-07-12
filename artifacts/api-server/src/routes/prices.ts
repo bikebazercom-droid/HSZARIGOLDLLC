@@ -210,6 +210,61 @@ export function triggerGoldApiPoll(): void {
   pollGoldApi().catch((err: unknown) => logger.warn({ err }, "[goldapi] Triggered poll failed"));
 }
 
+// ── Daily high/low from Yahoo Finance (GC=F) ─────────────────────────────────
+// The livepriceofgold.com socket feed sends only the current price — no daily
+// range. We fetch GC=F from Yahoo Finance on startup and every 5 minutes so
+// the TV board always shows today's true session high/low, not just the
+// narrow window observed since the server last started.
+// ─────────────────────────────────────────────────────────────────────────────
+interface YahooChartMeta {
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?:  number;
+  regularMarketPrice?:   number;
+}
+interface YahooChartResponse {
+  chart?: { result?: Array<{ meta?: YahooChartMeta }> };
+}
+
+// Yahoo Finance v8 chart requires a browser-like User-Agent (v7/quote now returns 401)
+const YAHOO_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+async function fetchDailyHighLow(): Promise<void> {
+  const endpoints = [
+    "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
+    "https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
+  ];
+  for (const url of endpoints) {
+    try {
+      const resp = await fetch(url, {
+        headers: { "User-Agent": YAHOO_UA, "Accept": "application/json" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!resp.ok) { logger.warn({ status: resp.status, url }, "[daily-range] HTTP error"); continue; }
+      const data = await resp.json() as YahooChartResponse;
+      const meta = data?.chart?.result?.[0]?.meta;
+      const high = meta?.regularMarketDayHigh;
+      const low  = meta?.regularMarketDayLow;
+      if (high && low && Number.isFinite(high) && Number.isFinite(low) && high > 1000 && low > 1000) {
+        // Expand running range — never shrink it (live ticks may already be wider)
+        if (dailyHighUsdPerOz == null || high > dailyHighUsdPerOz) dailyHighUsdPerOz = high;
+        if (dailyLowUsdPerOz  == null || low  < dailyLowUsdPerOz)  dailyLowUsdPerOz  = low;
+        // Sync the date guard so trackDailyRange doesn't zero out our seeded values
+        dailyTrackingDateUTC = todayUTC();
+        logger.info({ high, low }, "[daily-range] Daily H/L seeded from Yahoo Finance GC=F");
+        return;
+      }
+      logger.warn({ meta }, "[daily-range] Unexpected Yahoo Finance shape");
+    } catch (err) {
+      logger.warn({ err, url }, "[daily-range] fetch failed — trying next endpoint");
+    }
+  }
+  logger.warn("[daily-range] All Yahoo Finance endpoints failed — H/L will track from current session only");
+}
+
+// Seed immediately on startup, then refresh every 5 minutes
+fetchDailyHighLow();
+setInterval(fetchDailyHighLow, 5 * 60 * 1000);
+
 liveSocket.on("update", (raw: string) => {
   try {
     const data = JSON.parse(raw) as Record<string, string | number>;
