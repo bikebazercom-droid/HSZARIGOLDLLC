@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLivePrice } from "@/context/live-price";
 import { Link, useLocation } from "wouter";
 import {
@@ -11,6 +11,9 @@ import {
   getGetPricesQueryKey,
   useListProducts,
   getListProductsQueryKey,
+  useGetPublicPriceItems,
+  getGetPublicPriceItemsQueryKey,
+  PriceItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -157,6 +160,32 @@ const KG_BAR_DESCS = new Set([
 ]);
 const SILVER_DESCS = new Set(["Silver", "Silver (0.999)", "Silver 999"]);
 
+// ── TV board price engine ─────────────────────────────────────────────────────
+// Mirrors computeItemPrice in showroom-board.tsx exactly.
+// When Live mode is active, invoice rate resolution checks this first for GOLD 9999
+// and JEWELLERY 22K so the invoice always reflects the precise per-item price
+// (purityFactor + premiumOffsetAed from the DB item record) shown on the TV board.
+const r2tv = (n: number) => Math.round(n * 100) / 100;
+function computeTvItemPrice(item: PriceItem, base: number | null): number | null {
+  if (item.formulaType === "manual")
+    return item.manualRateAed == null ? null : r2tv(item.manualRateAed + item.premiumOffsetAed);
+  if (base == null) return null;
+  if (item.formulaType === "spot_bar")
+    return r2tv(base * (item.weightGrams ?? 0) * item.purityFactor + item.premiumOffsetAed);
+  return r2tv(base * item.purityFactor + item.premiumOffsetAed);
+}
+
+// Invoice descriptions that map to the TV board's "GOLD 9999" pinned item
+const TV_GOLD_9999_DESCS = new Set([
+  ...GOLD_DESCS, "Gold 9999 1GM", "Gold 9999 1KG", "GOLD 9999",
+]);
+// Invoice descriptions that map to the TV board's "JEWELLERY 22K" pinned item
+// 21K/18K are intentionally excluded — they are not displayed on the TV board.
+const TV_JEWELLERY_22K_DESCS = new Set([
+  "Gold Jewelry 22K", "Gold 22K (0.916)", "Gold Jewelry 22k",
+  "Gold Jewelry", "22K Gold Jewelry", "Jewellery 22K 1GM", "JEWELLERY 22K",
+]);
+
 function descToCategory(desc: string): string {
   if (JEWELRY_DESCS.has(desc)) return "gold_jewelry";
   if (GOLD_DESCS.has(desc))    return "gold";
@@ -213,7 +242,22 @@ function getRateForDesc(
   fallback: number,
   rawAedPerGram?: number | null,
   laborPct = 0,
+  tvPriceMap?: Map<string, number>,
 ): number {
+  // TV board prices take highest priority in Live mode — they use the exact
+  // per-item DB record (purityFactor + premiumOffsetAed) so the invoice rate
+  // is always identical to what's displayed on the TV screen.
+  if (tvPriceMap) {
+    if (TV_GOLD_9999_DESCS.has(description)) {
+      const tv = tvPriceMap.get("GOLD 9999");
+      if (tv != null) return tv;
+    }
+    if (TV_JEWELLERY_22K_DESCS.has(description)) {
+      const tv = tvPriceMap.get("JEWELLERY 22K");
+      if (tv != null) return tv;
+    }
+  }
+
   const lm = 1 + laborPct / 100;
 
   if (rawAedPerGram && rawAedPerGram > 0) {
@@ -296,10 +340,11 @@ function resolvePrimaryRate(
   fallback: number,
   rawAedPerGram?: number | null,
   laborPct = 0,
+  tvPriceMap?: Map<string, number>,
 ): number {
   const primary = currentItems.find(i => i.description || i.purity);
   if (!primary) return fallback;
-  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborPct);
+  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborPct, tvPriceMap);
   return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram, laborPct);
 }
 
@@ -326,6 +371,35 @@ export default function NewInvoice() {
   const { liveRates } = useLivePrice();
   // When manual mode is ON, pass undefined so rate helpers fall back to DB values.
   const liveAed = isManualMode ? undefined : liveRates.aedPerGram;
+
+  // ── TV board price sync ────────────────────────────────────────────────────
+  // Poll the same public price items the TV board uses so we can compute
+  // per-item prices via the exact same engine (purityFactor + premiumOffsetAed
+  // from the DB record). Refetch every second so invoice rates stay locked to
+  // what's currently displayed on the TV screen.
+  const { data: publicPriceItems } = useGetPublicPriceItems({
+    query: {
+      queryKey: getGetPublicPriceItemsQueryKey(),
+      refetchInterval: 1000,
+      refetchIntervalInBackground: true,
+      staleTime: 0,
+    },
+  });
+
+  // tvPriceMap: item.name → computed AED/g price (same formula as TV board).
+  // Only populated when live mode is active; undefined in manual mode so the
+  // existing DB-based fallback chain kicks in instead.
+  const tvPriceMap = useMemo<Map<string, number> | undefined>(() => {
+    if (isManualMode) return undefined;
+    const base = liveRates.adjustedBaseAedPerGram;
+    if (!base || !publicPriceItems?.length) return undefined;
+    const m = new Map<string, number>();
+    for (const item of publicPriceItems) {
+      const price = computeTvItemPrice(item, base);
+      if (price != null) m.set(item.name, price);
+    }
+    return m;
+  }, [isManualMode, liveRates.adjustedBaseAedPerGram, publicPriceItems]);
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");
@@ -428,7 +502,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent, tvPriceMap);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
@@ -475,9 +549,10 @@ export default function NewInvoice() {
   useEffect(() => {
     // In manual mode the live 1s tick must NOT override admin-set rates.
     if (!isLive || isManualMode) return;
-    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed, liveRates.laborCostPercent));
+    // Pass tvPriceMap so GOLD 9999 + JEWELLERY 22K rates mirror the TV board exactly.
+    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed, liveRates.laborCostPercent, tvPriceMap));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, isManualMode, prices, itemSignature, liveAed, liveRates.laborCostPercent]);
+  }, [isLive, isManualMode, prices, itemSignature, liveAed, liveRates.laborCostPercent, tvPriceMap]);
 
   // Seed the global Metal Rate with a sensible baseline the moment prices
   // first load (covers page load / Live Mode toggling before any item has a
@@ -904,7 +979,11 @@ export default function NewInvoice() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-base font-semibold">Metal Rate (AED/g)</Label>
-                  {isLive ? (
+                  {isLive && tvPriceMap ? (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                      <span className="text-amber-500">◆</span> Synced from TV Board
+                    </span>
+                  ) : isLive ? (
                     <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
                       <span className="text-emerald-500">●</span> Live Market Rate
                     </span>
