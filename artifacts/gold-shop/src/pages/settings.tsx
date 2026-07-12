@@ -14,7 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key, Power } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
 
@@ -49,6 +50,9 @@ export default function SettingsPage() {
   // token is already configured (so the password field shows bullet characters
   // rather than appearing blank on page load / tab navigation).
   const [goldApiToken, setGoldApiToken] = useState<string>("");
+  // goldApiEnabled mirrors the DB boolean — toggled immediately without a
+  // separate "Save" click so it feels instantaneous.
+  const [goldApiEnabled, setGoldApiEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     if (settings) {
@@ -67,6 +71,7 @@ export default function SettingsPage() {
       // Pre-populate with sentinel so the password field shows bullet chars
       // instead of an empty box — the raw token is never returned by the API.
       setGoldApiToken(settings.goldApiTokenSet ? CONFIGURED_SENTINEL : "");
+      setGoldApiEnabled(settings.goldApiEnabled ?? true);
     }
   }, [settings]);
 
@@ -88,6 +93,27 @@ export default function SettingsPage() {
       },
       onError: (err: any) => {
         toast({ title: "Failed to save token", description: err.message, variant: "destructive" });
+      }
+    });
+  };
+
+  const handleToggleGoldApi = (checked: boolean) => {
+    // Optimistically update local state so the toggle feels instant
+    setGoldApiEnabled(checked);
+    updateSettings.mutate({ data: { goldApiEnabled: checked } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+        toast({
+          title: checked ? "GoldAPI.io enabled" : "GoldAPI.io disabled",
+          description: checked
+            ? "GoldAPI.io is now the active price source."
+            : "Switched to fallback live-price feed.",
+        });
+      },
+      onError: (err: any) => {
+        // Revert on failure
+        setGoldApiEnabled(!checked);
+        toast({ title: "Failed to update toggle", description: err.message, variant: "destructive" });
       }
     });
   };
@@ -549,23 +575,50 @@ export default function SettingsPage() {
       {/* GoldAPI.io Settings */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Key className="w-5 h-5 text-primary" />
-            <CardTitle>GoldAPI.io Settings</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              <CardTitle>GoldAPI.io Settings</CardTitle>
+            </div>
+            {/* Enable / Disable toggle — only meaningful when a token is set */}
+            {settings?.goldApiTokenSet && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {goldApiEnabled ? "Enabled" : "Disabled"}
+                </span>
+                <Switch
+                  checked={goldApiEnabled}
+                  onCheckedChange={handleToggleGoldApi}
+                  disabled={updateSettings.isPending}
+                  aria-label="Enable GoldAPI.io"
+                  className={goldApiEnabled ? "data-[state=checked]:bg-green-500" : ""}
+                />
+              </div>
+            )}
           </div>
           <CardDescription>
             Configure your GoldAPI.io token to fetch the official XAU/USD spot price every 60 seconds.
-            When a token is active it takes precedence over the fallback live-price feed.
+            Use the toggle to enable or disable it without losing the token.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
+
+          {/* Status badge */}
+          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 bg-muted/30">
+            <Power className={`w-4 h-4 flex-shrink-0 ${settings?.goldApiTokenSet && goldApiEnabled ? "text-green-500" : "text-muted-foreground"}`} />
             <span className="text-sm font-medium">Status:</span>
             {settings?.goldApiTokenSet ? (
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                Token configured — GoldAPI.io active
-              </span>
+              goldApiEnabled ? (
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-600">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
+                  Token configured — GoldAPI.io active
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  Token configured — GoldAPI.io paused (toggle OFF)
+                </span>
+              )
             ) : (
               <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                 <span className="w-2 h-2 rounded-full bg-muted-foreground/50 inline-block" />
@@ -581,13 +634,9 @@ export default function SettingsPage() {
               type="password"
               value={goldApiToken}
               onFocus={() => {
-                // When the user clicks into the field and it's showing the
-                // sentinel mask, clear it so they can type the new token.
                 if (goldApiToken === CONFIGURED_SENTINEL) setGoldApiToken("");
               }}
               onBlur={() => {
-                // If the user focused but typed nothing (accidentally clicked),
-                // restore the sentinel mask so the field doesn't look empty.
                 if (goldApiToken === "" && settings?.goldApiTokenSet) {
                   setGoldApiToken(CONFIGURED_SENTINEL);
                 }

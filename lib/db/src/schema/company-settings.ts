@@ -1,4 +1,4 @@
-import { pgTable, serial, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean } from "drizzle-orm/pg-core";
 
 export const companySettingsTable = pgTable("company_settings", {
   id: serial("id").primaryKey(),
@@ -15,4 +15,5 @@ export const companySettingsTable = pgTable("company_settings", {
   stampSignatureUrl: text("stamp_signature_url"),
   showroomLogoUrl: text("showroom_logo_url"),
   goldApiToken: text("gold_api_token"),
+  goldApiEnabled: boolean("gold_api_enabled").notNull().default(true),
 });

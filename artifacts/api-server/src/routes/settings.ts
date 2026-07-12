@@ -3,7 +3,7 @@ import { db, companySettingsTable } from "@workspace/db";
 import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
 import { broadcast } from "../lib/socket.js";
-import { triggerGoldApiPoll } from "./prices.js";
+import { triggerGoldApiPoll, setGoldApiActive } from "./prices.js";
 
 const router: IRouter = Router();
 
@@ -39,6 +39,7 @@ router.put("/settings", async (req, res): Promise<void> => {
     stampSignatureUrl?: string;
     showroomLogoUrl?: string;
     goldApiToken?: string;
+    goldApiEnabled?: boolean;
   };
 
   // Build the patch explicitly — only include keys that were actually sent in
@@ -61,6 +62,7 @@ router.put("/settings", async (req, res): Promise<void> => {
   if (body.showroomLogoUrl   !== undefined) patch.showroomLogoUrl   = body.showroomLogoUrl;
   // goldApiToken: only touch when explicitly sent — empty string clears the token.
   if (body.goldApiToken !== undefined) patch.goldApiToken = body.goldApiToken || null;
+  if (body.goldApiEnabled !== undefined) patch.goldApiEnabled = body.goldApiEnabled;
 
   const [updated] = await db
     .update(companySettingsTable)
@@ -69,9 +71,15 @@ router.put("/settings", async (req, res): Promise<void> => {
     .returning();
   res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
   broadcast("SETTINGS_MUTATION");
-  // If a GoldAPI token was included, kick off an immediate poll so the TV board
-  // gets prices within seconds rather than waiting for the next 60-second tick.
-  if (body.goldApiToken) triggerGoldApiPoll();
+
+  // If the toggle was explicitly turned OFF, immediately deactivate in-memory so
+  // the next /prices/spot call falls back to the Socket.IO feed without waiting
+  // for the next 60-second poll cycle.
+  if (body.goldApiEnabled === false) setGoldApiActive(false);
+
+  // If a GoldAPI token was included (or the toggle was turned ON), kick off an
+  // immediate poll so the TV board gets prices within seconds.
+  if (body.goldApiToken || body.goldApiEnabled === true) triggerGoldApiPoll();
 });
 
 // Public, unauthenticated router — mounted separately, before the requireAuth

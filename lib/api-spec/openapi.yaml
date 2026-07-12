@@ -1261,7 +1261,7 @@ components:
 
     CompanySettings:
       type: object
-      required: [id, companyName, address, phone, email, trn, logoType, logoInitial, goldApiTokenSet]
+      required: [id, companyName, address, phone, email, trn, logoType, logoInitial, goldApiTokenSet, goldApiEnabled]
       properties:
         id:
           type: integer
@@ -1293,6 +1293,9 @@ components:
         goldApiTokenSet:
           type: boolean
           description: Whether a GoldAPI.io API token has been configured. The token itself is never returned.
+        goldApiEnabled:
+          type: boolean
+          description: Whether GoldAPI.io polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.
 
     CompanySettingsInput:
       type: object
@@ -1324,6 +1327,9 @@ components:
         goldApiToken:
           type: string
           description: GoldAPI.io API token. Send an empty string to clear the token.
+        goldApiEnabled:
+          type: boolean
+          description: Enable or disable GoldAPI.io polling without clearing the token.
 
     PublicSettings:
       type: object

@@ -21,4 +21,6 @@ export interface CompanySettingsInput {
   showroomLogoUrl?: string;
   /** GoldAPI.io API token. Send an empty string to clear the token. */
   goldApiToken?: string;
+  /** Enable or disable GoldAPI.io polling without clearing the token. */
+  goldApiEnabled?: boolean;
 }

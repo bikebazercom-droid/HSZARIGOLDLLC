@@ -66,12 +66,19 @@ interface LiveSpot {
 let liveSpot:   LiveSpot | null = null;
 let lastDbWriteAt: Date | null  = null;
 
-// True while a GoldAPI.io token is configured and the last poll succeeded.
+// True while a GoldAPI.io token is configured, the last poll succeeded,
+// AND the admin has not manually disabled the integration via the toggle.
 // When active, the Yahoo Finance fallback must NOT overwrite liveSpot — GoldAPI
 // is the authoritative source and Yahoo would introduce stale-price leakage
 // during the 15-second window between GoldAPI's 60s poll and Yahoo's 45s
 // staleness threshold.
 let goldApiActive = false;
+
+// Called by the settings route the instant the admin flips the toggle OFF so
+// the in-memory flag reflects the new state without waiting for the next poll.
+export function setGoldApiActive(val: boolean): void {
+  goldApiActive = val;
+}
 
 let dailyLowUsdPerOz:    number | null = null;
 let dailyHighUsdPerOz:   number | null = null;
@@ -139,10 +146,21 @@ interface GoldApiResponse {
 async function pollGoldApi(): Promise<void> {
   try {
     const [row] = await db
-      .select({ goldApiToken: companySettingsTable.goldApiToken })
+      .select({
+        goldApiToken:   companySettingsTable.goldApiToken,
+        goldApiEnabled: companySettingsTable.goldApiEnabled,
+      })
       .from(companySettingsTable)
       .limit(1);
-    const token = row?.goldApiToken;
+
+    const token   = row?.goldApiToken;
+    const enabled = row?.goldApiEnabled ?? true;
+
+    // If the admin has turned the toggle OFF, deactivate and skip polling.
+    if (!enabled) {
+      goldApiActive = false;
+      return;
+    }
     if (!token) return;
 
     const resp = await fetch("https://www.goldapi.io/api/XAU/USD", {
