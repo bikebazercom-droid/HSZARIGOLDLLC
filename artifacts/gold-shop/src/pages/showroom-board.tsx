@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import hazariLogoImg from "@assets/photo_2026-07-12_18-20-48-removebg-preview_1783860252480.png";
 import { useLivePrice } from "@/context/live-price";
 import {
   useGetPublicSettings,
@@ -237,6 +238,32 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
         boxShadow: `0 4px 48px -12px #000000dd`,
       }}
     >
+      {/* ── GOLD SPOT label bar ──────────────────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "0.75em",
+          paddingBottom: "clamp(0.3rem,0.7vh,0.6rem)",
+          borderBottom: `1px solid ${GOLD}28`,
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            color: GOLD,
+            fontWeight: 800,
+            fontSize: "clamp(0.7rem,calc(0.55vh + 0.55vw),1.1rem)",
+            letterSpacing: "0.3em",
+            textTransform: "uppercase",
+            textShadow: `0 0 20px ${GOLD}44`,
+          }}
+        >
+          GOLD SPOT
+        </span>
+      </div>
+
       {/* ── Always a rigid 2 × 2 grid — same on every screen size ───────────── */}
       {/* DOM order matches visual order: BID(top-left) → ASK(top-right) →
           Low(bottom-left) → High(bottom-right).  No responsive reordering.     */}
@@ -256,14 +283,14 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           <div
             className="tabular-nums"
             style={{
-              color: "#ffffff",
+              color: GREEN,
               fontFamily: "monospace",
               fontWeight: 900,
               fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
               lineHeight: 1,
               letterSpacing: "-0.02em",
               textAlign: "center",
-              textShadow: "0 2px 20px #000000aa",
+              textShadow: `0 2px 20px ${GREEN}44`,
             }}
           >
             {fmt(bidUsdPerOz, 2)}
@@ -281,14 +308,14 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           <div
             className="tabular-nums"
             style={{
-              color: "#ffffff",
+              color: RED,
               fontFamily: "monospace",
               fontWeight: 900,
               fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
               lineHeight: 1,
               letterSpacing: "-0.02em",
               textAlign: "center",
-              textShadow: "0 2px 20px #000000aa",
+              textShadow: `0 2px 20px ${RED}44`,
             }}
           >
             {fmt(askUsdPerOz, 2)}
@@ -698,16 +725,16 @@ export default function ShowroomBoard() {
             minHeight: "clamp(4rem,12vh,9rem)",
           }}
         >
-          {/* Brand — full-width centered banner image */}
+          {/* Brand — transparent PNG logo, crisp on dark background */}
           <img
-            src={`${import.meta.env.BASE_URL}hazari-gold-banner.jpg`}
+            src={hazariLogoImg}
             alt="Hazari Gold LLC"
             style={{
               height: "clamp(3.5rem,11vh,8.5rem)",
-              maxWidth: "min(80vw,600px)",
+              maxWidth: "min(85vw,640px)",
               objectFit: "contain",
               objectPosition: "center",
-              filter: `drop-shadow(0 0 24px ${GOLD}44)`,
+              filter: `drop-shadow(0 0 20px ${GOLD}55)`,
             }}
           />
 
