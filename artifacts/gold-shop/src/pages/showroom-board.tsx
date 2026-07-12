@@ -238,21 +238,6 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
         boxShadow: `0 4px 48px -12px #000000dd`,
       }}
     >
-      {/* ── Title ───────────────────────────────────────────────────────── */}
-      <div
-        style={{
-          textAlign: "center",
-          color: GOLD_LIGHT,
-          fontWeight: 900,
-          fontSize: "clamp(0.65rem,calc(0.6vh + 0.6vw),1.05rem)",
-          letterSpacing: "0.3em",
-          textTransform: "uppercase",
-          textShadow: `0 0 20px ${GOLD}66`,
-        }}
-      >
-        GOLD SPOT
-      </div>
-
       {/* ── Always a rigid 2 × 2 grid — same on every screen size ───────────── */}
       {/* DOM order matches visual order: BID(top-left) → ASK(top-right) →
           Low(bottom-left) → High(bottom-right).  No responsive reordering.     */}
