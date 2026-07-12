@@ -34,8 +34,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface LiveRates {
   usdPerOz:           number | null;
-  aedPerGram:         number | null;   // Adjusted_Base (spread applied server-side) — invoices/admin
-  baseAedPerGram:     number | null;   // Raw Base_24K_AED before spread — TV board uses this
+  aedPerGram:         number | null;   // Adjusted_Base rounded to 2dp — invoices/admin display
+  baseAedPerGram:     number | null;   // Raw Base_24K_AED before spread — international spot reference
+  adjustedBaseAedPerGram: number | null; // Full-float spread-adjusted base — TV board item engine uses this
   bidUsdPerOz:        number | null;
   askUsdPerOz:        number | null;
   dailyLowUsdPerOz:   number | null;
@@ -69,6 +70,7 @@ const EMPTY_RATES: LiveRates = {
   usdPerOz:           null,
   aedPerGram:         null,
   baseAedPerGram:     null,
+  adjustedBaseAedPerGram: null,
   bidUsdPerOz:        null,
   askUsdPerOz:        null,
   dailyLowUsdPerOz:   null,
@@ -125,7 +127,8 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
     return {
       usdPerOz:          spot.usdPerOz ?? null,
       aedPerGram:        round2(adjustedBase),
-      baseAedPerGram:    marketBase,          // full float — TV formula rounds only at final output
+      baseAedPerGram:    marketBase,               // full float pre-spread — international spot reference
+      adjustedBaseAedPerGram: adjustedBase,        // full float with admin spread — TV board item engine
       bidUsdPerOz:       spot.bidUsdPerOz        != null ? round2(spot.bidUsdPerOz)        : null,
       askUsdPerOz:       spot.askUsdPerOz        != null ? round2(spot.askUsdPerOz)        : null,
       dailyLowUsdPerOz:  spot.dailyLowUsdPerOz  != null ? round2(spot.dailyLowUsdPerOz)  : null,

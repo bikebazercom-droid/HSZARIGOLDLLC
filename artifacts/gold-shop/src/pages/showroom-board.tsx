@@ -67,8 +67,8 @@ function fmt(n: number | null | undefined, decimals = 2) {
 }
 
 // ── Price item formula engine ─────────────────────────────────────────────────
-// spot_bar      → baseAedPerGram × weightGrams × purityFactor + offset
-// spot_per_gram → baseAedPerGram × purityFactor + offset
+// spot_bar      → adjustedBaseAedPerGram × weightGrams × purityFactor + offset
+// spot_per_gram → adjustedBaseAedPerGram × purityFactor + offset
 // manual        → manualRateAed + offset
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -492,9 +492,9 @@ export default function ShowroomBoard() {
 
   const priceMap = useMemo<Map<number, number | null>>(() => {
     const m = new Map<number, number | null>();
-    for (const item of visibleItems) m.set(item.id, computeItemPrice(item, liveRates.baseAedPerGram));
+    for (const item of visibleItems) m.set(item.id, computeItemPrice(item, liveRates.adjustedBaseAedPerGram));
     return m;
-  }, [visibleItems, liveRates.baseAedPerGram]);
+  }, [visibleItems, liveRates.adjustedBaseAedPerGram]);
 
   const dirs = useItemDirs(priceMap);
 
@@ -769,7 +769,7 @@ export default function ShowroomBoard() {
           >
             Prices in AED · Formula: (XAU/USD ÷ 31.1034768) × 3.6725 · Rates update every second
           </span>
-          {liveRates.baseAedPerGram != null && (
+          {liveRates.adjustedBaseAedPerGram != null && (
             <span
               className="tabular-nums"
               style={{
@@ -780,7 +780,9 @@ export default function ShowroomBoard() {
                 fontFamily: "monospace",
               }}
             >
-              BASE 24K: AED {fmt(liveRates.baseAedPerGram, 4)}/g
+              {liveRates.spreadPercent > 0
+                ? `DUBAI 24K: AED ${fmt(liveRates.adjustedBaseAedPerGram, 4)}/g`
+                : `BASE 24K: AED ${fmt(liveRates.adjustedBaseAedPerGram, 4)}/g`}
             </span>
           )}
         </div>
