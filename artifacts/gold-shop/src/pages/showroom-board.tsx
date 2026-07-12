@@ -283,9 +283,9 @@ interface BigCardProps {
 
 function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
   useEffect(() => { ensureKeyframes(); }, []);
-  const isUp   = dir === "up";
-  const isDown = dir === "down";
-  const isTick = isUp || isDown;
+  const isUp      = dir === "up";
+  const isDown    = dir === "down";
+  const isTick    = isUp || isDown;
   const tickColor = isUp ? GREEN : RED;
   const priceColor = isTick ? tickColor : "#ffffff";
 
@@ -294,17 +294,16 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
       style={{
         flex: 1,
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "space-between",
         position: "relative",
         background: `linear-gradient(160deg,#111008 0%,#0a0a0a 60%,#0d0d0d 100%)`,
         border: `1px solid ${accent}33`,
-        borderTop: `3px solid ${accent}`,
+        borderLeft: `5px solid ${accent}`,
         borderRadius: "clamp(0.5rem,1vw,1rem)",
-        boxShadow: `0 0 80px -25px ${accent}33, 0 12px 50px -15px #000000cc`,
-        padding: "clamp(1.5rem,4vh,4rem) clamp(1.2rem,3vw,3rem)",
-        gap: "clamp(0.8rem,2vh,2.2rem)",
+        boxShadow: `0 0 80px -25px ${accent}33, 0 8px 40px -12px #000000cc`,
+        padding: "clamp(1rem,3vh,3rem) clamp(2rem,4vw,5rem)",
         overflow: "hidden",
         minHeight: 0,
       }}
@@ -316,68 +315,81 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
           top: "50%",
           left: "50%",
           transform: "translate(-50%,-50%)",
-          width: "90%",
-          height: "90%",
-          background: `radial-gradient(ellipse at center,${accent}09 0%,transparent 65%)`,
+          width: "100%",
+          height: "100%",
+          background: `radial-gradient(ellipse 70% 80% at 20% 50%,${accent}08 0%,transparent 70%)`,
           pointerEvents: "none",
         }}
       />
 
-      {/* Icon */}
-      <div
-        style={{
-          width: "clamp(3rem,6vh,7rem)",
-          height: "clamp(3rem,6vh,7rem)",
-          opacity: 0.75,
-          flexShrink: 0,
-        }}
-      >
-        {iconForItem(item)}
-      </div>
-
-      {/* Item name */}
-      <div
-        style={{
-          color: accent,
-          fontWeight: 900,
-          fontSize: "clamp(1.2rem,calc(1.8vh + 1.5vw),3.5rem)",
-          letterSpacing: "0.2em",
-          textTransform: "uppercase",
-          textAlign: "center",
-          textShadow: `0 0 40px ${accent}55`,
-          lineHeight: 1.1,
-          flexShrink: 0,
-        }}
-      >
-        {item.name}
-      </div>
-
-      {/* Weight badge */}
-      <div
-        style={{
-          color: GOLD,
-          fontWeight: 800,
-          fontSize: "clamp(0.8rem,calc(0.9vh + 0.7vw),1.5rem)",
-          letterSpacing: "0.22em",
-          textTransform: "uppercase",
-          background: `${GOLD}14`,
-          border: `1px solid ${GOLD}44`,
-          borderRadius: "0.5rem",
-          padding: "clamp(0.2rem,0.5vh,0.5rem) clamp(0.8rem,2vw,1.8rem)",
-          flexShrink: 0,
-        }}
-      >
-        {item.weightLabel}
-      </div>
-
-      {/* Price block */}
+      {/* ── LEFT: icon + name + weight ── */}
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           alignItems: "center",
-          gap: "0.3em",
+          gap: "clamp(1rem,2.5vw,3rem)",
           flexShrink: 0,
+          zIndex: 1,
+        }}
+      >
+        {/* Icon */}
+        <div
+          style={{
+            width: "clamp(3.5rem,7vh,8rem)",
+            height: "clamp(3.5rem,7vh,8rem)",
+            opacity: 0.8,
+            flexShrink: 0,
+          }}
+        >
+          {iconForItem(item)}
+        </div>
+
+        {/* Name + weight badge */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "clamp(0.4rem,1vh,1rem)" }}>
+          <div
+            style={{
+              color: accent,
+              fontWeight: 900,
+              fontSize: "clamp(1.4rem,calc(2vh + 1.5vw),3.5rem)",
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              textShadow: `0 0 50px ${accent}55`,
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {item.name}
+          </div>
+          <div
+            style={{
+              color: GOLD,
+              fontWeight: 800,
+              fontSize: "clamp(0.8rem,calc(1vh + 0.8vw),1.8rem)",
+              letterSpacing: "0.3em",
+              textTransform: "uppercase",
+              background: `${GOLD}14`,
+              border: `1px solid ${GOLD}44`,
+              borderRadius: "0.5rem",
+              padding: "clamp(0.2rem,0.5vh,0.5rem) clamp(0.8rem,1.5vw,1.5rem)",
+              display: "inline-block",
+              alignSelf: "flex-start",
+            }}
+          >
+            {item.weightLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* ── RIGHT: price ── */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: "clamp(0.5rem,1.2vw,1.5rem)",
+          flexShrink: 0,
+          zIndex: 1,
         }}
       >
         {/* Direction arrow */}
@@ -386,7 +398,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
             style={{
               color: tickColor,
               fontWeight: 900,
-              fontSize: "clamp(1.4rem,4vh,5rem)",
+              fontSize: "clamp(1.8rem,5vh,6rem)",
               lineHeight: 1,
               animation: `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`,
               userSelect: "none",
@@ -397,19 +409,19 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         )}
 
         {/* Price + AED */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.35em" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.4em" }}>
           <span
             className="tabular-nums"
             style={{
               color: priceColor,
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(2.8rem,calc(5vh + 4.5vw),10rem)",
+              fontSize: "clamp(3rem,calc(5vh + 4vw),9rem)",
               lineHeight: 1,
               letterSpacing: "-0.03em",
               whiteSpace: "nowrap",
               textShadow: isTick
-                ? `0 0 50px ${tickColor}99`
+                ? `0 0 60px ${tickColor}99`
                 : `0 0 40px ${accent}22`,
               animation: isTick
                 ? `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`
@@ -422,7 +434,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
             style={{
               color: GOLD,
               fontWeight: 700,
-              fontSize: "clamp(1rem,calc(1.6vh + 1.2vw),2.8rem)",
+              fontSize: "clamp(1rem,calc(1.5vh + 1.2vw),2.5rem)",
               fontFamily: "sans-serif",
               opacity: 0.85,
               paddingBottom: "0.1em",
@@ -432,17 +444,6 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
           </span>
         </div>
       </div>
-
-      {/* Bottom accent bar */}
-      <div
-        style={{
-          height: "3px",
-          width: "55%",
-          background: `linear-gradient(90deg,transparent,${accent}88,transparent)`,
-          borderRadius: "2px",
-          flexShrink: 0,
-        }}
-      />
     </div>
   );
 }
@@ -720,12 +721,13 @@ export default function ShowroomBoard() {
         {/* ── DIVIDER ──────────────────────────────────────────────────────── */}
         <GoldDivider />
 
-        {/* ── PRICE CARDS (2-item full-screen layout) ──────────────────────── */}
+        {/* ── PRICE CARDS (stacked vertically, GOLD 9999 top / JEWELLERY 22K bottom) ── */}
         <div
           style={{
             flex: 1,
             display: "flex",
-            gap: "clamp(0.6rem,1.5vw,1.5rem)",
+            flexDirection: "column",
+            gap: "clamp(0.6rem,1.2vh,1.2rem)",
             overflow: "hidden",
             minHeight: 0,
           }}
