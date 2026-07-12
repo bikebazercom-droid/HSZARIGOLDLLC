@@ -365,10 +365,12 @@ export default function NewInvoice() {
   });
   const { data: products } = useListProducts({}, { query: { queryKey: getListProductsQueryKey({}) } });
 
-  const isLive = !!(prices as PricesData | undefined)?.liveModeConnected;
+  const { liveRates } = useLivePrice();
+  // Use the live-price context (1s polling) instead of the stale prices query
+  // field so the Metal Rate lock/unlock state tracks the live feed in real time.
+  const isLive = liveRates.isLive;
   const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
-  const { liveRates } = useLivePrice();
   // When manual mode is ON, pass undefined so rate helpers fall back to DB values.
   const liveAed = isManualMode ? undefined : liveRates.aedPerGram;
 

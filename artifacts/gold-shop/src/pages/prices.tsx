@@ -525,7 +525,7 @@ export default function Prices() {
             savedValue={(prices as any)[asset.fieldKey]}
             value={localRates[asset.fieldKey]}
             onChange={handleChange} onSave={handleSaveOne}
-            liveLocked={prices.liveModeConnected && !localManualMode}
+            liveLocked={liveRates.isLive && !localManualMode}
             liveValue={liveValueByKey[asset.fieldKey]}
             tvVisible={asset.tvVisibilityKey ? tvVisibility[asset.tvVisibilityKey] : undefined}
             onToggleTvVisible={handleToggleTvVisible} />
