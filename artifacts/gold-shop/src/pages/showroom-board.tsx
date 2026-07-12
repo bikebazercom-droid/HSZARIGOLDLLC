@@ -666,15 +666,15 @@ export default function ShowroomBoard() {
             label="LOW"
             sub="TODAY"
             value={liveRates.dailyLowUsdPerOz}
-            color={AMBER}
-            icon="↙"
+            color={RED}
+            icon="↓"
           />
           <SpotCard
             label="HIGH"
             sub="TODAY"
             value={liveRates.dailyHighUsdPerOz}
-            color={CYAN}
-            icon="↗"
+            color={GREEN}
+            icon="↑"
           />
         </div>
 
