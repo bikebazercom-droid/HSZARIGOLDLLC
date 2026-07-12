@@ -23,10 +23,9 @@ import {
 const TOLA_BAR_GRAMS = 3.75 * 31.1034768;  // = 116.638038…g
 const PURITY_995     = 0.995;
 const PURITY_9999    = 0.9999;
-// Dubai gold market convention: 22K is priced at 92.00% of 24K spot
-// (the "916" standard used by Dubai Gold & Jewellery Group boards).
-// Pure 22/24 = 91.67%, but the published market rate uses 0.9200.
-const PURITY_22K     = 0.9200;
+// livepriceofgold.com Dubai retail convention: 22K = 24K × 0.9180
+// (confirmed by reverse-engineering live sheet: 446.58 / 486.47 = 0.91800)
+const PURITY_22K     = 0.9180;
 const PURITY_21K     = 21 / 24;
 const PURITY_18K     = 18 / 24;
 

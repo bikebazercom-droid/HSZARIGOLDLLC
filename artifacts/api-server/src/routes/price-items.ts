@@ -70,7 +70,7 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     formulaType: "spot_per_gram",
     weightGrams: null,
     weightLabel: "1GM",
-    purityFactor: "0.9200000",
+    purityFactor: "0.9180000",
     premiumOffsetAed: "0",
     tvVisible: true,
     isCore: true,
