@@ -271,68 +271,82 @@ function SpotCard({ label, sub, value, color, icon }: SpotCardProps) {
   );
 }
 
-// ── Price row ─────────────────────────────────────────────────────────────────
-interface RowProps {
+// ── Big price card (2-item full-screen layout) ───────────────────────────────
+const CARD_ACCENTS = [GOLD, AMBER] as const;
+
+interface BigCardProps {
   item: PriceItem;
   price: number | null;
   dir: Dir;
-  rowIndex: number;
+  accent: string;
 }
 
-function PriceRow({ item, price, dir, rowIndex }: RowProps) {
+function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
   useEffect(() => { ensureKeyframes(); }, []);
   const isUp   = dir === "up";
   const isDown = dir === "down";
   const isTick = isUp || isDown;
-
-  const oddBg = rowIndex % 2 === 1
-    ? `linear-gradient(90deg,#0c0c0c 0%,${BG_ROW} 100%)`
-    : `linear-gradient(90deg,${BG_CARD} 0%,${BG_ROW} 100%)`;
+  const tickColor = isUp ? GREEN : RED;
+  const priceColor = isTick ? tickColor : "#ffffff";
 
   return (
     <div
       style={{
-        display: "grid",
-        gridTemplateColumns: "auto 1fr auto auto",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
         alignItems: "center",
-        gap: "clamp(0.5rem,1.2vw,1.4rem)",
-        background: oddBg,
-        borderLeft: `3px solid ${isTick ? (isUp ? GREEN : RED) : `${GOLD}55`}`,
-        borderBottom: `1px solid ${GOLD}18`,
-        padding: "clamp(0.5rem,1.1vh,1rem) clamp(0.8rem,2vw,2rem)",
-        animation: isTick
-          ? `${isUp ? "hgRowUp" : "hgRowDown"} 2s ease-out forwards`
-          : undefined,
-        transition: "border-left-color 0.3s",
+        justifyContent: "center",
+        position: "relative",
+        background: `linear-gradient(160deg,#111008 0%,#0a0a0a 60%,#0d0d0d 100%)`,
+        border: `1px solid ${accent}33`,
+        borderTop: `3px solid ${accent}`,
+        borderRadius: "clamp(0.5rem,1vw,1rem)",
+        boxShadow: `0 0 80px -25px ${accent}33, 0 12px 50px -15px #000000cc`,
+        padding: "clamp(1.5rem,4vh,4rem) clamp(1.2rem,3vw,3rem)",
+        gap: "clamp(0.8rem,2vh,2.2rem)",
+        overflow: "hidden",
+        minHeight: 0,
       }}
     >
+      {/* Background radial glow */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%,-50%)",
+          width: "90%",
+          height: "90%",
+          background: `radial-gradient(ellipse at center,${accent}09 0%,transparent 65%)`,
+          pointerEvents: "none",
+        }}
+      />
+
       {/* Icon */}
       <div
         style={{
-          width: "clamp(1.8rem,calc(2.8vh + 1vw),3.2rem)",
-          height: "clamp(1.8rem,calc(2.8vh + 1vw),3.2rem)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: `${GOLD}12`,
-          border: `1px solid ${GOLD}33`,
-          borderRadius: "clamp(0.35rem,0.7vw,0.7rem)",
+          width: "clamp(3rem,6vh,7rem)",
+          height: "clamp(3rem,6vh,7rem)",
+          opacity: 0.75,
           flexShrink: 0,
-          padding: "clamp(0.25rem,0.5vh,0.45rem)",
         }}
       >
         {iconForItem(item)}
       </div>
 
-      {/* Name */}
+      {/* Item name */}
       <div
         style={{
+          color: accent,
           fontWeight: 900,
+          fontSize: "clamp(1.2rem,calc(1.8vh + 1.5vw),3.5rem)",
+          letterSpacing: "0.2em",
           textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          color: "#f5f5f5",
-          fontSize: "clamp(0.85rem,calc(0.9vh + 0.9vw),1.75rem)",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          textAlign: "center",
+          textShadow: `0 0 40px ${accent}55`,
+          lineHeight: 1.1,
+          flexShrink: 0,
         }}
       >
         {item.name}
@@ -341,39 +355,38 @@ function PriceRow({ item, price, dir, rowIndex }: RowProps) {
       {/* Weight badge */}
       <div
         style={{
-          fontWeight: 800,
-          textTransform: "uppercase",
-          letterSpacing: "0.18em",
           color: GOLD,
-          fontSize: "clamp(0.7rem,calc(0.75vh + 0.7vw),1.3rem)",
+          fontWeight: 800,
+          fontSize: "clamp(0.8rem,calc(0.9vh + 0.7vw),1.5rem)",
+          letterSpacing: "0.22em",
+          textTransform: "uppercase",
           background: `${GOLD}14`,
           border: `1px solid ${GOLD}44`,
-          borderRadius: "0.4rem",
-          padding: "clamp(0.15rem,0.4vh,0.35rem) clamp(0.5rem,1.2vw,1rem)",
-          whiteSpace: "nowrap",
+          borderRadius: "0.5rem",
+          padding: "clamp(0.2rem,0.5vh,0.5rem) clamp(0.8rem,2vw,1.8rem)",
           flexShrink: 0,
         }}
       >
         {item.weightLabel}
       </div>
 
-      {/* Price + tick arrow */}
+      {/* Price block */}
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "flex-end",
           gap: "0.3em",
           flexShrink: 0,
-          minWidth: "clamp(5rem,14vw,16rem)",
         }}
       >
+        {/* Direction arrow */}
         {isTick && (
           <span
             style={{
-              color: isUp ? GREEN : RED,
+              color: tickColor,
               fontWeight: 900,
-              fontSize: "clamp(0.9rem,calc(1.2vh + 1vw),2rem)",
+              fontSize: "clamp(1.4rem,4vh,5rem)",
               lineHeight: 1,
               animation: `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`,
               userSelect: "none",
@@ -382,18 +395,25 @@ function PriceRow({ item, price, dir, rowIndex }: RowProps) {
             {isUp ? "▲" : "▼"}
           </span>
         )}
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.3em" }}>
+
+        {/* Price + AED */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.35em" }}>
           <span
             className="tabular-nums"
             style={{
-              color: isTick ? (isUp ? GREEN : RED) : "#ffffff",
+              color: priceColor,
               fontFamily: "monospace",
               fontWeight: 900,
-              fontSize: "clamp(1rem,calc(1.4vh + 1.3vw),2.6rem)",
+              fontSize: "clamp(2.8rem,calc(5vh + 4.5vw),10rem)",
               lineHeight: 1,
-              letterSpacing: "-0.02em",
+              letterSpacing: "-0.03em",
               whiteSpace: "nowrap",
-              animation: isTick ? `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards` : undefined,
+              textShadow: isTick
+                ? `0 0 50px ${tickColor}99`
+                : `0 0 40px ${accent}22`,
+              animation: isTick
+                ? `${isUp ? "hgUp" : "hgDown"} 2s ease-out forwards`
+                : undefined,
             }}
           >
             {fmt(price)}
@@ -402,15 +422,27 @@ function PriceRow({ item, price, dir, rowIndex }: RowProps) {
             style={{
               color: GOLD,
               fontWeight: 700,
-              fontSize: "clamp(0.6rem,calc(0.6vh + 0.55vw),1.1rem)",
+              fontSize: "clamp(1rem,calc(1.6vh + 1.2vw),2.8rem)",
               fontFamily: "sans-serif",
               opacity: 0.85,
+              paddingBottom: "0.1em",
             }}
           >
             AED
           </span>
         </div>
       </div>
+
+      {/* Bottom accent bar */}
+      <div
+        style={{
+          height: "3px",
+          width: "55%",
+          background: `linear-gradient(90deg,transparent,${accent}88,transparent)`,
+          borderRadius: "2px",
+          flexShrink: 0,
+        }}
+      />
     </div>
   );
 }
@@ -485,10 +517,17 @@ export default function ShowroomBoard() {
   const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
   const shopName        = "HAZARI GOLD";
 
-  const visibleItems = useMemo(
-    () => (priceItems ?? []).filter(i => i.tvVisible),
-    [priceItems],
-  );
+  // Hardcoded permanent allowlist — only these two items ever appear on the TV board
+  // regardless of DB tvVisible flags or any admin configuration changes.
+  const PINNED_NAMES = ["GOLD 9999", "JEWELLERY 22K"] as const;
+
+  const visibleItems = useMemo(() => {
+    const all = priceItems ?? [];
+    return PINNED_NAMES
+      .map(name => all.find(i => i.name === name))
+      .filter((i): i is PriceItem => i != null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceItems]);
 
   const priceMap = useMemo<Map<number, number | null>>(() => {
     const m = new Map<number, number | null>();
@@ -681,41 +720,14 @@ export default function ShowroomBoard() {
         {/* ── DIVIDER ──────────────────────────────────────────────────────── */}
         <GoldDivider />
 
-        {/* ── TABLE HEADER ─────────────────────────────────────────────────── */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "auto 1fr auto auto",
-            gap: "clamp(0.5rem,1.2vw,1.4rem)",
-            padding: "clamp(0.3rem,0.7vh,0.6rem) clamp(0.8rem,2vw,2rem)",
-            background: `linear-gradient(90deg,#1a1000 0%,#130d00 50%,#0e0900 100%)`,
-            borderRadius: "clamp(0.4rem,0.8vw,0.8rem)",
-            border: `1px solid ${GOLD}44`,
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ width: "clamp(1.8rem,calc(2.8vh + 1vw),3.2rem)" }} />
-          <div style={{ color: GOLD, fontWeight: 800, fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)", letterSpacing: "0.25em", textTransform: "uppercase" }}>
-            METAL
-          </div>
-          <div style={{ color: GOLD, fontWeight: 800, fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)", letterSpacing: "0.25em", textTransform: "uppercase", textAlign: "right" }}>
-            WEIGHT
-          </div>
-          <div style={{ color: GOLD, fontWeight: 800, fontSize: "clamp(0.6rem,calc(0.55vh + 0.55vw),1rem)", letterSpacing: "0.25em", textTransform: "uppercase", textAlign: "right", minWidth: "clamp(5rem,14vw,16rem)" }}>
-            PRICE (AED)
-          </div>
-        </div>
-
-        {/* ── PRICE ROWS ───────────────────────────────────────────────────── */}
+        {/* ── PRICE CARDS (2-item full-screen layout) ──────────────────────── */}
         <div
           style={{
             flex: 1,
             display: "flex",
-            flexDirection: "column",
+            gap: "clamp(0.6rem,1.5vw,1.5rem)",
             overflow: "hidden",
-            borderRadius: "clamp(0.4rem,0.8vw,0.8rem)",
-            border: `1px solid ${GOLD}22`,
-            background: BG_ROW,
+            minHeight: 0,
           }}
         >
           {visibleItems.length === 0 ? (
@@ -732,16 +744,16 @@ export default function ShowroomBoard() {
                 textTransform: "uppercase",
               }}
             >
-              {liveRates.isLive ? "No items configured" : "Connecting to live feed…"}
+              {liveRates.isLive ? "Connecting…" : "Connecting to live feed…"}
             </div>
           ) : (
             visibleItems.map((item, i) => (
-              <PriceRow
+              <BigPriceCard
                 key={item.id}
                 item={item}
                 price={priceMap.get(item.id) ?? null}
                 dir={dirs.get(item.id) ?? "neutral"}
-                rowIndex={i}
+                accent={CARD_ACCENTS[i % CARD_ACCENTS.length]}
               />
             ))
           )}
