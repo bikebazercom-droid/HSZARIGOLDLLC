@@ -14,8 +14,7 @@ const GOLD_LIGHT  = "#f0d060";
 const GOLD_DIM    = "#a07820";
 const GREEN       = "#22c55e";
 const RED         = "#ef4444";
-const CYAN        = "#22d3ee";
-const AMBER       = "#f59e0b";
+const AMBER       = "#f59e0b";   // used only for STALE live-dot indicator
 const BG_DEEP     = "#080808";
 const BG_CARD     = "#0f0f0f";
 const BG_ROW      = "#111111";
@@ -212,7 +211,7 @@ interface GoldSpotWidgetProps {
 
 function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighUsdPerOz }: GoldSpotWidgetProps) {
   const BOX_BASE: React.CSSProperties = {
-    background: "#160c04",
+    background: BG_CARD,
     borderRadius: "clamp(0.4rem,0.8vw,0.9rem)",
     display: "flex",
     flexDirection: "column",
@@ -362,7 +361,8 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
 }
 
 // ── Big price card (2-item full-screen layout) ───────────────────────────────
-const CARD_ACCENTS = [GOLD, AMBER] as const;
+// Both asset rows use the brand gold accent — AMBER is reserved for the live-dot stale state only
+const CARD_ACCENTS = [GOLD, GOLD] as const;
 
 interface BigCardProps {
   item: PriceItem;
@@ -386,7 +386,7 @@ function BigPriceCard({ item, price, dir, accent }: BigCardProps) {
         flex: 1,
         maxHeight: "clamp(4.5rem,13vh,8rem)",
         position: "relative",
-        background: `linear-gradient(160deg,#111008 0%,#0a0a0a 60%,#0d0d0d 100%)`,
+        background: `linear-gradient(160deg,#111111 0%,#0a0a0a 60%,#0d0d0d 100%)`,
         border: `1px solid ${accent}33`,
         borderLeft: `5px solid ${accent}`,
         borderRadius: "clamp(0.5rem,1vw,1rem)",
