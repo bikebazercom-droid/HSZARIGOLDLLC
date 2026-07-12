@@ -709,75 +709,18 @@ export default function ShowroomBoard() {
             flexShrink: 0,
           }}
         >
-          {/* Brand */}
-          <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.5rem,1.2vw,1.1rem)" }}>
-            {showroomLogoUrl ? (
-              <img
-                src={showroomLogoUrl}
-                alt="Logo"
-                style={{
-                  height: "clamp(2.4rem,7vh,5.5rem)",
-                  maxWidth: "min(45vw,220px)",
-                  objectFit: "contain",
-                  filter: `drop-shadow(0 0 20px ${GOLD}66)`,
-                }}
-              />
-            ) : (
-              <>
-                {/* Ornamental diamond */}
-                <div
-                  style={{
-                    width:  "clamp(2rem,5vh,4.5rem)",
-                    height: "clamp(2rem,5vh,4.5rem)",
-                    border: `2px solid ${GOLD}`,
-                    transform: "rotate(45deg)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    boxShadow: `0 0 24px ${GOLD}44, 0 0 60px ${GOLD}22`,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "55%", height: "55%",
-                      background: GOLD,
-                      transform: "rotate(0deg)",
-                    }}
-                  />
-                </div>
-
-                {/* Shop name */}
-                <div>
-                  <div
-                    style={{
-                      color: GOLD,
-                      fontWeight: 900,
-                      fontSize: "clamp(1.2rem,calc(1.8vh + 1.6vw),4rem)",
-                      letterSpacing: "0.14em",
-                      textTransform: "uppercase",
-                      lineHeight: 1,
-                      textShadow: `0 0 40px ${GOLD}66, 0 2px 8px #00000099`,
-                    }}
-                  >
-                    {shopName}
-                  </div>
-                  <div
-                    style={{
-                      color: `${GOLD}88`,
-                      fontWeight: 600,
-                      fontSize: "clamp(0.5rem,calc(0.5vh + 0.5vw),0.9rem)",
-                      letterSpacing: "0.35em",
-                      textTransform: "uppercase",
-                      marginTop: "0.1em",
-                    }}
-                  >
-                    LIVE GOLD PRICE BOARD
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Brand — Hazari Gold banner image */}
+          <img
+            src={`${import.meta.env.BASE_URL}hazari-gold-banner.jpg`}
+            alt="Hazari Gold LLC"
+            style={{
+              height: "clamp(2.8rem,8vh,6rem)",
+              maxWidth: "min(55vw,320px)",
+              objectFit: "contain",
+              objectPosition: "left center",
+              filter: `drop-shadow(0 0 16px ${GOLD}44)`,
+            }}
+          />
 
           {/* Clock + live indicator */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35em", flexShrink: 0 }}>
