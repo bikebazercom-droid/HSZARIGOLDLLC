@@ -10,19 +10,21 @@ import {
 //   Raw_Ask_USD  = XAUUSD tick from livepriceofgold.com Socket.IO feed
 //   Base_24K_AED = (Raw_Ask_USD / 31.1034768) × 3.6725
 //   Adjusted_Base = Base_24K_AED × (1 + spreadPercent / 100)   ← server applies
-//   Bar rows     = Adjusted_Base × purity
-//   Jewelry rows = Adjusted_Base × purity × (1 + laborCostPercent / 100)
+//
+// Dubai market convention (livepriceofgold.com):
+//   Spot price per gram IS the 9999 gold rate — no separate 0.9999 deduction.
+//   9999 bars  = Adjusted_Base × weight          (purity factor = 1.0)
+//   995 bars   = Adjusted_Base × weight × 0.9950
+//   Jewellery  = Adjusted_Base × karat_factor × (1 + laborCostPercent / 100)
 //
 // `aedPerGram` from /prices/spot is already the Adjusted_Base (spread applied
 // server-side). `laborCostPercent` is also returned from the spot endpoint and
-// applied here for jewelry rows only (22K/21K/18K).
+// applied here for jewellery rows only (22K/21K/18K).
 // ─────────────────────────────────────────────────────────────────────────────
 
-// 1 Tola = 3/8 troy oz exactly. 3.75 × 31.1034768 = 116.638038g.
-// Using the precise tola definition rather than the rounded 116.640.
-const TOLA_BAR_GRAMS = 3.75 * 31.1034768;  // = 116.638038…g
+// Dubai local tola convention: 1 Tola = 11.664g → 10 Tola Bar = 116.64g
+const TOLA_BAR_GRAMS = 116.64;
 const PURITY_995     = 0.995;
-const PURITY_9999    = 0.9999;
 // livepriceofgold.com Dubai retail convention: 22K = 24K × 0.9180
 // (confirmed by reverse-engineering live sheet: 446.58 / 486.47 = 0.91800)
 const PURITY_22K     = 0.9180;
@@ -136,11 +138,12 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
       laborCostPercent:  laborPct,
 
       // ── Admin/invoice rates (spread + labor applied) ──────────────────────────
+      // Dubai convention: spot = 9999 rate, no 0.9999 factor; 995 discount applied only for 995 bars.
       ttBar995Total:   round2(adjustedBase * TOLA_BAR_GRAMS * PURITY_995),
-      ttBar9999Total:  round2(adjustedBase * TOLA_BAR_GRAMS * PURITY_9999),
-      gold9999Rate:    round2(adjustedBase * PURITY_9999),
-      goldKg9999Total: round2(adjustedBase * 1000 * PURITY_9999),
-      goldKg9999Rate:  round2(adjustedBase * PURITY_9999),
+      ttBar9999Total:  round2(adjustedBase * TOLA_BAR_GRAMS),
+      gold9999Rate:    round2(adjustedBase),
+      goldKg9999Total: round2(adjustedBase * 1000),
+      goldKg9999Rate:  round2(adjustedBase),
       kgBar995Total:   round2(adjustedBase * 1000 * PURITY_995),
       gold22kRate:     round2(adjustedBase * PURITY_22K * laborMult),
       gold21kRate:     round2(adjustedBase * PURITY_21K * laborMult),

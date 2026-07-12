@@ -13,7 +13,7 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     name: "TT. BAR 995",
     displayOrder: 1,
     formulaType: "spot_bar",
-    weightGrams: String(3.75 * TROY),
+    weightGrams: "116.64",        // Dubai convention: 1 Tola = 11.664g → 10 Tola = 116.64g
     weightLabel: "TTB",
     purityFactor: "0.9950000",
     premiumOffsetAed: "0",
@@ -24,9 +24,9 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     name: "TT. BAR 9999",
     displayOrder: 2,
     formulaType: "spot_bar",
-    weightGrams: String(3.75 * TROY),
+    weightGrams: "116.64",        // Dubai convention: 1 Tola = 11.664g → 10 Tola = 116.64g
     weightLabel: "TTB",
-    purityFactor: "0.9999000",
+    purityFactor: "1.0000000",    // spot rate IS the 9999 rate — no separate deduction
     premiumOffsetAed: "0",
     tvVisible: true,
     isCore: true,
@@ -37,7 +37,7 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     formulaType: "spot_per_gram",
     weightGrams: null,
     weightLabel: "1GM",
-    purityFactor: "0.9999000",
+    purityFactor: "1.0000000",    // spot rate IS the 9999 rate — no separate deduction
     premiumOffsetAed: "0",
     tvVisible: true,
     isCore: true,
@@ -59,7 +59,7 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     formulaType: "spot_bar",
     weightGrams: "1000",
     weightLabel: "1KG",
-    purityFactor: "0.9999000",
+    purityFactor: "1.0000000",    // spot rate IS the 9999 rate — no separate deduction
     premiumOffsetAed: "0",
     tvVisible: true,
     isCore: true,

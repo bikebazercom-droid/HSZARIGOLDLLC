@@ -19,6 +19,13 @@ The pricing engine derives `Base_24K_AED` directly from the international gold s
 
 - Admin in-memory state: `adminSpreadPercent` and `adminLaborPercent` are module-level vars in `prices.ts`, loaded from DB on startup via `loadAdminConfig()`. PATCH /api/prices with `{spreadPremiumPercent, laborCostPercent}` updates both DB and in-memory vars; `liveSpot.aedPerGram` is re-computed immediately so the next 1s poll picks up the change instantly (no restart needed).
 
+- Dubai market conventions (enforced as of July 2026):
+  - **9999-purity items** (GOLD 9999, TT BAR 9999, KG BAR 9999): purityFactor = **1.0** — the spot rate IS the 9999 price; no separate 0.9999 deduction.
+  - **995 bars**: purityFactor = **0.9950** applied to spot rate directly.
+  - **TT Bar (Ten Tola) weight**: **116.64g** (Dubai local convention: 1 Tola = 11.664g); NOT the troy-oz derived 116.638038g.
+  - **22K jewellery**: purityFactor = **0.9180** (livepriceofgold.com Dubai convention; confirmed 446.58 / 486.47 = 0.918). NOT 0.9167 (22/24) nor 0.9200.
+  - **21K**: 0.8750 (= 21/24). **18K**: 0.7500 (= 18/24). Both correct.
+  - These factors live in the DB `price_items.purity_factor` (TV board) AND as constants in `live-price.tsx` (admin/invoice). Update both when changing conventions.
 - Jewelry purities (22K/21K/18K): `Adjusted_Base × purity × (1 + laborPct/100)` applied in `live-price.tsx`. Bar/bullion rows use `Adjusted_Base × purity` only.
 
 - Free feed formula (verified against livepriceofgold.com Dubai AED/gram — matches to 1 cent):
