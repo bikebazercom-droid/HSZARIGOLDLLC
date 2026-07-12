@@ -469,7 +469,7 @@ export default function NewInvoice() {
     if (!isLive || isManualMode) return;
     setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed, liveRates.laborCostPercent));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, isManualMode, prices, itemSignature]);
+  }, [isLive, isManualMode, prices, itemSignature, liveAed, liveRates.laborCostPercent]);
 
   // Seed the global Metal Rate with a sensible baseline the moment prices
   // first load (covers page load / Live Mode toggling before any item has a
