@@ -362,6 +362,18 @@ export default function InvoiceDetail() {
                   <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
                 </tr>
               ))}
+              {/* Placeholder rows — pad table to minimum 7 rows for a structured layout */}
+              {Array.from({ length: Math.max(0, 7 - (invoice.items?.length ?? 0)) }).map((_, i) => {
+                const rowIdx = (invoice.items?.length ?? 0) + i;
+                return (
+                  <tr key={`ph-${i}`} style={{ background: rowIdx % 2 === 1 ? "#f9f9f9" : "white" }}>
+                    <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", color: "#bbb" }}>{rowIdx + 1}</td>
+                    {[...Array(7)].map((__, c) => (
+                      <td key={c} style={{ padding: "5px 6px", border: "1px solid #ddd" }}>&nbsp;</td>
+                    ))}
+                  </tr>
+                );
+              })}
               {/* Totals row */}
               <tr style={{ background: "#eef2f7", fontWeight: "bold" }}>
                 <td colSpan={2} style={{ padding: "5px 8px", border: "1px solid #ccc" }}>Total ({itemCount} Items)</td>
