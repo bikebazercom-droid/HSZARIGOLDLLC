@@ -21,13 +21,13 @@ const GOLD = "#c8a43a";
 const underlineFieldStyle: React.CSSProperties = {
   borderBottom: "1px solid #aaa",
   minWidth: 120,
-  minHeight: 16,
-  paddingBottom: "6px",
-  lineHeight: 1.5,
+  minHeight: 14,
+  paddingBottom: "3px",
+  lineHeight: 1.4,
 };
 
 const fieldLabelCellStyle: React.CSSProperties = {
-  padding: "5px 8px",
+  padding: "3px 8px",
   fontWeight: "bold",
   color: NAVY,
   whiteSpace: "nowrap",
@@ -35,13 +35,13 @@ const fieldLabelCellStyle: React.CSSProperties = {
 };
 
 const fieldColonCellStyle: React.CSSProperties = {
-  padding: "5px 2px",
+  padding: "3px 2px",
   color: NAVY,
   verticalAlign: "bottom",
 };
 
 const fieldValueCellStyle: React.CSSProperties = {
-  padding: "5px 8px",
+  padding: "3px 8px",
   verticalAlign: "bottom",
 };
 
@@ -177,7 +177,7 @@ export default function InvoiceDetail() {
         <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, margin: "-15mm -15mm 0" }} />
 
         {/* Top line: Arabic + PARTY COPY */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px 2px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 16px 1px" }}>
           <div style={{ flex: 1 }} />
           <div style={{ textAlign: "center", color: GOLD, fontSize: "13px", fontWeight: "bold", fontFamily: "serif", flex: 2 }}>
             بسم الله الرحمن الرحيم
@@ -336,7 +336,7 @@ export default function InvoiceDetail() {
         </div>
 
         {/* Items Table */}
-        <div style={{ margin: "8px 16px" }}>
+        <div style={{ margin: "4px 16px" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
             <thead>
               <tr style={{ background: NAVY, color: "white" }}>
@@ -352,14 +352,14 @@ export default function InvoiceDetail() {
             <tbody>
               {invoice.items?.map((item, index) => (
                 <tr key={item.id} style={{ borderBottom: `1px solid #ddd`, background: index % 2 === 1 ? "#f9f9f9" : "white" }}>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{index + 1}</td>
-                  <td style={{ padding: "5px 8px", border: "1px solid #ddd", fontWeight: "500" }}>{item.description}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.grossWeight)}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{item.purity || "-"}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.pureWeight)}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.makingRate)}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd" }}>{item.makingAmt ? fmt(item.makingAmt) : "-"}</td>
-                  <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{index + 1}</td>
+                  <td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: "500" }}>{item.description}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.grossWeight)}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{item.purity || "-"}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.pureWeight)}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.makingRate)}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{item.makingAmt ? fmt(item.makingAmt) : "-"}</td>
+                  <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
                 </tr>
               ))}
               {/* Placeholder rows — pad table to minimum 7 rows for a structured layout */}
@@ -367,29 +367,29 @@ export default function InvoiceDetail() {
                 const rowIdx = (invoice.items?.length ?? 0) + i;
                 return (
                   <tr key={`ph-${i}`} style={{ background: rowIdx % 2 === 1 ? "#f9f9f9" : "white" }}>
-                    <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ddd", color: "#bbb" }}>{rowIdx + 1}</td>
+                    <td style={{ padding: "2px 5px", textAlign: "center", border: "1px solid #ddd", color: "#bbb" }}>{rowIdx + 1}</td>
                     {[...Array(7)].map((__, c) => (
-                      <td key={c} style={{ padding: "5px 6px", border: "1px solid #ddd" }}>&nbsp;</td>
+                      <td key={c} style={{ padding: "2px 5px", border: "1px solid #ddd" }}>&nbsp;</td>
                     ))}
                   </tr>
                 );
               })}
               {/* Totals row */}
               <tr style={{ background: "#eef2f7", fontWeight: "bold" }}>
-                <td colSpan={2} style={{ padding: "5px 8px", border: "1px solid #ccc" }}>Total ({itemCount} Items)</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{fmtWt(totalGross)}</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>-</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{fmtWt(totalPure)}</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>-</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{totalMakingAmt ? fmt(totalMakingAmt) : "-"}</td>
-                <td style={{ padding: "5px 6px", textAlign: "center", border: "1px solid #ccc" }}>{fmt(totalPrice)}</td>
+                <td colSpan={2} style={{ padding: "3px 8px", border: "1px solid #ccc" }}>Total ({itemCount} Items)</td>
+                <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ccc" }}>{fmtWt(totalGross)}</td>
+                <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ccc" }}>-</td>
+                <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ccc" }}>{fmtWt(totalPure)}</td>
+                <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ccc" }}>-</td>
+                <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ccc" }}>{totalMakingAmt ? fmt(totalMakingAmt) : "-"}</td>
+                <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ccc" }}>{fmt(totalPrice)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         {/* Summary */}
-        <div style={{ margin: "4px 16px 8px", display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ margin: "2px 16px 4px", display: "flex", justifyContent: "flex-end" }}>
           <table style={{ width: "58%", borderCollapse: "collapse", fontSize: "10px" }}>
             <tbody>
               {[
@@ -399,27 +399,27 @@ export default function InvoiceDetail() {
                 { label: "Round Off Discount (AED)", value: fmt(roundOffDiscount), bold: false, show: true },
               ].filter(row => row.show).map(({ label, value }) => (
                 <tr key={label}>
-                  <td style={{ padding: "4px 10px", border: "1px solid #ccc" }}>{label}</td>
-                  <td style={{ padding: "4px 10px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold", minWidth: "80px" }}>{value}</td>
+                  <td style={{ padding: "3px 8px", border: "1px solid #ccc" }}>{label}</td>
+                  <td style={{ padding: "3px 8px", textAlign: "right", border: "1px solid #ccc", fontWeight: "bold", minWidth: "80px" }}>{value}</td>
                 </tr>
               ))}
               <tr style={{ background: NAVY, color: "white" }}>
-                <td style={{ padding: "6px 10px", fontWeight: "bold", fontSize: "11px" }}>Total Amount Including VAT (AED)</td>
-                <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: "bold", fontSize: "12px" }}>{fmt(totalIncludingVat)}</td>
+                <td style={{ padding: "4px 10px", fontWeight: "bold", fontSize: "11px" }}>Total Amount Including VAT (AED)</td>
+                <td style={{ padding: "4px 10px", textAlign: "right", fontWeight: "bold", fontSize: "12px" }}>{fmt(totalIncludingVat)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         {/* Amount in Words + Payment Mode */}
-        <div style={{ margin: "4px 16px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", padding: "6px 10px", borderBottom: "1px solid #eee", gap: "8px" }}>
-            <span style={{ fontSize: "16px" }}>💰</span>
+        <div style={{ margin: "2px 16px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #eee", gap: "8px" }}>
+            <span style={{ fontSize: "14px" }}>💰</span>
             <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Amount In Words (AED):</span>
             <span style={{ fontStyle: "italic" }}>{numberToWords(totalIncludingVat)}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", padding: "6px 10px", gap: "8px" }}>
-            <span style={{ fontSize: "16px" }}>💳</span>
+          <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", gap: "8px" }}>
+            <span style={{ fontSize: "14px" }}>💳</span>
             <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Payment Mode:</span>
             <span style={{ fontWeight: "bold" }}>{paymentLabel}</span>
           </div>
@@ -427,7 +427,7 @@ export default function InvoiceDetail() {
 
         {/* Notes — rendered as plain text so it appears in both screen and print/PDF */}
         {invoice.notes && (
-          <div style={{ margin: "4px 16px 8px", border: `1px solid #ccc`, borderRadius: "4px", padding: "6px 10px", fontSize: "10px", color: "#000", background: "#fff" }}>
+          <div style={{ margin: "2px 16px 4px", border: `1px solid #ccc`, borderRadius: "4px", padding: "4px 8px", fontSize: "10px", color: "#000", background: "#fff" }}>
             <span style={{ fontWeight: "bold", color: NAVY }}>Notes: </span>
             <span style={{ whiteSpace: "pre-wrap" }}>{invoice.notes}</span>
           </div>
@@ -496,6 +496,13 @@ export default function InvoiceDetail() {
             padding: 0;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+          }
+          [data-invoice-doc] {
+            height: 297mm !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
+            page-break-inside: avoid !important;
+            box-shadow: none !important;
           }
         }
       `}</style>
