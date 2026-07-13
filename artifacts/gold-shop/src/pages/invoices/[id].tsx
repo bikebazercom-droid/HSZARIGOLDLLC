@@ -413,6 +413,14 @@ export default function InvoiceDetail() {
           </div>
         </div>
 
+        {/* Notes — rendered as plain text so it appears in both screen and print/PDF */}
+        {invoice.notes && (
+          <div style={{ margin: "4px 16px 8px", border: `1px solid #ccc`, borderRadius: "4px", padding: "6px 10px", fontSize: "10px", color: "#000", background: "#fff" }}>
+            <span style={{ fontWeight: "bold", color: NAVY }}>Notes: </span>
+            <span style={{ whiteSpace: "pre-wrap" }}>{invoice.notes}</span>
+          </div>
+        )}
+
         {/* ── BOTTOM FOOTER WRAPPER ──────────────────────────────────────────
             Absolutely pinned to the bottom of the A4 frame so that signatures
             and the navy ribbon always sit at the foot of the page regardless
@@ -457,7 +465,7 @@ export default function InvoiceDetail() {
       </div>
 
       {invoice.notes && (
-        <div className="mt-4 p-4 bg-muted/40 rounded text-sm no-print">
+        <div className="mt-4 p-4 bg-muted/40 rounded text-sm no-print" style={{ whiteSpace: "pre-wrap" }}>
           <span className="font-medium">Notes: </span>{invoice.notes}
         </div>
       )}
