@@ -885,16 +885,6 @@ export default function NewInvoice() {
                       </td>
                     </tr>
                   ))}
-                  {/* Placeholder rows — pad table to minimum 7 rows */}
-                  {Array.from({ length: Math.max(0, 7 - items.length) }).map((_, i) => (
-                    <tr key={`ph-${i}`} className={(items.length + i) % 2 === 1 ? "bg-muted/20" : ""}>
-                      <td className="py-2 px-3 text-center text-muted-foreground/30 text-sm border-b border-border/30">{items.length + i + 1}</td>
-                      {[...Array(7)].map((__, c) => (
-                        <td key={c} className="py-2 px-3 border-b border-border/30">&nbsp;</td>
-                      ))}
-                      <td className="py-2 px-3 border-b border-border/30"></td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
             </div>
