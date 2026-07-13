@@ -129,18 +129,17 @@ export default function InvoiceDetail() {
     const html2pdf = (await import("html2pdf.js")).default;
     html2pdf()
       .set({
-        // Zero left/right margin so the 210mm invoice fills the full A4 width.
-        // Vertical margins give breathing room at top/bottom only.
-        margin: [8, 0, 8, 0],
+        // Zero margins — the invoice div itself has 15mm padding for safe
+        // boundary, so no additional pdf-level margin is needed.
+        margin: [0, 0, 0, 0],
         filename: `Invoice-${invoice.invoiceNumber}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: {
           scale: 2,
           useCORS: true,
           logging: false,
-          // Force html2canvas to render at A4 width (210mm @ 96 dpi = 794px)
-          // regardless of the current browser viewport width.  Without this,
-          // narrow viewports clip the right side of the invoice.
+          // Force html2canvas to render at A4 width (210mm @ 96 dpi ≈ 794px)
+          // regardless of the current browser viewport width.
           windowWidth: 794,
           scrollX: 0,
           scrollY: 0,
@@ -171,10 +170,11 @@ export default function InvoiceDetail() {
           viewports it scrolls horizontally inside this contained wrapper
           instead of breaking the page's own layout. */}
       <div className="overflow-x-auto print:overflow-visible">
-      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box" }}>
+      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", padding: "15mm" }}>
 
-        {/* Gold top border */}
-        <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
+        {/* Gold top border — negative margin escapes the 15mm container padding
+            so it stays flush with the outer div edges */}
+        <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, margin: "-15mm -15mm 0" }} />
 
         {/* Top line: Arabic + PARTY COPY */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px 2px" }}>
@@ -442,13 +442,14 @@ export default function InvoiceDetail() {
           ))}
         </div>
 
-        {/* Footer */}
-        <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px" }}>
+        {/* Footer — negative margin escapes the 15mm container padding so it
+            spans full width, with the gold border flush at the very bottom */}
+        <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px", margin: "0 -15mm" }}>
           Thank you for your business!
         </div>
 
         {/* Gold bottom border */}
-        <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
+        <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, margin: "0 -15mm -15mm" }} />
       </div>
       </div>
 
@@ -462,24 +463,16 @@ export default function InvoiceDetail() {
         @media print {
           @page {
             size: A4;
-            margin: 10mm;
+            margin: 0;
           }
           .no-print { display: none !important; }
           body {
             width: 210mm;
-            max-width: 210mm;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          /* Scale the invoice to fit within the @page 10mm margins (190mm usable).
-             transform-origin top-left ensures the content anchors to the top-left
-             corner of the printable area rather than scaling from centre. */
-          [data-invoice-doc] {
-            transform: scale(0.905);
-            transform-origin: top left;
+            height: 297mm;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
       `}</style>
