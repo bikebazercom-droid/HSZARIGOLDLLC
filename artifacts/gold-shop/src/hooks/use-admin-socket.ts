@@ -8,6 +8,7 @@ import {
   getGetMonthlySalesQueryKey,
   getGetCategorySummaryQueryKey,
   getGetPricesQueryKey,
+  getGetPricesSpotQueryKey,
   getListProductsQueryKey,
   getGetSettingsQueryKey,
   getGetPublicSettingsQueryKey,
@@ -28,8 +29,8 @@ function getSocket(): Socket {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 2_000,
-      reconnectionDelayMax: 10_000,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3_000,
     });
   }
   return _socket;
@@ -61,7 +62,11 @@ export function useAdminSocket(): void {
     }
 
     function onPriceMutation() {
+      // Invalidate both the admin prices page AND the live spot endpoint so
+      // every consumer (admin dashboard, prices page, live-price context) gets
+      // an immediate push-driven update instead of waiting for its poll cycle.
       queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetPricesSpotQueryKey() });
     }
 
     function onProductMutation() {

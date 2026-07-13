@@ -110,10 +110,10 @@ const liveSocket = socketIO("https://www.livepriceofgold.com", {
   upgrade: false,
   reconnection: true,
   reconnectionAttempts: Infinity,
-  reconnectionDelay: 2000,
-  reconnectionDelayMax: 6000,
-  randomizationFactor: 0.5,
-  timeout: 20_000,
+  reconnectionDelay: 500,          // was 2000 — reconnect faster after drops
+  reconnectionDelayMax: 3_000,     // was 6000 — cap at 3 s, not 6 s
+  randomizationFactor: 0.3,
+  timeout: 10_000,                 // was 20 000 — detect dead connections sooner
 });
 
 liveSocket.on("connect", () => {

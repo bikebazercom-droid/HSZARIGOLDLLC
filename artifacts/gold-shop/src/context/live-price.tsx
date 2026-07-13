@@ -1,8 +1,31 @@
-import React, { createContext, useContext, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { io } from "socket.io-client";
 import {
   useGetPricesSpot,
   getGetPricesSpotQueryKey,
 } from "@workspace/api-client-react";
+
+// ── Public socket singleton ───────────────────────────────────────────────────
+// Shared across all hook instances so only one WebSocket is opened per tab.
+// No authentication required — the TV board (showroom) is a public page.
+// Primary mechanism: when the server broadcasts PRICE_MUTATION (every live
+// tick from livepriceofgold.com), we immediately invalidate the spot cache
+// so React Query fires a refetch within milliseconds, not up to 1 second later.
+let _pubSock: ReturnType<typeof io> | null = null;
+function getPubSocket() {
+  if (!_pubSock) {
+    _pubSock = io({
+      path: "/api/socket.io",
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3_000,
+    });
+  }
+  return _pubSock;
+}
 
 // ── International Spot Gold (XAU/USD) pricing engine — 1-second real-time sync ──
 //
@@ -103,10 +126,28 @@ const LivePriceContext = createContext<LivePriceContextValue>({
 });
 
 export function LivePriceProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+
+  // ── Socket push: instant update on every server-side price tick ───────────
+  // The server broadcasts PRICE_MUTATION each time a new XAU/USD tick arrives
+  // from livepriceofgold.com (~every few seconds). We immediately invalidate
+  // the spot cache so React Query refetches without waiting for the polling
+  // interval — reducing effective latency from ≤1 000 ms to ~50–150 ms.
+  useEffect(() => {
+    const sock = getPubSocket();
+    const onPrice = () => {
+      void queryClient.invalidateQueries({ queryKey: getGetPricesSpotQueryKey() });
+    };
+    sock.on("PRICE_MUTATION", onPrice);
+    return () => { sock.off("PRICE_MUTATION", onPrice); };
+  }, [queryClient]);
+
+  // Polling kept at 2 s as a safety-net fallback (market closed, socket lag).
+  // Socket push is now the primary real-time mechanism.
   const { data: spot } = useGetPricesSpot({
     query: {
       queryKey: getGetPricesSpotQueryKey(),
-      refetchInterval: 1000,
+      refetchInterval: 2_000,
       refetchIntervalInBackground: true,
       staleTime: 0,
       gcTime: 0,
