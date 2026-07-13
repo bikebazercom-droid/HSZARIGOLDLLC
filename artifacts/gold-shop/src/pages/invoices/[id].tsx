@@ -440,9 +440,9 @@ export default function InvoiceDetail() {
             to-edge (left/right: 0) so the full-width navy & gold strips need
             no negative-margin escape. Signatures are padded inward to match
             the 15mm content boundary. */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, pageBreakBefore: "avoid" }}>
           {/* Signatures */}
-          <div style={{ padding: "16px 15mm 8px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <div style={{ padding: "8px 15mm 6px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
             {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
               <div key={label} style={{ width: "30%" }}>
                 {label === "Authorised Signature" && settings?.stampSignatureUrl && (
@@ -466,7 +466,7 @@ export default function InvoiceDetail() {
           </div>
 
           {/* Navy "Thank you" ribbon — full width inside the wrapper */}
-          <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px" }}>
+          <div className="thank-you-footer" style={{ background: NAVY, color: "white", textAlign: "center", padding: "6px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px", pageBreakBefore: "avoid" }}>
             Thank you for your business!
           </div>
 
@@ -485,24 +485,35 @@ export default function InvoiceDetail() {
       <style>{`
         @media print {
           @page {
-            size: A4;
-            margin: 0;
+            size: A4 portrait;
+            margin: 0 !important;
           }
-          .no-print { display: none !important; }
-          body {
-            width: 210mm;
-            height: 297mm;
-            margin: 0;
-            padding: 0;
+          html, body {
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          [data-invoice-doc] {
+          #root, [data-reactroot] {
             height: 297mm !important;
             max-height: 297mm !important;
             overflow: hidden !important;
-            page-break-inside: avoid !important;
+          }
+          .no-print { display: none !important; }
+          [data-invoice-doc] {
+            width: 210mm !important;
+            height: 297mm !important;
+            min-height: unset !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
             box-shadow: none !important;
+            border: none !important;
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
           }
         }
       `}</style>
