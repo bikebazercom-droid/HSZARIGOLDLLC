@@ -78,6 +78,14 @@ let lastDbWriteAt: Date | null  = null;
 // staleness threshold.
 let goldApiActive = false;
 
+// ── Swissquote OTC half-spread (updated every 15 s) ──────────────────────────
+// Swissquote's public feed returns the actual interbank XAU/USD bid and ask.
+// We store half the spread so every price source (Socket.IO, GoldAPI, Yahoo
+// fallback) computes bid/ask from the same calibrated OTC value instead of
+// a fixed constant.  Initialised to BID_ASK_SPREAD_USD/2 as a safe fallback
+// until the first Swissquote poll resolves.
+let sqHalfSpread: number = BID_ASK_SPREAD_USD / 2;
+
 // Called by the settings route the instant the admin flips the toggle OFF so
 // the in-memory flag reflects the new state without waiting for the next poll.
 export function setGoldApiActive(val: boolean): void {
@@ -189,10 +197,10 @@ async function pollGoldApi(): Promise<void> {
     // Prefer the real ask/bid from GoldAPI.io; fall back to derived spread
     const askUsdPerOz = (data.ask && Number.isFinite(data.ask) && data.ask > 500)
       ? data.ask
-      : usdPerOz + ASK_OFFSET_USD;
+      : usdPerOz + sqHalfSpread;
     const bidUsdPerOz = (data.bid && Number.isFinite(data.bid) && data.bid > 500)
       ? data.bid
-      : askUsdPerOz - BID_ASK_SPREAD_USD;
+      : usdPerOz - sqHalfSpread;
 
     // Use GoldAPI daily range when provided
     if (data.low_price  && Number.isFinite(data.low_price)  && data.low_price  > 500) {
@@ -285,12 +293,23 @@ async function fetchYahooFinance(): Promise<void> {
       const low   = meta?.regularMarketDayLow;
       const price = meta?.regularMarketPrice;
 
-      // ── Daily H/L ─────────────────────────────────────────────────────────────
+      // ── Daily H/L (startup seed only) ────────────────────────────────────────
+      // GC=F is COMEX gold futures, not OTC spot — its daily range will deviate
+      // from what interbank quote boards (e.g. NetDania) show.  We therefore
+      // use Yahoo's H/L ONLY to seed the values on cold start or day rollover
+      // (i.e. when live spot tracking hasn't yet established today's range).
+      // Once trackDailyRange() has run at least once for today, spot ticks own
+      // the H/L and we must NOT let futures data override them.
       if (high && low && Number.isFinite(high) && Number.isFinite(low) && high > 1000 && low > 1000) {
-        if (dailyHighUsdPerOz == null || high > dailyHighUsdPerOz) dailyHighUsdPerOz = high;
-        if (dailyLowUsdPerOz  == null || low  < dailyLowUsdPerOz)  dailyLowUsdPerOz  = low;
-        dailyTrackingDateUTC = todayUTC();
-        logger.info({ high, low }, "[yahoo] Daily H/L updated from GC=F");
+        const today = todayUTC();
+        if (dailyTrackingDateUTC !== today) {
+          dailyHighUsdPerOz    = high;
+          dailyLowUsdPerOz     = low;
+          dailyTrackingDateUTC = today;
+          logger.info({ high, low }, "[yahoo] GC=F H/L seeded (startup/day-rollover)");
+        } else {
+          logger.info({ high, low }, "[yahoo] GC=F H/L skipped — live spot tracking active");
+        }
       }
 
       // ── Live spot fallback ─────────────────────────────────────────────────────
@@ -302,8 +321,8 @@ async function fetchYahooFinance(): Promise<void> {
         const isStale = !liveSpot || (Date.now() - liveSpot.receivedAt.getTime() > LIVE_SPOT_STALE_MS);
         if (isStale) {
           await loadAdminConfig();
-          const askUsdPerOz   = price + ASK_OFFSET_USD;
-          const bidUsdPerOz   = askUsdPerOz - BID_ASK_SPREAD_USD;
+          const askUsdPerOz   = price + sqHalfSpread;
+          const bidUsdPerOz   = price - sqHalfSpread;
           const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
           const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
           trackDailyRange(price);
@@ -336,6 +355,51 @@ async function fetchYahooFinance(): Promise<void> {
 fetchYahooFinance();
 setInterval(fetchYahooFinance, 30_000);
 
+// ── Swissquote OTC bid/ask calibration ────────────────────────────────────────
+// Swissquote Bank's public data feed (no auth required) serves actual real-time
+// XAU/USD bid and ask from the OTC interbank market — the same source used by
+// professional quote boards.  We poll every 15 s and store half the spread so
+// all price sources (Socket.IO, GoldAPI fallback, Yahoo fallback) produce bid
+// and ask that track the real OTC market spread instead of a fixed constant.
+// If any poll fails, sqHalfSpread stays at its last good value (safe fallback).
+// ─────────────────────────────────────────────────────────────────────────────
+interface SqSpreadProfile { spreadProfile: string; bid: number; ask: number; }
+interface SqItem { spreadProfilePrices?: SqSpreadProfile[]; }
+
+async function pollSwissquote(): Promise<void> {
+  try {
+    const resp = await fetch(
+      "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD",
+      { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8_000) }
+    );
+    if (!resp.ok) return;
+    const data = await resp.json() as SqItem[];
+    const profiles = data?.[0]?.spreadProfilePrices;
+    if (!profiles?.length) return;
+    // "prime" = institutional rates; fall back to first available profile
+    const p = profiles.find(x => x.spreadProfile === "prime") ?? profiles[0];
+    if (!p?.bid || !p?.ask || p.bid < 1_000) return;
+
+    sqHalfSpread = (p.ask - p.bid) / 2;
+
+    // Patch live bid/ask immediately so the TV board reflects the new OTC
+    // spread without waiting for the next Socket.IO tick.
+    if (liveSpot) {
+      liveSpot.bidUsdPerOz = liveSpot.usdPerOz - sqHalfSpread;
+      liveSpot.askUsdPerOz = liveSpot.usdPerOz + sqHalfSpread;
+      broadcast("PRICE_MUTATION");
+    }
+    logger.info(
+      { bid: p.bid.toFixed(3), ask: p.ask.toFixed(3), halfSpread: sqHalfSpread.toFixed(3) },
+      "[swissquote] OTC spread calibrated"
+    );
+  } catch (err) {
+    logger.warn({ err }, "[swissquote] Poll failed — retaining last known spread");
+  }
+}
+pollSwissquote();
+setInterval(pollSwissquote, 15_000);
+
 liveSocket.on("update", (raw: string) => {
   try {
     const data = JSON.parse(raw) as Record<string, string | number>;
@@ -353,8 +417,8 @@ liveSocket.on("update", (raw: string) => {
       return;
     }
 
-    const askUsdPerOz   = usdPerOz + ASK_OFFSET_USD;
-    const bidUsdPerOz   = askUsdPerOz - BID_ASK_SPREAD_USD;
+    const askUsdPerOz   = usdPerOz + sqHalfSpread;
+    const bidUsdPerOz   = usdPerOz - sqHalfSpread;
     const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
 
     // Apply admin spread: Adjusted_Base = Base_24K_AED × (1 + spread% / 100)
