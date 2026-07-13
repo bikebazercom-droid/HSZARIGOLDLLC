@@ -170,7 +170,7 @@ export default function InvoiceDetail() {
           viewports it scrolls horizontally inside this contained wrapper
           instead of breaking the page's own layout. */}
       <div className="overflow-x-auto print:overflow-visible">
-      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", padding: "15mm" }}>
+      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", padding: "15mm", position: "relative" }}>
 
         {/* Gold top border — negative margin escapes the 15mm container padding
             so it stays flush with the outer div edges */}
@@ -413,43 +413,46 @@ export default function InvoiceDetail() {
           </div>
         </div>
 
-        {/* Signatures */}
-        <div style={{ margin: "16px 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
-            <div key={label} style={{ width: "30%" }}>
-              {/* Standard normal-flow block centering — no position: absolute.
-                  The stamp is rendered before the line/label as a normal
-                  block element with margin: 0 auto, so it can never overflow
-                  or shove sibling content out of the container. A small
-                  negative margin-bottom pulls it down to overlap the line. */}
-              {label === "Authorised Signature" && settings?.stampSignatureUrl && (
-                <img
-                  src={settings.stampSignatureUrl}
-                  alt="Authorized stamp and signature"
-                  style={{
-                    display: "block",
-                    width: "130px",
-                    maxWidth: "100%",
-                    height: "auto",
-                    margin: "0 auto -10px",
-                  }}
-                />
-              )}
-              <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY, textAlign: "center" }}>
-                {label}
+        {/* ── BOTTOM FOOTER WRAPPER ──────────────────────────────────────────
+            Absolutely pinned to the bottom of the A4 frame so that signatures
+            and the navy ribbon always sit at the foot of the page regardless
+            of how many item rows are in the invoice.  The wrapper spans edge-
+            to-edge (left/right: 0) so the full-width navy & gold strips need
+            no negative-margin escape. Signatures are padded inward to match
+            the 15mm content boundary. */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}>
+          {/* Signatures */}
+          <div style={{ padding: "16px 15mm 8px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
+              <div key={label} style={{ width: "30%" }}>
+                {label === "Authorised Signature" && settings?.stampSignatureUrl && (
+                  <img
+                    src={settings.stampSignatureUrl}
+                    alt="Authorized stamp and signature"
+                    style={{
+                      display: "block",
+                      width: "130px",
+                      maxWidth: "100%",
+                      height: "auto",
+                      margin: "0 auto -10px",
+                    }}
+                  />
+                )}
+                <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY, textAlign: "center" }}>
+                  {label}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        {/* Footer — negative margin escapes the 15mm container padding so it
-            spans full width, with the gold border flush at the very bottom */}
-        <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px", margin: "0 -15mm" }}>
-          Thank you for your business!
-        </div>
+          {/* Navy "Thank you" ribbon — full width inside the wrapper */}
+          <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px" }}>
+            Thank you for your business!
+          </div>
 
-        {/* Gold bottom border */}
-        <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, margin: "0 -15mm -15mm" }} />
+          {/* Gold bottom border — full width, flush at the very bottom */}
+          <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
+        </div>
       </div>
       </div>
 
