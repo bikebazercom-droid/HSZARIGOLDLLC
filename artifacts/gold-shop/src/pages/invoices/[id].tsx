@@ -440,7 +440,7 @@ export default function InvoiceDetail() {
             to-edge (left/right: 0) so the full-width navy & gold strips need
             no negative-margin escape. Signatures are padded inward to match
             the 15mm content boundary. */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, pageBreakBefore: "avoid" }}>
+        <div style={{ position: "absolute", bottom: "50mm", left: 0, right: 0, pageBreakBefore: "avoid" }}>
           {/* Signatures */}
           <div style={{ padding: "8px 15mm 6px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
             {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
