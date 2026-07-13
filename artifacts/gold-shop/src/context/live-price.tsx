@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 import {
   useGetPricesSpot,
   getGetPricesSpotQueryKey,
+  getGetPublicPriceItemsQueryKey,
 } from "@workspace/api-client-react";
 
 // ── Public socket singleton ───────────────────────────────────────────────────
@@ -136,7 +137,11 @@ export function LivePriceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const sock = getPubSocket();
     const onPrice = () => {
+      // Invalidate spot price so live-price context refetches immediately on every XAU tick.
+      // Also invalidate public price items so the TV board picks up premiumOffsetAed changes
+      // made by the admin (e.g. adding a making charge) without waiting for the 30s poll.
       void queryClient.invalidateQueries({ queryKey: getGetPricesSpotQueryKey() });
+      void queryClient.invalidateQueries({ queryKey: getGetPublicPriceItemsQueryKey() });
     };
     sock.on("PRICE_MUTATION", onPrice);
     return () => { sock.off("PRICE_MUTATION", onPrice); };

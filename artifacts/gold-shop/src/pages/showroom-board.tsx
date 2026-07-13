@@ -662,17 +662,15 @@ export default function ShowroomBoard() {
   const showroomLogoUrl = publicSettings?.showroomLogoUrl ?? null;
   const shopName        = "HAZARI GOLD";
 
-  // Hardcoded permanent allowlist — only these two items ever appear on the TV board
-  // regardless of DB tvVisible flags or any admin configuration changes.
-  const PINNED_NAMES = ["GOLD 9999", "JEWELLERY 22K"] as const;
-
-  const visibleItems = useMemo(() => {
-    const all = priceItems ?? [];
-    return PINNED_NAMES
-      .map(name => all.find(i => i.name === name))
-      .filter((i): i is PriceItem => i != null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceItems]);
+  // Show all items whose tvVisible flag is true, sorted by displayOrder.
+  // Admins control this from the Live Pricing page — no hardcoded allowlist.
+  const visibleItems = useMemo(
+    () =>
+      (priceItems ?? [])
+        .filter(i => i.tvVisible)
+        .sort((a, b) => a.displayOrder - b.displayOrder),
+    [priceItems],
+  );
 
   const priceMap = useMemo<Map<number, number | null>>(() => {
     const m = new Map<number, number | null>();

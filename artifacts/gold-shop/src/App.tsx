@@ -21,6 +21,7 @@ import Products from "@/pages/products/index";
 import NewProduct from "@/pages/products/new";
 import ProductDetail from "@/pages/products/[id]";
 import Prices from "@/pages/prices";
+import PriceItemsPage from "@/pages/price-items";
 import SettingsPage from "@/pages/settings";
 import ShowroomBoard from "@/pages/showroom-board";
 import NotFound from "@/pages/not-found";
@@ -77,6 +78,7 @@ function AdminRouter() {
         <Route path="/products/new" component={NewProduct} />
         <Route path="/products/:id" component={ProductDetail} />
         <Route path="/prices" component={Prices} />
+        <Route path="/price-items" component={PriceItemsPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>

@@ -9,6 +9,8 @@ import {
   getGetCategorySummaryQueryKey,
   getGetPricesQueryKey,
   getGetPricesSpotQueryKey,
+  getListPriceItemsQueryKey,
+  getGetPublicPriceItemsQueryKey,
   getListProductsQueryKey,
   getGetSettingsQueryKey,
   getGetPublicSettingsQueryKey,
@@ -62,11 +64,13 @@ export function useAdminSocket(): void {
     }
 
     function onPriceMutation() {
-      // Invalidate both the admin prices page AND the live spot endpoint so
-      // every consumer (admin dashboard, prices page, live-price context) gets
-      // an immediate push-driven update instead of waiting for its poll cycle.
+      // Invalidate all price-related caches so every consumer (admin pages,
+      // live-price context, TV board) gets an immediate push-driven update
+      // without waiting for their individual poll intervals.
       queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetPricesSpotQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListPriceItemsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetPublicPriceItemsQueryKey() });
     }
 
     function onProductMutation() {
