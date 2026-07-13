@@ -84,7 +84,9 @@ let goldApiActive = false;
 // fallback) computes bid/ask from the same calibrated OTC value instead of
 // a fixed constant.  Initialised to BID_ASK_SPREAD_USD/2 as a safe fallback
 // until the first Swissquote poll resolves.
-let sqHalfSpread: number = BID_ASK_SPREAD_USD / 2;
+let sqHalfSpread:  number        = BID_ASK_SPREAD_USD / 2;
+let sqMid:         number | null = null;  // Swissquote (bid+ask)/2 — latest mid
+let sqLastGoodAt:  number        = 0;     // epoch ms of last successful Swissquote poll
 
 // Called by the settings route the instant the admin flips the toggle OFF so
 // the in-memory flag reflects the new state without waiting for the next poll.
@@ -381,9 +383,61 @@ async function pollSwissquote(): Promise<void> {
     if (!p?.bid || !p?.ask || p.bid < 1_000) return;
 
     sqHalfSpread = (p.ask - p.bid) / 2;
+    sqMid        = (p.bid + p.ask) / 2;
+    sqLastGoodAt = Date.now();
 
-    // Patch live bid/ask immediately so the TV board reflects the new OTC
-    // spread without waiting for the next Socket.IO tick.
+    const socketSilentMs = liveSpot
+      ? Date.now() - liveSpot.receivedAt.getTime()
+      : Infinity;
+
+    // ── Drift guard ──────────────────────────────────────────────────────────
+    // While Socket.IO is live, compare its mid against Swissquote's mid.
+    // A gap > $3 means the feeds are diverging — flag it so it can be watched.
+    // We don't suppress the Socket.IO price at this threshold; short violent
+    // moves can span $3+ in seconds and the freshest timestamp wins.
+    if (liveSpot && socketSilentMs < 10_000) {
+      const drift = Math.abs(liveSpot.usdPerOz - sqMid);
+      if (drift > 3) {
+        logger.warn(
+          { liveMid: liveSpot.usdPerOz.toFixed(2), sqMid: sqMid.toFixed(2), drift: drift.toFixed(2) },
+          "[swissquote] Drift detected — livepriceofgold and Swissquote mid diverge >$3"
+        );
+      }
+    }
+
+    // ── Stale-feed takeover ──────────────────────────────────────────────────
+    // If Socket.IO has been silent for > 10 s, promote Swissquote to the full
+    // price source rather than waiting 45 s for the Yahoo Finance fallback.
+    // This cuts the maximum stale-data window on the TV board from ~45 s to
+    // at most one Swissquote poll interval (~15 s).
+    if (socketSilentMs > 10_000) {
+      await loadAdminConfig();
+      const mid           = sqMid;
+      const askUsdPerOz   = mid + sqHalfSpread;
+      const bidUsdPerOz   = mid - sqHalfSpread;
+      const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+      const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
+      trackDailyRange(mid);
+      liveSpot = {
+        rawAedPerGram,
+        aedPerGram,
+        baseAedPerGram: rawAedPerGram,
+        usdPerOz:       mid,
+        bidUsdPerOz,
+        askUsdPerOz,
+        dailyLowUsdPerOz,
+        dailyHighUsdPerOz,
+        receivedAt: new Date(),
+      };
+      broadcast("PRICE_MUTATION");
+      logger.info(
+        { mid: mid.toFixed(2), silentMs: Math.round(socketSilentMs) },
+        "[swissquote] Stale-feed takeover — Swissquote mid promoted to price source"
+      );
+      return;
+    }
+
+    // Normal path: Socket.IO is fresh — re-calibrate bid/ask on existing spot
     if (liveSpot) {
       liveSpot.bidUsdPerOz = liveSpot.usdPerOz - sqHalfSpread;
       liveSpot.askUsdPerOz = liveSpot.usdPerOz + sqHalfSpread;
@@ -415,6 +469,21 @@ liveSocket.on("update", (raw: string) => {
       usdPerOz = (aedRawFallback / USD_TO_AED) * TROY_OUNCE_TO_GRAM;
     } else {
       return;
+    }
+
+    // ── Swissquote sanity check ──────────────────────────────────────────────
+    // If Swissquote has polled in the last 30 s, compare its mid against this
+    // tick.  A gap > $5 is large enough to be suspicious but not large enough
+    // to auto-reject (rapid moves can reach $3–4 within seconds).  The warning
+    // surfaces feed divergence early so it can be monitored.
+    if (sqMid !== null && sqLastGoodAt > 0 && Date.now() - sqLastGoodAt < 30_000) {
+      const drift = Math.abs(usdPerOz - sqMid);
+      if (drift > 5) {
+        logger.warn(
+          { tick: usdPerOz.toFixed(2), sqMid: sqMid.toFixed(2), drift: drift.toFixed(2) },
+          "[live-gold] Drift warning — Socket.IO tick diverges from Swissquote mid by >$5"
+        );
+      }
     }
 
     const askUsdPerOz   = usdPerOz + sqHalfSpread;
