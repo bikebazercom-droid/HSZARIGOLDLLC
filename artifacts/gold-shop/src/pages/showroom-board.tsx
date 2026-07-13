@@ -202,39 +202,27 @@ function iconForItem(item: PriceItem): React.ReactNode {
   return <IconRing />;
 }
 
-// ── Gold Spot Widget — TradingView live XAU/USD embed ────────────────────────
-// Replaces the custom Bid/Ask/High/Low cards with TradingView's real-time
-// symbol-info widget for FX_IDC:XAUUSD, rendered directly from TradingView's
-// servers in the browser. No scraping, no proxy — prices come from TradingView.
-function GoldSpotWidget() {
-  const containerRef = useRef<HTMLDivElement>(null);
+// ── Gold Spot Widget — dark matte card with BID / ASK / LOW / HIGH boxes ─────
+interface GoldSpotWidgetProps {
+  askUsdPerOz:       number | null;
+  bidUsdPerOz:       number | null;
+  dailyLowUsdPerOz:  number | null;
+  dailyHighUsdPerOz: number | null;
+}
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    el.innerHTML = "";
-
-    const inner = document.createElement("div");
-    inner.className = "tradingview-widget-container__widget";
-    el.appendChild(inner);
-
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src =
-      "https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js";
-    script.async = true;
-    script.textContent = JSON.stringify({
-      symbol: "FX_IDC:XAUUSD",
-      width: "100%",
-      locale: "en",
-      colorTheme: "dark",
-      isTransparent: true,
-    });
-    el.appendChild(script);
-
-    return () => { el.innerHTML = ""; };
-  }, []);
+function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighUsdPerOz }: GoldSpotWidgetProps) {
+  const BOX_BASE: React.CSSProperties = {
+    background: BG_CARD,
+    borderRadius: "clamp(0.4rem,0.8vw,0.9rem)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "clamp(0.25rem,0.6vh,0.55rem)",
+    padding: "clamp(0.6rem,1.5vh,1.4rem) clamp(0.7rem,1.8vw,1.6rem)",
+    minWidth: 0,
+    minHeight: 0,
+  };
 
   return (
     <div
@@ -250,12 +238,13 @@ function GoldSpotWidget() {
         boxShadow: `0 4px 48px -12px #000000dd`,
       }}
     >
-      {/* ── GOLD SPOT label ──────────────────────────────────────────────────── */}
+      {/* ── GOLD SPOT label bar ──────────────────────────────────────────────── */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          gap: "0.75em",
           paddingBottom: "clamp(0.3rem,0.7vh,0.6rem)",
           borderBottom: `1px solid ${GOLD}28`,
           flexShrink: 0,
@@ -275,15 +264,107 @@ function GoldSpotWidget() {
         </span>
       </div>
 
-      {/* ── TradingView symbol-info widget (XAU/USD live) ─────────────────────
-          Injects TradingView's embed-widget-symbol-info script which renders
-          a live dark-themed price panel: last price, daily change %, High, Low.
-          All data streams directly from TradingView's servers to the browser. */}
+      {/* ── 2 × 2 grid: BID / ASK / LOW / HIGH ──────────────────────────────── */}
       <div
-        ref={containerRef}
-        className="tradingview-widget-container"
-        style={{ width: "100%", minHeight: "clamp(7rem,16vh,14rem)" }}
-      />
+        className="grid grid-cols-2"
+        style={{ gap: "clamp(0.4rem,0.9vw,0.85rem)" }}
+      >
+
+        {/* BID PRICE (oz) — top-left */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+            <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+            <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+              BID PRICE (oz)
+            </span>
+          </div>
+          <div
+            className="tabular-nums"
+            style={{
+              color: GREEN,
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textAlign: "center",
+              textShadow: `0 2px 20px ${GREEN}44`,
+            }}
+          >
+            {fmt(bidUsdPerOz, 2)}
+          </div>
+        </div>
+
+        {/* ASK PRICE (oz) — top-right */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+            <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+            <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+              ASK PRICE (oz)
+            </span>
+          </div>
+          <div
+            className="tabular-nums"
+            style={{
+              color: RED,
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textAlign: "center",
+              textShadow: `0 2px 20px ${RED}44`,
+            }}
+          >
+            {fmt(askUsdPerOz, 2)}
+          </div>
+        </div>
+
+        {/* LOW — bottom-left */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+          <div style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+            Low
+          </div>
+          <div
+            className="tabular-nums"
+            style={{
+              color: RED,
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textAlign: "center",
+              textShadow: `0 2px 16px ${RED}44`,
+            }}
+          >
+            {fmt(dailyLowUsdPerOz, 2)}
+          </div>
+        </div>
+
+        {/* HIGH — bottom-right */}
+        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+          <div style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+            High
+          </div>
+          <div
+            className="tabular-nums"
+            style={{
+              color: GREEN,
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              textAlign: "center",
+              textShadow: `0 2px 16px ${GREEN}44`,
+            }}
+          >
+            {fmt(dailyHighUsdPerOz, 2)}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
@@ -678,7 +759,12 @@ export default function ShowroomBoard() {
         </div>
 
         {/* ── GOLD SPOT WIDGET (ASK / BID with LOW / HIGH) ──────────────── */}
-        <GoldSpotWidget />
+        <GoldSpotWidget
+          askUsdPerOz={liveRates.askUsdPerOz}
+          bidUsdPerOz={liveRates.bidUsdPerOz}
+          dailyLowUsdPerOz={liveRates.dailyLowUsdPerOz}
+          dailyHighUsdPerOz={liveRates.dailyHighUsdPerOz}
+        />
 
         {/* ── DIVIDER ──────────────────────────────────────────────────────── */}
         <GoldDivider />
