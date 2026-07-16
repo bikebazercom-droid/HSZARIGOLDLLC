@@ -488,7 +488,7 @@ export default function InvoiceDetail() {
             size: A4 portrait;
             margin: 0 !important;
           }
-          html, body {
+          html {
             width: 210mm !important;
             height: 297mm !important;
             max-height: 297mm !important;
@@ -498,10 +498,28 @@ export default function InvoiceDetail() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+          body {
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
           #root, [data-reactroot] {
+            width: 210mm !important;
             height: 297mm !important;
             max-height: 297mm !important;
             overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            page-break-after: avoid !important;
           }
           .no-print { display: none !important; }
           [data-invoice-doc] {
