@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
 import { db, pricesTable, companySettingsTable } from "@workspace/db";
 import { GetPricesResponse, UpdatePricesResponse, GetPublicPricesResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger.js";
@@ -59,7 +61,19 @@ interface LiveSpot {
 let liveSpot:      LiveSpot | null = null;
 let lastDbWriteAt: Date    | null  = null;
 
-// ── Daily high / low tracker ──────────────────────────────────────────────────
+// ── Daily high / low tracker — file-backed persistence ───────────────────────
+// State is written to daily_hl.json on every update so a server restart within
+// the same UTC day restores the accumulated range rather than starting over.
+// At UTC midnight the watchdog clears both in-memory state and the file.
+// ─────────────────────────────────────────────────────────────────────────────
+const DAILY_HL_FILE = join(process.cwd(), "daily_hl.json");
+
+interface DailyHLState {
+  date:    string;          // YYYY-MM-DD UTC
+  low:     number | null;
+  high:    number | null;
+}
+
 let dailyLowUsdPerOz:     number | null = null;
 let dailyHighUsdPerOz:    number | null = null;
 let dailyTrackingDateUTC: string | null = null;
@@ -68,17 +82,74 @@ function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function trackDailyRange(usdPerOz: number) {
+/** Persist current H/L state to disk (fire-and-forget, never throws). */
+function saveDailyHL(): void {
+  try {
+    const state: DailyHLState = {
+      date: dailyTrackingDateUTC ?? todayUTC(),
+      low:  dailyLowUsdPerOz,
+      high: dailyHighUsdPerOz,
+    };
+    writeFileSync(DAILY_HL_FILE, JSON.stringify(state), "utf8");
+  } catch { /* non-fatal */ }
+}
+
+/** On startup: restore today's H/L from file if date matches, else start fresh. */
+function loadDailyHL(): void {
+  try {
+    if (!existsSync(DAILY_HL_FILE)) return;
+    const raw   = readFileSync(DAILY_HL_FILE, "utf8");
+    const state = JSON.parse(raw) as DailyHLState;
+    if (state.date !== todayUTC()) {
+      logger.info({ savedDate: state.date, today: todayUTC() }, "[UniRateAPI] Daily H/L file is from a prior day — starting fresh");
+      return;
+    }
+    dailyTrackingDateUTC = state.date;
+    dailyLowUsdPerOz     = typeof state.low  === "number" ? state.low  : null;
+    dailyHighUsdPerOz    = typeof state.high === "number" ? state.high : null;
+    logger.info(
+      { low: dailyLowUsdPerOz, high: dailyHighUsdPerOz },
+      "[UniRateAPI] Daily H/L restored from file"
+    );
+  } catch (err) {
+    logger.warn({ err }, "[UniRateAPI] Could not read daily_hl.json — starting fresh");
+  }
+}
+
+/** Update in-memory H/L from a new tick price and persist to disk. */
+function trackDailyRange(usdPerOz: number): void {
   const today = todayUTC();
   if (dailyTrackingDateUTC !== today) {
+    // Day rolled over — reset state
     dailyTrackingDateUTC = today;
     dailyLowUsdPerOz     = usdPerOz;
     dailyHighUsdPerOz    = usdPerOz;
+    saveDailyHL();
     return;
   }
-  if (dailyLowUsdPerOz  == null || usdPerOz < dailyLowUsdPerOz)  dailyLowUsdPerOz  = usdPerOz;
-  if (dailyHighUsdPerOz == null || usdPerOz > dailyHighUsdPerOz) dailyHighUsdPerOz = usdPerOz;
+  let changed = false;
+  if (dailyLowUsdPerOz  == null || usdPerOz < dailyLowUsdPerOz)  { dailyLowUsdPerOz  = usdPerOz; changed = true; }
+  if (dailyHighUsdPerOz == null || usdPerOz > dailyHighUsdPerOz) { dailyHighUsdPerOz = usdPerOz; changed = true; }
+  if (changed) saveDailyHL();
 }
+
+// ── Midnight watchdog ─────────────────────────────────────────────────────────
+// Checks every minute; when UTC date flips, resets H/L and clears the file so
+// the new day starts with a clean slate regardless of UniRate poll timing.
+// ─────────────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  const today = todayUTC();
+  if (dailyTrackingDateUTC && dailyTrackingDateUTC !== today) {
+    dailyTrackingDateUTC = today;
+    dailyLowUsdPerOz     = null;
+    dailyHighUsdPerOz    = null;
+    saveDailyHL();
+    logger.info({ date: today }, "[UniRateAPI] Midnight UTC — daily H/L reset for new day");
+  }
+}, 60_000);
+
+// Load persisted H/L immediately so the first poll has context
+loadDailyHL();
 
 // ── UniRateAPI — sole primary price source ────────────────────────────────────
 // Endpoint: GET https://api.unirateapi.com/api/commodities/rates?api_key=KEY&from=USD&to=XAU
