@@ -357,6 +357,108 @@ async function fetchYahooFinance(): Promise<void> {
 fetchYahooFinance();
 setInterval(fetchYahooFinance, 30_000);
 
+// ── UniRate API polling ────────────────────────────────────────────────────────
+// UniRateAPI (unirateapi.com) provides LBMA-blended XAU/USD spot prices,
+// refreshed every 15 minutes during market hours. We poll every 15 minutes and
+// use the result as an additional fallback when both Socket.IO and GoldAPI are
+// unavailable. The API key is read from the UNIRATE_API_KEY environment variable.
+//
+// Endpoint: GET https://api.unirateapi.com/api/commodities/rates?api_key=KEY&from=USD&to=XAU
+// Response: { "base": "USD", "rates": { "XAU": <oz_per_usd> }, ... }
+// Conversion: usdPerOz = 1 / rates.XAU
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface UniRateResponse {
+  base?: string;
+  to?: string;
+  // Actual response shape: { amount, base, to, rate, result }
+  // rate   = USD per troy ounce (direct price, e.g. 4054.40)
+  // result = XAU per USD        (inverse,      e.g. 0.000246)
+  rate?:   number;
+  result?: number;
+  error?:  string;
+}
+
+async function pollUniRate(): Promise<void> {
+  const apiKey = process.env.UNIRATE_API_KEY;
+  if (!apiKey) return; // Not configured — skip silently
+
+  try {
+    const url = `https://api.unirateapi.com/api/commodities/rates?api_key=${encodeURIComponent(apiKey)}&from=USD&to=XAU`;
+    const resp = await fetch(url, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!resp.ok) {
+      logger.warn({ status: resp.status }, "[unirate] Request failed");
+      return;
+    }
+
+    const data = await resp.json() as UniRateResponse;
+
+    // Prefer `rate` (direct USD/oz); fall back to 1/result if rate is missing
+    const usdPerOz = (data?.rate && Number.isFinite(data.rate) && data.rate > 500)
+      ? data.rate
+      : (data?.result && Number.isFinite(data.result) && data.result > 0)
+        ? 1 / data.result
+        : NaN;
+
+    if (!Number.isFinite(usdPerOz) || usdPerOz < 500) {
+      logger.warn({ data }, "[unirate] Unexpected response shape or price out of range");
+      return;
+    }
+
+    if (!Number.isFinite(usdPerOz) || usdPerOz < 500) {
+      logger.warn({ usdPerOz }, "[unirate] Price out of expected range");
+      return;
+    }
+
+    // Only update liveSpot when Socket.IO is stale AND GoldAPI is not active.
+    // UniRate refreshes every 15 min so it must never overwrite a fresh real-time feed.
+    const isStale = !liveSpot || (Date.now() - liveSpot.receivedAt.getTime() > LIVE_SPOT_STALE_MS);
+    if (!isStale || goldApiActive) {
+      logger.info({ usdPerOz: usdPerOz.toFixed(2) }, "[unirate] Price fetched (not applied — primary feed is live)");
+      return;
+    }
+
+    await loadAdminConfig();
+    const askUsdPerOz   = usdPerOz + sqHalfSpread;
+    const bidUsdPerOz   = usdPerOz - sqHalfSpread;
+    const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+    const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
+
+    trackDailyRange(usdPerOz);
+    liveSpot = {
+      rawAedPerGram,
+      aedPerGram,
+      baseAedPerGram: rawAedPerGram,
+      usdPerOz,
+      bidUsdPerOz,
+      askUsdPerOz,
+      dailyLowUsdPerOz,
+      dailyHighUsdPerOz,
+      receivedAt: new Date(),
+    };
+
+    logger.info(
+      { usdPerOz: usdPerOz.toFixed(2), aedPerGram: aedPerGram.toFixed(4) },
+      "[unirate] liveSpot updated (Socket.IO stale fallback)"
+    );
+    broadcast("PRICE_MUTATION");
+
+    db.update(pricesTable)
+      .set({ goldBullionRate: String(aedPerGram), goldPricePerGram: String(aedPerGram), updatedAt: new Date() })
+      .catch((err: unknown) => logger.warn({ err }, "[unirate] DB write failed"));
+  } catch (err) {
+    logger.warn({ err }, "[unirate] Poll failed");
+  }
+}
+
+// Poll immediately on startup, then every 15 minutes (matching UniRate's refresh cadence)
+pollUniRate();
+setInterval(pollUniRate, 15 * 60_000);
+
 // ── Swissquote OTC bid/ask calibration ────────────────────────────────────────
 // Swissquote Bank's public data feed (no auth required) serves actual real-time
 // XAU/USD bid and ask from the OTC interbank market — the same source used by
