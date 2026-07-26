@@ -8,3 +8,4 @@
 - [Gold-shop per-item live rate injection](gold-shop-per-item-live-rate.md) — each invoice row derives its own metal rate from live prices; never reintroduce a single shared page-level rate driving heterogeneous rows.
 - [Gold-shop pricing engine (spot-based)](gold-shop-pricing-engine.md) — Base_24K derived from XAU/USD international spot + admin spread/labor%; API server needs a workflow restart to pick up backend route changes (no hot reload).
 - [Gold-shop TV board price_items system](gold-shop-tv-board-price-items.md) — TV board rows driven by `price_items` DB table; frontend computes prices via `computeItemPrice(item, baseAedPerGram)` in showroom-board.tsx; live-price context no longer exposes raw* precomputed fields.
+- [UAE Kilo Bar 995 convention](uae-kilo-bar-995-convention.md) — 995 kilo bar uses 23/24 purity factor (not 0.995); Dubai showroom convention matching livepriceofgold.com reference app.

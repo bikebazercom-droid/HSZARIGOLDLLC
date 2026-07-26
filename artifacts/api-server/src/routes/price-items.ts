@@ -48,7 +48,10 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     formulaType: "spot_bar",
     weightGrams: "1000",
     weightLabel: "1KG",
-    purityFactor: "0.9950000",
+    // UAE gold market convention: 995 kilo bars are priced at 23/24 of the
+    // 9999 rate — NOT at 99.5% purity.  This matches Dubai showroom pricing
+    // convention and aligns with the reference app (livepriceofgold.com).
+    purityFactor: String(23 / 24),   // 0.95833…
     premiumOffsetAed: "0",
     tvVisible: true,
     isCore: true,
