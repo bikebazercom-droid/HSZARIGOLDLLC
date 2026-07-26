@@ -34,10 +34,10 @@ async function loadAdminConfig(): Promise<void> {
     adminConfigLoaded = true;
     logger.info(
       { adminSpreadPercent, adminLaborPercent, adminGold9999Offset, adminJewellery22kOffset },
-      "[unirate] Admin config loaded"
+      "[UniRateAPI] Admin config loaded"
     );
   } catch (err) {
-    logger.warn({ err }, "[unirate] Failed to load admin config — using 0,0");
+    logger.warn({ err }, "[UniRateAPI] Failed to load admin config — using 0,0");
   }
 }
 
@@ -130,11 +130,11 @@ async function pollUniRate(): Promise<void> {
 
     if (!enabled) {
       uniRateActive = false;
-      logger.info("[unirate] Polling disabled by admin toggle");
+      logger.info("[UniRateAPI] Polling disabled by admin toggle");
       return;
     }
     if (!token) {
-      logger.warn("[unirate] No API token configured — set token in Settings");
+      logger.warn("[UniRateAPI] No API token configured — set token in Settings");
       return;
     }
 
@@ -147,9 +147,9 @@ async function pollUniRate(): Promise<void> {
     if (!resp.ok) {
       if (resp.status === 401 || resp.status === 403) {
         uniRateActive = false;
-        logger.warn({ status: resp.status }, "[unirate] Auth error — check API token in Settings");
+        logger.warn({ status: resp.status }, "[UniRateAPI] Auth error — check API token in Settings");
       } else {
-        logger.warn({ status: resp.status }, "[unirate] Request failed");
+        logger.warn({ status: resp.status }, "[UniRateAPI] Request failed");
       }
       return;
     }
@@ -164,7 +164,7 @@ async function pollUniRate(): Promise<void> {
         : NaN;
 
     if (!Number.isFinite(usdPerOz) || usdPerOz < 500) {
-      logger.warn({ data }, "[unirate] Unexpected response shape or price out of range");
+      logger.warn({ data }, "[UniRateAPI] Unexpected response shape or price out of range");
       return;
     }
 
@@ -201,7 +201,7 @@ async function pollUniRate(): Promise<void> {
         dailyLow:   dailyLowUsdPerOz?.toFixed(2)  ?? "—",
         dailyHigh:  dailyHighUsdPerOz?.toFixed(2) ?? "—",
       },
-      "[unirate] Live spot updated"
+      "[UniRateAPI] Live Spot, High/Low fetched successfully"
     );
 
     // Throttle DB writes to once per 5 minutes to avoid excessive churn
@@ -215,79 +215,23 @@ async function pollUniRate(): Promise<void> {
           liveModeConnected: true,
           updatedAt:         new Date(),
         })
-        .catch((err: unknown) => logger.warn({ err }, "[unirate] DB write failed"));
+        .catch((err: unknown) => logger.warn({ err }, "[UniRateAPI] DB write failed"));
     }
   } catch (err) {
-    logger.warn({ err }, "[unirate] Poll failed");
+    logger.warn({ err }, "[UniRateAPI] Poll failed");
   }
 }
 
 // Exported so the settings route can trigger an immediate poll when a new
 // token is saved — avoids up to 60 s of "Connecting…" delay on the TV board.
 export function triggerUniRatePoll(): void {
-  pollUniRate().catch((err: unknown) => logger.warn({ err }, "[unirate] Triggered poll failed"));
+  pollUniRate().catch((err: unknown) => logger.warn({ err }, "[UniRateAPI] Triggered poll failed"));
 }
 
 // Poll immediately on startup, then every 60 seconds.
+// UniRateAPI is the sole data source — no third-party feeds of any kind.
 pollUniRate();
 setInterval(pollUniRate, 60_000);
-
-// ── Yahoo Finance — daily H/L seed only ───────────────────────────────────────
-// GC=F (COMEX gold futures) provides the actual session High and Low that
-// professional boards display. UniRateAPI only returns a mid price; without
-// this seed the TV board would show today's first tick as both High and Low.
-// We NEVER use Yahoo's price as a spot fallback — UniRateAPI owns liveSpot.
-// ─────────────────────────────────────────────────────────────────────────────
-interface YahooChartMeta {
-  regularMarketDayHigh?: number;
-  regularMarketDayLow?:  number;
-}
-interface YahooChartResponse {
-  chart?: { result?: Array<{ meta?: YahooChartMeta }> };
-}
-const YAHOO_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-
-async function fetchYahooHL(): Promise<void> {
-  const endpoints = [
-    "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
-    "https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
-  ];
-  for (const url of endpoints) {
-    try {
-      const resp = await fetch(url, {
-        headers: { "User-Agent": YAHOO_UA, "Accept": "application/json" },
-        signal:  AbortSignal.timeout(12_000),
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json() as YahooChartResponse;
-      const meta = data?.chart?.result?.[0]?.meta;
-      const high = meta?.regularMarketDayHigh;
-      const low  = meta?.regularMarketDayLow;
-      if (!high || !low || !Number.isFinite(high) || !Number.isFinite(low) || high < 1000 || low < 1000) continue;
-
-      // Always overwrite — Yahoo's session range is the authoritative daily H/L.
-      // UniRateAPI's mid-price ticks only span a fraction of the day's range.
-      dailyHighUsdPerOz    = high;
-      dailyLowUsdPerOz     = low;
-      dailyTrackingDateUTC = todayUTC();
-
-      // Push the updated H/L into the live spot so the TV board refreshes immediately
-      if (liveSpot) {
-        liveSpot = { ...liveSpot, dailyHighUsdPerOz: high, dailyLowUsdPerOz: low };
-        broadcast("PRICE_MUTATION");
-      }
-      logger.info({ high, low }, "[yahoo-hl] Daily H/L updated from GC=F");
-      return;
-    } catch (err) {
-      logger.warn({ err, url }, "[yahoo-hl] fetch failed — trying next endpoint");
-    }
-  }
-  logger.warn("[yahoo-hl] All Yahoo Finance endpoints failed");
-}
-
-// Seed H/L immediately on startup, then refresh every 5 minutes
-fetchYahooHL();
-setInterval(fetchYahooHL, 5 * 60_000);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function toNum(v: string | number | null): number | null {
