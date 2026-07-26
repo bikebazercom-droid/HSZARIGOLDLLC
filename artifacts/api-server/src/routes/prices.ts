@@ -16,6 +16,18 @@ const TROY_OUNCE_TO_GRAM = 31.1034768;
 // Real OTC spot spread for XAU/USD is typically $0.80–$1.00; $0.45 → $0.90 full.
 const HALF_SPREAD_USD = 0.45;
 
+// ── Polling intervals ─────────────────────────────────────────────────────────
+// UniRateAPI paid plan: 1,000 requests/day.
+//   Normal interval : 90 s → 960 req/day  (safe, leaves ~40 buffer for triggered polls)
+//   Back-off interval: 300 s → engaged when x-ratelimit-remaining < RATE_LIMIT_BACKOFF_THRESHOLD
+const POLL_INTERVAL_NORMAL_MS  = 90_000;
+const POLL_INTERVAL_BACKOFF_MS = 300_000;
+const RATE_LIMIT_BACKOFF_THRESHOLD = 100;   // engage back-off when <100 req remain in the window
+
+// Active poll interval — starts at normal; may be lengthened by adaptive throttle.
+let activePollIntervalMs = POLL_INTERVAL_NORMAL_MS;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
 // ── Admin-configurable spread & labor (loaded from DB, updated via PATCH/PUT) ─
 let adminSpreadPercent      = 0;
 let adminLaborPercent       = 0;
@@ -65,6 +77,9 @@ let lastDbWriteAt: Date    | null  = null;
 // State is written to daily_hl.json on every update so a server restart within
 // the same UTC day restores the accumulated range rather than starting over.
 // At UTC midnight the watchdog clears both in-memory state and the file.
+//
+// H/L is seeded from Yahoo Finance GC=F OHLC on startup so the first tick
+// after a restart doesn't collapse High=Low to a single value.
 // ─────────────────────────────────────────────────────────────────────────────
 const DAILY_HL_FILE = join(process.cwd(), "daily_hl.json");
 
@@ -133,11 +148,62 @@ function trackDailyRange(usdPerOz: number): void {
   if (changed) saveDailyHL();
 }
 
-// ── Midnight watchdog ─────────────────────────────────────────────────────────
-// Checks every minute; when UTC date flips, resets H/L and clears the file so
-// the new day starts with a clean slate regardless of UniRate poll timing.
+// ── Yahoo Finance H/L seed ────────────────────────────────────────────────────
+// Called once at startup (and at midnight rollover) to seed today's daily
+// High/Low from Yahoo Finance GC=F (continuous gold futures, free, no auth).
+// This prevents Low=High after a server restart during active trading hours.
+// Yahoo Finance is used ONLY for H/L seeding — UniRateAPI remains the sole
+// live price source. If Yahoo is unreachable, we fall back gracefully.
 // ─────────────────────────────────────────────────────────────────────────────
-setInterval(() => {
+async function seedDailyRangeFromYahoo(): Promise<void> {
+  try {
+    const url  = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d";
+    const resp = await fetch(url, {
+      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) {
+      logger.warn({ status: resp.status }, "[H/L Seed] Yahoo Finance request failed — H/L will build from live ticks");
+      return;
+    }
+    const json = await resp.json() as Record<string, unknown>;
+    const result = (json as any)?.chart?.result?.[0];
+    const meta   = result?.meta as Record<string, unknown> | undefined;
+
+    // Yahoo provides regularMarketDayHigh / Low on the meta object
+    const high = typeof meta?.regularMarketDayHigh === "number" ? meta.regularMarketDayHigh : null;
+    const low  = typeof meta?.regularMarketDayLow  === "number" ? meta.regularMarketDayLow  : null;
+
+    if (!high || !low || high < 500 || low < 500) {
+      logger.warn({ high, low }, "[H/L Seed] Yahoo Finance returned unexpected H/L — skipping seed");
+      return;
+    }
+
+    const today = todayUTC();
+    // Only seed if we don't already have a wider intraday range from the file
+    const seedHigh = (dailyHighUsdPerOz == null || high > dailyHighUsdPerOz) ? high : dailyHighUsdPerOz;
+    const seedLow  = (dailyLowUsdPerOz  == null || low  < dailyLowUsdPerOz)  ? low  : dailyLowUsdPerOz;
+
+    dailyTrackingDateUTC = today;
+    dailyHighUsdPerOz    = seedHigh;
+    dailyLowUsdPerOz     = seedLow;
+    saveDailyHL();
+
+    logger.info(
+      { low: seedLow.toFixed(2), high: seedHigh.toFixed(2), source: "Yahoo Finance GC=F" },
+      "[H/L Seed] Daily H/L seeded from Yahoo Finance — will be refined by live ticks"
+    );
+  } catch (err) {
+    logger.warn({ err }, "[H/L Seed] Yahoo Finance unavailable — H/L will build from live ticks only");
+  }
+}
+
+// ── Midnight watchdog ─────────────────────────────────────────────────────────
+// Checks every minute; when UTC date flips, resets H/L and re-seeds from Yahoo
+// so the new day starts with a proper range from the opening rather than a
+// single-tick Low=High.
+// ─────────────────────────────────────────────────────────────────────────────
+setInterval(async () => {
   const today = todayUTC();
   if (dailyTrackingDateUTC && dailyTrackingDateUTC !== today) {
     dailyTrackingDateUTC = today;
@@ -145,11 +211,10 @@ setInterval(() => {
     dailyHighUsdPerOz    = null;
     saveDailyHL();
     logger.info({ date: today }, "[UniRateAPI] Midnight UTC — daily H/L reset for new day");
+    // Re-seed from Yahoo for the new trading session
+    await seedDailyRangeFromYahoo();
   }
 }, 60_000);
-
-// Load persisted H/L immediately so the first poll has context
-loadDailyHL();
 
 // ── UniRateAPI — sole primary price source ────────────────────────────────────
 // Endpoint: GET https://api.unirateapi.com/api/commodities/rates?api_key=KEY&from=USD&to=XAU
@@ -157,8 +222,11 @@ loadDailyHL();
 //   rate   → USD per troy oz (direct, e.g. 4054.40)  — preferred
 //   result → XAU per USD (inverse; fallback: 1/result = USD/oz)
 //
-// Polling: every 60 s on a paid key — catches UniRate's updates quickly
-// while staying well within paid-plan request limits.
+// No OHLC endpoint exists on UniRateAPI — H/L is tracked in-memory and
+// seeded from Yahoo Finance GC=F at startup (see seedDailyRangeFromYahoo).
+//
+// Polling: 90 s (960 req/day) — safely within the 1,000/day paid-plan limit.
+// Adaptive back-off: 300 s when x-ratelimit-remaining < 100.
 //
 // Pricing formula:
 //   mid        = rate (from UniRate)
@@ -185,6 +253,18 @@ export function setUniRateActive(val: boolean): void {
 // No-op stubs kept for backward-compat with settings.ts imports
 export function setGoldApiActive(_val: boolean): void { /* removed — UniRate is sole source */ }
 export function triggerGoldApiPoll(): void              { /* removed — UniRate is sole source */ }
+
+// ── Adaptive poll scheduler ────────────────────────────────────────────────────
+// We use a self-rescheduling setTimeout (rather than setInterval) so we can
+// vary the interval dynamically based on the x-ratelimit-remaining header.
+// ─────────────────────────────────────────────────────────────────────────────
+function scheduleNextPoll(delayMs: number): void {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    await pollUniRate();
+    scheduleNextPoll(activePollIntervalMs);
+  }, delayMs);
+}
 
 async function pollUniRate(): Promise<void> {
   try {
@@ -214,6 +294,38 @@ async function pollUniRate(): Promise<void> {
       headers: { "Accept": "application/json" },
       signal:  AbortSignal.timeout(15_000),
     });
+
+    // ── Rate-limit header tracking ─────────────────────────────────────────────
+    const remaining = parseInt(resp.headers.get("x-ratelimit-remaining") ?? "", 10);
+    const resetEpoch = parseInt(resp.headers.get("x-ratelimit-reset")    ?? "", 10);
+    const limit      = parseInt(resp.headers.get("x-ratelimit-limit")    ?? "", 10);
+    if (Number.isFinite(remaining) && Number.isFinite(limit)) {
+      const resetIn = Number.isFinite(resetEpoch)
+        ? Math.round((resetEpoch * 1000 - Date.now()) / 3600_000 * 10) / 10
+        : null;
+      logger.info(
+        { remaining, limit, resetInHours: resetIn },
+        "[UniRateAPI] Rate-limit quota"
+      );
+      // Adaptive back-off: if fewer than RATE_LIMIT_BACKOFF_THRESHOLD requests remain,
+      // lengthen the poll interval to conserve quota for the rest of the window.
+      if (remaining < RATE_LIMIT_BACKOFF_THRESHOLD) {
+        if (activePollIntervalMs !== POLL_INTERVAL_BACKOFF_MS) {
+          activePollIntervalMs = POLL_INTERVAL_BACKOFF_MS;
+          logger.warn(
+            { remaining, newIntervalSeconds: POLL_INTERVAL_BACKOFF_MS / 1000 },
+            "[UniRateAPI] Rate-limit low — switching to back-off polling interval"
+          );
+        }
+      } else if (activePollIntervalMs !== POLL_INTERVAL_NORMAL_MS) {
+        // Quota has been replenished (new window) — restore normal interval
+        activePollIntervalMs = POLL_INTERVAL_NORMAL_MS;
+        logger.info(
+          { remaining, newIntervalSeconds: POLL_INTERVAL_NORMAL_MS / 1000 },
+          "[UniRateAPI] Rate-limit quota restored — resuming normal polling interval"
+        );
+      }
+    }
 
     if (!resp.ok) {
       if (resp.status === 401 || resp.status === 403) {
@@ -272,7 +384,7 @@ async function pollUniRate(): Promise<void> {
         dailyLow:   dailyLowUsdPerOz?.toFixed(2)  ?? "—",
         dailyHigh:  dailyHighUsdPerOz?.toFixed(2) ?? "—",
       },
-      "[UniRateAPI] Live Spot, High/Low fetched successfully"
+      "[UniRateAPI] New tick received and broadcast to TV"
     );
 
     // Throttle DB writes to once per 5 minutes to avoid excessive churn
@@ -294,15 +406,39 @@ async function pollUniRate(): Promise<void> {
 }
 
 // Exported so the settings route can trigger an immediate poll when a new
-// token is saved — avoids up to 60 s of "Connecting…" delay on the TV board.
+// token is saved — avoids up to 90 s of "Connecting…" delay on the TV board.
 export function triggerUniRatePoll(): void {
   pollUniRate().catch((err: unknown) => logger.warn({ err }, "[UniRateAPI] Triggered poll failed"));
 }
 
-// Poll immediately on startup, then every 60 seconds.
-// UniRateAPI is the sole data source — no third-party feeds of any kind.
-pollUniRate();
-setInterval(pollUniRate, 60_000);
+// ── Startup sequence ──────────────────────────────────────────────────────────
+// 1. Restore persisted H/L from disk (same day → restores accumulated range)
+// 2. Seed H/L from Yahoo Finance GC=F OHLC so day range is valid right away
+// 3. Fire first UniRateAPI poll immediately
+// 4. Schedule recurring polls at POLL_INTERVAL_NORMAL_MS (adaptive)
+// ─────────────────────────────────────────────────────────────────────────────
+async function startup(): Promise<void> {
+  loadDailyHL();
+  await seedDailyRangeFromYahoo();
+  await pollUniRate();
+  scheduleNextPoll(activePollIntervalMs);
+}
+
+startup().catch((err: unknown) => logger.warn({ err }, "[UniRateAPI] Startup sequence failed"));
+
+// ── 1-second heartbeat broadcast ─────────────────────────────────────────────
+// Broadcasts the current cached liveSpot to all connected TV clients every
+// second. The TV board's Socket.IO listener (live-price.tsx) immediately
+// invalidates and refetches /api/prices/spot on each broadcast, so the display
+// updates every second even between UniRateAPI polls (which are every 90 s).
+// The HTTP handler for /api/prices/spot reads from in-memory liveSpot — cost
+// is essentially zero. Clients that are not connected receive no traffic.
+// ─────────────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  if (liveSpot) {
+    broadcast("PRICE_MUTATION");
+  }
+}, 1_000);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function toNum(v: string | number | null): number | null {
