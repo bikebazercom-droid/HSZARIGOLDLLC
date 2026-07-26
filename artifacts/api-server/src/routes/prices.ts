@@ -359,45 +359,62 @@ setInterval(fetchYahooFinance, 30_000);
 
 // ── UniRate API polling ────────────────────────────────────────────────────────
 // UniRateAPI (unirateapi.com) provides LBMA-blended XAU/USD spot prices,
-// refreshed every 15 minutes during market hours. We poll every 15 minutes and
-// use the result as an additional fallback when both Socket.IO and GoldAPI are
-// unavailable. The API key is read from the UNIRATE_API_KEY environment variable.
+// refreshed every 15 minutes during market hours. When an admin saves a UniRate
+// token in Settings, this loop reads it from DB and fetches the live XAU/USD
+// price. Falls back to the UNIRATE_API_KEY env var for backward compatibility.
 //
 // Endpoint: GET https://api.unirateapi.com/api/commodities/rates?api_key=KEY&from=USD&to=XAU
-// Response: { "base": "USD", "rates": { "XAU": <oz_per_usd> }, ... }
-// Conversion: usdPerOz = 1 / rates.XAU
+// Response: { amount, base, to, rate, result }
+//   rate   = USD per troy ounce (preferred, e.g. 4054.40)
+//   result = XAU per USD        (fallback: 1/result = USD/oz)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface UniRateResponse {
-  base?: string;
-  to?: string;
-  // Actual response shape: { amount, base, to, rate, result }
-  // rate   = USD per troy ounce (direct price, e.g. 4054.40)
-  // result = XAU per USD        (inverse,      e.g. 0.000246)
-  rate?:   number;
-  result?: number;
+  base?:   string;
+  to?:     string;
+  rate?:   number;  // USD per troy ounce (direct)
+  result?: number;  // XAU per USD (inverse)
   error?:  string;
 }
 
-async function pollUniRate(): Promise<void> {
-  const apiKey = process.env.UNIRATE_API_KEY;
-  if (!apiKey) return; // Not configured — skip silently
+let uniRateActive = false;
 
+export function setUniRateActive(val: boolean): void {
+  uniRateActive = val;
+}
+
+async function pollUniRate(): Promise<void> {
   try {
-    const url = `https://api.unirateapi.com/api/commodities/rates?api_key=${encodeURIComponent(apiKey)}&from=USD&to=XAU`;
+    // Prefer DB-stored token (Settings UI); fall back to env var
+    const [row] = await db
+      .select({
+        uniRateApiToken:   companySettingsTable.uniRateApiToken,
+        uniRateApiEnabled: companySettingsTable.uniRateApiEnabled,
+      })
+      .from(companySettingsTable)
+      .limit(1);
+
+    const token   = row?.uniRateApiToken ?? process.env.UNIRATE_API_KEY ?? null;
+    const enabled = row?.uniRateApiEnabled ?? true;
+
+    if (!enabled) { uniRateActive = false; return; }
+    if (!token) return;
+
+    const url = `https://api.unirateapi.com/api/commodities/rates?api_key=${encodeURIComponent(token)}&from=USD&to=XAU`;
     const resp = await fetch(url, {
       headers: { "Accept": "application/json" },
       signal: AbortSignal.timeout(15_000),
     });
 
     if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) uniRateActive = false;
       logger.warn({ status: resp.status }, "[unirate] Request failed");
       return;
     }
 
     const data = await resp.json() as UniRateResponse;
 
-    // Prefer `rate` (direct USD/oz); fall back to 1/result if rate is missing
+    // Prefer `rate` (direct USD/oz); fall back to 1/result
     const usdPerOz = (data?.rate && Number.isFinite(data.rate) && data.rate > 500)
       ? data.rate
       : (data?.result && Number.isFinite(data.result) && data.result > 0)
@@ -409,50 +426,39 @@ async function pollUniRate(): Promise<void> {
       return;
     }
 
-    if (!Number.isFinite(usdPerOz) || usdPerOz < 500) {
-      logger.warn({ usdPerOz }, "[unirate] Price out of expected range");
-      return;
-    }
-
-    // Only update liveSpot when Socket.IO is stale AND GoldAPI is not active.
-    // UniRate refreshes every 15 min so it must never overwrite a fresh real-time feed.
-    const isStale = !liveSpot || (Date.now() - liveSpot.receivedAt.getTime() > LIVE_SPOT_STALE_MS);
-    if (!isStale || goldApiActive) {
-      logger.info({ usdPerOz: usdPerOz.toFixed(2) }, "[unirate] Price fetched (not applied — primary feed is live)");
-      return;
-    }
-
     await loadAdminConfig();
     const askUsdPerOz   = usdPerOz + sqHalfSpread;
     const bidUsdPerOz   = usdPerOz - sqHalfSpread;
     const rawAedPerGram = (askUsdPerOz / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
     const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
-
     trackDailyRange(usdPerOz);
-    liveSpot = {
-      rawAedPerGram,
-      aedPerGram,
-      baseAedPerGram: rawAedPerGram,
-      usdPerOz,
-      bidUsdPerOz,
-      askUsdPerOz,
-      dailyLowUsdPerOz,
-      dailyHighUsdPerOz,
-      receivedAt: new Date(),
-    };
 
-    logger.info(
-      { usdPerOz: usdPerOz.toFixed(2), aedPerGram: aedPerGram.toFixed(4) },
-      "[unirate] liveSpot updated (Socket.IO stale fallback)"
-    );
-    broadcast("PRICE_MUTATION");
-
-    db.update(pricesTable)
-      .set({ goldBullionRate: String(aedPerGram), goldPricePerGram: String(aedPerGram), updatedAt: new Date() })
-      .catch((err: unknown) => logger.warn({ err }, "[unirate] DB write failed"));
+    // UniRate is a 15-min reference rate — only promote to liveSpot when
+    // the real-time Socket.IO feed is stale (>45 s silent).
+    const isStale = !liveSpot || (Date.now() - liveSpot.receivedAt.getTime() > LIVE_SPOT_STALE_MS);
+    if (isStale) {
+      liveSpot = {
+        rawAedPerGram, aedPerGram, baseAedPerGram: rawAedPerGram,
+        usdPerOz, bidUsdPerOz, askUsdPerOz,
+        dailyLowUsdPerOz, dailyHighUsdPerOz,
+        receivedAt: new Date(),
+      };
+      broadcast("PRICE_MUTATION");
+      logger.info({ usdPerOz: usdPerOz.toFixed(2), aedPerGram: aedPerGram.toFixed(4) }, "[unirate] liveSpot updated (primary feed stale)");
+      db.update(pricesTable)
+        .set({ goldBullionRate: String(aedPerGram), goldPricePerGram: String(aedPerGram), updatedAt: new Date() })
+        .catch((err: unknown) => logger.warn({ err }, "[unirate] DB write failed"));
+    } else {
+      logger.info({ usdPerOz: usdPerOz.toFixed(2) }, "[unirate] Price fetched (not applied — primary feed is live)");
+    }
+    uniRateActive = true;
   } catch (err) {
     logger.warn({ err }, "[unirate] Poll failed");
   }
+}
+
+export function triggerUniRatePoll(): void {
+  pollUniRate().catch((err: unknown) => logger.warn({ err }, "[unirate] Triggered poll failed"));
 }
 
 // Poll immediately on startup, then every 15 minutes (matching UniRate's refresh cadence)

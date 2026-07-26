@@ -1273,7 +1273,7 @@ components:
 
     CompanySettings:
       type: object
-      required: [id, companyName, address, phone, email, trn, logoType, logoInitial, goldApiTokenSet, goldApiEnabled]
+      required: [id, companyName, address, phone, email, trn, logoType, logoInitial, uniRateApiTokenSet, uniRateApiEnabled]
       properties:
         id:
           type: integer
@@ -1302,12 +1302,12 @@ components:
         showroomLogoUrl:
           type: ["string", "null"]
           description: Optional custom logo image shown at the top of the public showroom TV price display board.
-        goldApiTokenSet:
+        uniRateApiTokenSet:
           type: boolean
-          description: Whether a GoldAPI.io API token has been configured. The token itself is never returned.
-        goldApiEnabled:
+          description: Whether a UniRateAPI token has been configured. The token itself is never returned.
+        uniRateApiEnabled:
           type: boolean
-          description: Whether GoldAPI.io polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.
+          description: Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.
 
     CompanySettingsInput:
       type: object
@@ -1336,12 +1336,12 @@ components:
           type: string
         showroomLogoUrl:
           type: string
-        goldApiToken:
+        uniRateApiToken:
           type: string
-          description: GoldAPI.io API token. Send an empty string to clear the token.
-        goldApiEnabled:
+          description: UniRateAPI token. Send an empty string to clear the token.
+        uniRateApiEnabled:
           type: boolean
-          description: Enable or disable GoldAPI.io polling without clearing the token.
+          description: Enable or disable UniRateAPI polling without clearing the token.
 
     PublicSettings:
       type: object

@@ -25,8 +25,8 @@ export const GetSettingsResponse = zod.object({
   "logoImageUrl": zod.string().nullish(),
   "stampSignatureUrl": zod.string().nullish(),
   "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.'),
-  "goldApiTokenSet": zod.boolean().describe('Whether a GoldAPI.io API token has been configured. The token itself is never returned.'),
-  "goldApiEnabled": zod.boolean().describe('Whether GoldAPI.io polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.')
+  "uniRateApiTokenSet": zod.boolean().describe('Whether a UniRateAPI token has been configured. The token itself is never returned.'),
+  "uniRateApiEnabled": zod.boolean().describe('Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.')
 })
 
 
@@ -46,8 +46,8 @@ export const UpdateSettingsBody = zod.object({
   "logoImageUrl": zod.string().optional(),
   "stampSignatureUrl": zod.string().optional(),
   "showroomLogoUrl": zod.string().optional(),
-  "goldApiToken": zod.string().optional().describe('GoldAPI.io API token. Send an empty string to clear the token.'),
-  "goldApiEnabled": zod.boolean().optional().describe('Enable or disable GoldAPI.io polling without clearing the token.')
+  "uniRateApiToken": zod.string().optional().describe('UniRateAPI token. Send an empty string to clear the token.'),
+  "uniRateApiEnabled": zod.boolean().optional().describe('Enable or disable UniRateAPI polling without clearing the token.')
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -64,8 +64,8 @@ export const UpdateSettingsResponse = zod.object({
   "logoImageUrl": zod.string().nullish(),
   "stampSignatureUrl": zod.string().nullish(),
   "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.'),
-  "goldApiTokenSet": zod.boolean().describe('Whether a GoldAPI.io API token has been configured. The token itself is never returned.'),
-  "goldApiEnabled": zod.boolean().describe('Whether GoldAPI.io polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.')
+  "uniRateApiTokenSet": zod.boolean().describe('Whether a UniRateAPI token has been configured. The token itself is never returned.'),
+  "uniRateApiEnabled": zod.boolean().describe('Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.')
 })
 
 

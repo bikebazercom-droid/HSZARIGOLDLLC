@@ -28,8 +28,8 @@ export interface CompanySettings {
      * @nullable
      */
   showroomLogoUrl?: string | null;
-  /** Whether a GoldAPI.io API token has been configured. The token itself is never returned. */
-  goldApiTokenSet: boolean;
-  /** Whether GoldAPI.io polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured. */
-  goldApiEnabled: boolean;
+  /** Whether a UniRateAPI token has been configured. The token itself is never returned. */
+  uniRateApiTokenSet: boolean;
+  /** Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured. */
+  uniRateApiEnabled: boolean;
 }

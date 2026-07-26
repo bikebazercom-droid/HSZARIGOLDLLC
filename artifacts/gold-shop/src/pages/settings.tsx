@@ -52,13 +52,13 @@ export default function SettingsPage() {
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
   const [showroomLogoUrl, setShowroomLogoUrl] = useState<string>("");
-  // goldApiToken holds the new token the user types, OR the sentinel when a
+  // uniRateApiToken holds the new token the user types, OR the sentinel when a
   // token is already configured (so the password field shows bullet characters
   // rather than appearing blank on page load / tab navigation).
-  const [goldApiToken, setGoldApiToken] = useState<string>("");
-  // goldApiEnabled mirrors the DB boolean — toggled immediately without a
+  const [uniRateApiToken, setUniRateApiToken] = useState<string>("");
+  // uniRateApiEnabled mirrors the DB boolean — toggled immediately without a
   // separate "Save" click so it feels instantaneous.
-  const [goldApiEnabled, setGoldApiEnabled] = useState<boolean>(true);
+  const [uniRateApiEnabled, setUniRateApiEnabled] = useState<boolean>(true);
 
   // ── Live rate manual offsets ───────────────────────────────────────────────
   const [gold9999Offset, setGold9999Offset] = useState<number>(0);
@@ -108,26 +108,23 @@ export default function SettingsPage() {
       setShowroomLogoUrl(settings.showroomLogoUrl ?? "");
       // Pre-populate with sentinel so the password field shows bullet chars
       // instead of an empty box — the raw token is never returned by the API.
-      setGoldApiToken(settings.goldApiTokenSet ? CONFIGURED_SENTINEL : "");
-      setGoldApiEnabled(settings.goldApiEnabled ?? true);
+      setUniRateApiToken((settings as any).uniRateApiTokenSet ? CONFIGURED_SENTINEL : "");
+      setUniRateApiEnabled((settings as any).uniRateApiEnabled ?? true);
     }
   }, [settings]);
 
-  const handleSaveGoldApi = () => {
-    // If the field still holds the sentinel (user never edited it), there is
-    // nothing to change — bail out to prevent an accidental no-op PATCH that
-    // could clear the token when the request body serialises "" for the field.
-    if (goldApiToken === CONFIGURED_SENTINEL) {
+  const handleSaveUniRate = () => {
+    if (uniRateApiToken === CONFIGURED_SENTINEL) {
       toast({
         title: "No changes made",
         description: "The existing token is already saved. Paste a new token to replace it, or clear the field to remove it.",
       });
       return;
     }
-    updateSettings.mutate({ data: { goldApiToken } }, {
+    updateSettings.mutate({ data: { uniRateApiToken } as any }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-        toast({ title: "GoldAPI.io token saved", description: "Live pricing will use GoldAPI.io on the next 60-second tick." });
+        toast({ title: "UniRateAPI token saved", description: "Live pricing will use UniRateAPI on the next poll." });
       },
       onError: (err: any) => {
         toast({ title: "Failed to save token", description: err.message, variant: "destructive" });
@@ -135,22 +132,20 @@ export default function SettingsPage() {
     });
   };
 
-  const handleToggleGoldApi = (checked: boolean) => {
-    // Optimistically update local state so the toggle feels instant
-    setGoldApiEnabled(checked);
-    updateSettings.mutate({ data: { goldApiEnabled: checked } }, {
+  const handleToggleUniRate = (checked: boolean) => {
+    setUniRateApiEnabled(checked);
+    updateSettings.mutate({ data: { uniRateApiEnabled: checked } as any }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
         toast({
-          title: checked ? "GoldAPI.io enabled" : "GoldAPI.io disabled",
+          title: checked ? "UniRateAPI enabled" : "UniRateAPI disabled",
           description: checked
-            ? "GoldAPI.io is now the active price source."
-            : "Switched to fallback live-price feed.",
+            ? "UniRateAPI is now the active fallback price source."
+            : "Switched to other fallback feeds.",
         });
       },
       onError: (err: any) => {
-        // Revert on failure
-        setGoldApiEnabled(!checked);
+        setUniRateApiEnabled(!checked);
         toast({ title: "Failed to update toggle", description: err.message, variant: "destructive" });
       }
     });
@@ -610,32 +605,32 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* GoldAPI.io Settings */}
+      {/* UniRateAPI Settings */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Key className="w-5 h-5 text-primary" />
-              <CardTitle>GoldAPI.io Settings</CardTitle>
+              <CardTitle>UniRateAPI Settings</CardTitle>
             </div>
             {/* Enable / Disable toggle — only meaningful when a token is set */}
-            {settings?.goldApiTokenSet && (
+            {(settings as any)?.uniRateApiTokenSet && (
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-muted-foreground">
-                  {goldApiEnabled ? "Enabled" : "Disabled"}
+                  {uniRateApiEnabled ? "Enabled" : "Disabled"}
                 </span>
                 <Switch
-                  checked={goldApiEnabled}
-                  onCheckedChange={handleToggleGoldApi}
+                  checked={uniRateApiEnabled}
+                  onCheckedChange={handleToggleUniRate}
                   disabled={updateSettings.isPending}
-                  aria-label="Enable GoldAPI.io"
-                  className={goldApiEnabled ? "data-[state=checked]:bg-green-500" : ""}
+                  aria-label="Enable UniRateAPI"
+                  className={uniRateApiEnabled ? "data-[state=checked]:bg-green-500" : ""}
                 />
               </div>
             )}
           </div>
           <CardDescription>
-            Configure your GoldAPI.io token to fetch the official XAU/USD spot price every 60 seconds.
+            Configure your UniRateAPI token to fetch the official XAU/USD spot price (LBMA-blended, updates every 15 minutes).
             Use the toggle to enable or disable it without losing the token.
           </CardDescription>
         </CardHeader>
@@ -643,18 +638,18 @@ export default function SettingsPage() {
 
           {/* Status badge */}
           <div className="flex items-center gap-2 rounded-lg border px-3 py-2 bg-muted/30">
-            <Power className={`w-4 h-4 flex-shrink-0 ${settings?.goldApiTokenSet && goldApiEnabled ? "text-green-500" : "text-muted-foreground"}`} />
+            <Power className={`w-4 h-4 flex-shrink-0 ${(settings as any)?.uniRateApiTokenSet && uniRateApiEnabled ? "text-green-500" : "text-muted-foreground"}`} />
             <span className="text-sm font-medium">Status:</span>
-            {settings?.goldApiTokenSet ? (
-              goldApiEnabled ? (
+            {(settings as any)?.uniRateApiTokenSet ? (
+              uniRateApiEnabled ? (
                 <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-600">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-                  Token configured — GoldAPI.io active
+                  Token configured — UniRateAPI active
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600">
                   <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-                  Token configured — GoldAPI.io paused (toggle OFF)
+                  Token configured — UniRateAPI paused (toggle OFF)
                 </span>
               )
             ) : (
@@ -666,31 +661,31 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="goldApiToken">API Token</Label>
+            <Label htmlFor="uniRateApiToken">API Token</Label>
             <Input
-              id="goldApiToken"
+              id="uniRateApiToken"
               type="password"
-              value={goldApiToken}
+              value={uniRateApiToken}
               onFocus={() => {
-                if (goldApiToken === CONFIGURED_SENTINEL) setGoldApiToken("");
+                if (uniRateApiToken === CONFIGURED_SENTINEL) setUniRateApiToken("");
               }}
               onBlur={() => {
-                if (goldApiToken === "" && settings?.goldApiTokenSet) {
-                  setGoldApiToken(CONFIGURED_SENTINEL);
+                if (uniRateApiToken === "" && (settings as any)?.uniRateApiTokenSet) {
+                  setUniRateApiToken(CONFIGURED_SENTINEL);
                 }
               }}
-              onChange={e => setGoldApiToken(e.target.value)}
+              onChange={e => setUniRateApiToken(e.target.value)}
               placeholder={
-                settings?.goldApiTokenSet
+                (settings as any)?.uniRateApiTokenSet
                   ? "Paste new token to replace, or clear to remove…"
-                  : "Paste your GoldAPI.io token here…"
+                  : "Paste your UniRateAPI token here…"
               }
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground">
               Get your token from{" "}
-              <a href="https://www.goldapi.io" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                goldapi.io
+              <a href="https://unirateapi.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                unirateapi.com
               </a>
               . To remove the token, clear the field and click Save API Settings.
             </p>
@@ -698,7 +693,7 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between pt-1">
             <Button
-              onClick={handleSaveGoldApi}
+              onClick={handleSaveUniRate}
               disabled={updateSettings.isPending}
               variant="outline"
               className="gap-2"

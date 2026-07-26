@@ -19,8 +19,8 @@ export interface CompanySettingsInput {
   logoImageUrl?: string;
   stampSignatureUrl?: string;
   showroomLogoUrl?: string;
-  /** GoldAPI.io API token. Send an empty string to clear the token. */
-  goldApiToken?: string;
-  /** Enable or disable GoldAPI.io polling without clearing the token. */
-  goldApiEnabled?: boolean;
+  /** UniRateAPI token. Send an empty string to clear the token. */
+  uniRateApiToken?: string;
+  /** Enable or disable UniRateAPI polling without clearing the token. */
+  uniRateApiEnabled?: boolean;
 }

@@ -3,7 +3,7 @@ import { db, companySettingsTable } from "@workspace/db";
 import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
 import { broadcast } from "../lib/socket.js";
-import { triggerGoldApiPoll, setGoldApiActive } from "./prices.js";
+import { triggerGoldApiPoll, setGoldApiActive, triggerUniRatePoll, setUniRateActive } from "./prices.js";
 
 const router: IRouter = Router();
 
@@ -15,7 +15,11 @@ async function getOrCreate() {
 }
 
 function toSettingsResponse(row: typeof companySettingsTable.$inferSelect) {
-  return { ...row, goldApiTokenSet: !!(row.goldApiToken) };
+  return {
+    ...row,
+    goldApiTokenSet:    !!(row.goldApiToken),
+    uniRateApiTokenSet: !!(row.uniRateApiToken),
+  };
 }
 
 router.get("/settings", async (_req, res): Promise<void> => {
@@ -40,6 +44,8 @@ router.put("/settings", async (req, res): Promise<void> => {
     showroomLogoUrl?: string;
     goldApiToken?: string;
     goldApiEnabled?: boolean;
+    uniRateApiToken?: string;
+    uniRateApiEnabled?: boolean;
   };
 
   // Build the patch explicitly — only include keys that were actually sent in
@@ -63,6 +69,9 @@ router.put("/settings", async (req, res): Promise<void> => {
   // goldApiToken: only touch when explicitly sent — empty string clears the token.
   if (body.goldApiToken !== undefined) patch.goldApiToken = body.goldApiToken || null;
   if (body.goldApiEnabled !== undefined) patch.goldApiEnabled = body.goldApiEnabled;
+  // uniRateApiToken: same sentinel pattern as goldApiToken
+  if (body.uniRateApiToken !== undefined) patch.uniRateApiToken = body.uniRateApiToken || null;
+  if (body.uniRateApiEnabled !== undefined) patch.uniRateApiEnabled = body.uniRateApiEnabled;
 
   const [updated] = await db
     .update(companySettingsTable)
@@ -72,14 +81,13 @@ router.put("/settings", async (req, res): Promise<void> => {
   res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
   broadcast("SETTINGS_MUTATION");
 
-  // If the toggle was explicitly turned OFF, immediately deactivate in-memory so
-  // the next /prices/spot call falls back to the Socket.IO feed without waiting
-  // for the next 60-second poll cycle.
+  // If the GoldAPI toggle was explicitly turned OFF, immediately deactivate in-memory.
   if (body.goldApiEnabled === false) setGoldApiActive(false);
-
-  // If a GoldAPI token was included (or the toggle was turned ON), kick off an
-  // immediate poll so the TV board gets prices within seconds.
   if (body.goldApiToken || body.goldApiEnabled === true) triggerGoldApiPoll();
+
+  // UniRate: same immediate-effect pattern
+  if (body.uniRateApiEnabled === false) setUniRateActive(false);
+  if (body.uniRateApiToken || body.uniRateApiEnabled === true) triggerUniRatePoll();
 });
 
 // Public, unauthenticated router — mounted separately, before the requireAuth
