@@ -11,7 +11,8 @@ const TROY_OUNCE_TO_GRAM = 31.1034768;
 
 // Standard interbank XAU/USD OTC half-spread (USD per oz).
 // UniRateAPI returns the mid price only; we derive bid/ask from this constant.
-const HALF_SPREAD_USD = 0.15; // → $0.30 full spread
+// Real OTC spot spread for XAU/USD is typically $0.80–$1.00; $0.45 → $0.90 full.
+const HALF_SPREAD_USD = 0.45;
 
 // ── Admin-configurable spread & labor (loaded from DB, updated via PATCH/PUT) ─
 let adminSpreadPercent      = 0;
@@ -228,10 +229,65 @@ export function triggerUniRatePoll(): void {
 }
 
 // Poll immediately on startup, then every 60 seconds.
-// At 60 s cadence the paid key sees ≤1440 req/day and catches UniRate's
-// per-update windows quickly without hammering the endpoint.
 pollUniRate();
 setInterval(pollUniRate, 60_000);
+
+// ── Yahoo Finance — daily H/L seed only ───────────────────────────────────────
+// GC=F (COMEX gold futures) provides the actual session High and Low that
+// professional boards display. UniRateAPI only returns a mid price; without
+// this seed the TV board would show today's first tick as both High and Low.
+// We NEVER use Yahoo's price as a spot fallback — UniRateAPI owns liveSpot.
+// ─────────────────────────────────────────────────────────────────────────────
+interface YahooChartMeta {
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?:  number;
+}
+interface YahooChartResponse {
+  chart?: { result?: Array<{ meta?: YahooChartMeta }> };
+}
+const YAHOO_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+async function fetchYahooHL(): Promise<void> {
+  const endpoints = [
+    "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
+    "https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d",
+  ];
+  for (const url of endpoints) {
+    try {
+      const resp = await fetch(url, {
+        headers: { "User-Agent": YAHOO_UA, "Accept": "application/json" },
+        signal:  AbortSignal.timeout(12_000),
+      });
+      if (!resp.ok) continue;
+      const data = await resp.json() as YahooChartResponse;
+      const meta = data?.chart?.result?.[0]?.meta;
+      const high = meta?.regularMarketDayHigh;
+      const low  = meta?.regularMarketDayLow;
+      if (!high || !low || !Number.isFinite(high) || !Number.isFinite(low) || high < 1000 || low < 1000) continue;
+
+      // Always overwrite — Yahoo's session range is the authoritative daily H/L.
+      // UniRateAPI's mid-price ticks only span a fraction of the day's range.
+      dailyHighUsdPerOz    = high;
+      dailyLowUsdPerOz     = low;
+      dailyTrackingDateUTC = todayUTC();
+
+      // Push the updated H/L into the live spot so the TV board refreshes immediately
+      if (liveSpot) {
+        liveSpot = { ...liveSpot, dailyHighUsdPerOz: high, dailyLowUsdPerOz: low };
+        broadcast("PRICE_MUTATION");
+      }
+      logger.info({ high, low }, "[yahoo-hl] Daily H/L updated from GC=F");
+      return;
+    } catch (err) {
+      logger.warn({ err, url }, "[yahoo-hl] fetch failed — trying next endpoint");
+    }
+  }
+  logger.warn("[yahoo-hl] All Yahoo Finance endpoints failed");
+}
+
+// Seed H/L immediately on startup, then refresh every 5 minutes
+fetchYahooHL();
+setInterval(fetchYahooHL, 5 * 60_000);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function toNum(v: string | number | null): number | null {
