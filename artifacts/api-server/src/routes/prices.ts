@@ -148,32 +148,69 @@ function trackDailyRange(usdPerOz: number): void {
   if (changed) saveDailyHL();
 }
 
-// ── Yahoo Finance LOW seed ────────────────────────────────────────────────────
-// Called once at startup (and at midnight rollover) to seed today's daily LOW
-// from Yahoo Finance GC=F (continuous gold futures).
-//   • LOW  only: GC=F day-low tracks OTC spot low closely (~$1 off).
-//   • HIGH skipped: futures daily-high is inflated by ~$12 vs OTC spot.
+// ── Yahoo Finance H/L seed ────────────────────────────────────────────────────
+// Seeds today's High AND Low from Yahoo Finance GC=F hourly bars with
+// pre/post-market data included.  This covers the full 23-hour gold session
+// (00:00 UTC onward) rather than just the 9:30 AM ET open.
+//
+// Using hourly bars (interval=1h, includePrePost=true) the max HIGH computed
+// from individual bars typically matches OTC spot to within ~$2, far better
+// than the regularMarketDayHigh aggregate (~$12 off due to futures premium).
+//
+// Midnight rollover re-seeds so each new day starts with a fresh H/L.
 // ─────────────────────────────────────────────────────────────────────────────
-async function seedLowFromYahoo(): Promise<void> {
+async function seedHLFromYahoo(): Promise<void> {
   try {
-    const url  = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d";
+    // range=2d gives yesterday+today bars; we filter to today's UTC date only
+    const url  = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1h&range=2d&includePrePost=true";
     const resp = await fetch(url, {
       headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
-      signal:  AbortSignal.timeout(10_000),
+      signal:  AbortSignal.timeout(12_000),
     });
-    if (!resp.ok) return;
-    const meta = ((await resp.json() as any)?.chart?.result?.[0]?.meta) as Record<string, unknown> | undefined;
-    const low  = typeof meta?.regularMarketDayLow === "number" ? meta.regularMarketDayLow : null;
-    if (!low || low < 500) return;
-    const today = todayUTC();
-    if (dailyLowUsdPerOz == null || low < dailyLowUsdPerOz) {
-      dailyTrackingDateUTC = today;
-      dailyLowUsdPerOz     = low;
-      saveDailyHL();
-      logger.info({ low: low.toFixed(2) }, "[H/L Seed] Daily LOW seeded from Yahoo GC=F (HIGH left for live ticks)");
+    if (!resp.ok) {
+      logger.warn({ status: resp.status }, "[H/L Seed] Yahoo request failed — H/L builds from live ticks");
+      return;
     }
+    const json    = await resp.json() as Record<string, unknown>;
+    const result  = (json as any)?.chart?.result?.[0];
+    const tsList  = (result?.timestamp ?? []) as number[];
+    const qHigh   = (result?.indicators?.quote?.[0]?.high ?? []) as (number | null)[];
+    const qLow    = (result?.indicators?.quote?.[0]?.low  ?? []) as (number | null)[];
+
+    const today = todayUTC();
+    let seedHigh: number | null = null;
+    let seedLow:  number | null = null;
+
+    for (let i = 0; i < tsList.length; i++) {
+      const barDate = new Date(tsList[i] * 1000).toISOString().slice(0, 10);
+      if (barDate !== today) continue;
+      const h = qHigh[i], l = qLow[i];
+      if (h != null && h > 500 && (seedHigh == null || h > seedHigh)) seedHigh = h;
+      if (l != null && l > 500 && (seedLow  == null || l < seedLow))  seedLow  = l;
+    }
+
+    if (!seedHigh && !seedLow) {
+      logger.warn("[H/L Seed] No today bars found in Yahoo hourly data");
+      return;
+    }
+
+    // Merge with any accumulated range — only expand the range, never shrink it
+    if (seedHigh != null && (dailyHighUsdPerOz == null || seedHigh > dailyHighUsdPerOz)) {
+      dailyHighUsdPerOz    = seedHigh;
+      dailyTrackingDateUTC = today;
+    }
+    if (seedLow != null && (dailyLowUsdPerOz == null || seedLow < dailyLowUsdPerOz)) {
+      dailyLowUsdPerOz     = seedLow;
+      dailyTrackingDateUTC = today;
+    }
+    saveDailyHL();
+
+    logger.info(
+      { low: dailyLowUsdPerOz?.toFixed(2) ?? "—", high: dailyHighUsdPerOz?.toFixed(2) ?? "—" },
+      "[H/L Seed] H/L seeded from Yahoo GC=F hourly bars (pre+post market)"
+    );
   } catch (err) {
-    logger.warn({ err }, "[H/L Seed] Yahoo seed failed — LOW builds from live ticks");
+    logger.warn({ err }, "[H/L Seed] Yahoo seed failed — H/L builds from live ticks");
   }
 }
 
@@ -189,7 +226,7 @@ setInterval(async () => {
     dailyHighUsdPerOz    = null;
     saveDailyHL();
     logger.info({ date: today }, "[UniRateAPI] Midnight UTC — daily H/L reset for new day");
-    await seedLowFromYahoo();
+    await seedHLFromYahoo();
   }
 }, 60_000);
 
@@ -485,7 +522,7 @@ export function triggerUniRatePoll(): void {
 // ─────────────────────────────────────────────────────────────────────────────
 async function startup(): Promise<void> {
   loadDailyHL();
-  await seedLowFromYahoo();          // seed today's LOW before first tick
+  await seedHLFromYahoo();           // seed today's H/L from hourly bars
   await pollSwissquote();            // first real bid/ask tick (~instant)
   await pollUniRate();               // confirmation poll
   setInterval(pollSwissquote, SWISSQUOTE_POLL_MS);   // 15 s fast ticks
