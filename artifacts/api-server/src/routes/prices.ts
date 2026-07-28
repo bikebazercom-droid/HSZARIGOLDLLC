@@ -148,11 +148,40 @@ function trackDailyRange(usdPerOz: number): void {
   if (changed) saveDailyHL();
 }
 
-// ── Midnight watchdog ─────────────────────────────────────────────────────────
-// Checks every minute; when UTC date flips, resets H/L state so the next
-// UniRateAPI tick initialises a fresh range for the new trading day.
+// ── Yahoo Finance LOW seed ────────────────────────────────────────────────────
+// Called once at startup (and at midnight rollover) to seed today's daily LOW
+// from Yahoo Finance GC=F (continuous gold futures).
+//   • LOW  only: GC=F day-low tracks OTC spot low closely (~$1 off).
+//   • HIGH skipped: futures daily-high is inflated by ~$12 vs OTC spot.
 // ─────────────────────────────────────────────────────────────────────────────
-setInterval(() => {
+async function seedLowFromYahoo(): Promise<void> {
+  try {
+    const url  = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d";
+    const resp = await fetch(url, {
+      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) return;
+    const meta = ((await resp.json() as any)?.chart?.result?.[0]?.meta) as Record<string, unknown> | undefined;
+    const low  = typeof meta?.regularMarketDayLow === "number" ? meta.regularMarketDayLow : null;
+    if (!low || low < 500) return;
+    const today = todayUTC();
+    if (dailyLowUsdPerOz == null || low < dailyLowUsdPerOz) {
+      dailyTrackingDateUTC = today;
+      dailyLowUsdPerOz     = low;
+      saveDailyHL();
+      logger.info({ low: low.toFixed(2) }, "[H/L Seed] Daily LOW seeded from Yahoo GC=F (HIGH left for live ticks)");
+    }
+  } catch (err) {
+    logger.warn({ err }, "[H/L Seed] Yahoo seed failed — LOW builds from live ticks");
+  }
+}
+
+// ── Midnight watchdog ─────────────────────────────────────────────────────────
+// Checks every minute; when UTC date flips, resets H/L and re-seeds LOW from
+// Yahoo so the new day starts with a reasonable low rather than the first tick.
+// ─────────────────────────────────────────────────────────────────────────────
+setInterval(async () => {
   const today = todayUTC();
   if (dailyTrackingDateUTC && dailyTrackingDateUTC !== today) {
     dailyTrackingDateUTC = today;
@@ -160,27 +189,115 @@ setInterval(() => {
     dailyHighUsdPerOz    = null;
     saveDailyHL();
     logger.info({ date: today }, "[UniRateAPI] Midnight UTC — daily H/L reset for new day");
+    await seedLowFromYahoo();
   }
 }, 60_000);
 
-// ── UniRateAPI — sole primary price source ────────────────────────────────────
+// ── Swissquote — primary fast price source (every 15 s) ──────────────────────
+// URL: https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD
+// Free, no API key, institutional OTC XAU/USD bid/ask feed.
+// Provides real bid/ask directly (no synthetic spread needed).
+// Polling every 15 s gives ~5,760 req/day — no rate-limit concern.
+// UniRateAPI remains as a slow-poll confirmation source (every 90 s).
+// ─────────────────────────────────────────────────────────────────────────────
+const SWISSQUOTE_URL      = "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD";
+const SWISSQUOTE_POLL_MS  = 15_000;
+
+interface SwissquoteProfile {
+  spreadProfile: string;
+  bidSpread:     number;
+  askSpread:     number;
+  bid:           number;
+  ask:           number;
+}
+interface SwissquoteEntry {
+  topo:                { platform: string; server: string };
+  spreadProfilePrices: SwissquoteProfile[];
+  ts:                  number;
+}
+
+let swissquoteFailStreak = 0;
+
+async function pollSwissquote(): Promise<void> {
+  try {
+    const resp = await fetch(SWISSQUOTE_URL, {
+      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+      signal:  AbortSignal.timeout(8_000),
+    });
+    if (!resp.ok) {
+      swissquoteFailStreak++;
+      logger.warn({ status: resp.status, streak: swissquoteFailStreak }, "[Swissquote] Request failed");
+      return;
+    }
+    const data = await resp.json() as SwissquoteEntry[];
+    const item = Array.isArray(data) ? data[0] : null;
+    if (!item?.spreadProfilePrices?.length) {
+      swissquoteFailStreak++;
+      logger.warn("[Swissquote] Unexpected response shape");
+      return;
+    }
+
+    // "elite" profile = tightest institutional spread; fall back to first available
+    const profile = item.spreadProfilePrices.find(p => p.spreadProfile === "elite")
+                 ?? item.spreadProfilePrices[0];
+    const bid = profile.bid;
+    const ask = profile.ask;
+    if (!bid || !ask || bid < 500 || ask < 500 || ask < bid) {
+      swissquoteFailStreak++;
+      logger.warn({ bid, ask }, "[Swissquote] Price out of range");
+      return;
+    }
+
+    swissquoteFailStreak = 0;
+    const mid = (bid + ask) / 2;
+
+    await loadAdminConfig();
+    const rawAedPerGram = (ask / TROY_OUNCE_TO_GRAM) * USD_TO_AED;
+    const aedPerGram    = rawAedPerGram * (1 + adminSpreadPercent / 100);
+
+    trackDailyRange(mid);
+
+    liveSpot = {
+      rawAedPerGram,
+      aedPerGram,
+      baseAedPerGram: rawAedPerGram,
+      usdPerOz:        mid,
+      bidUsdPerOz:     bid,
+      askUsdPerOz:     ask,
+      dailyLowUsdPerOz,
+      dailyHighUsdPerOz,
+      receivedAt:      new Date(),
+    };
+
+    broadcast("PRICE_MUTATION");
+
+    logger.info(
+      {
+        bid:       bid.toFixed(2),
+        ask:       ask.toFixed(2),
+        mid:       mid.toFixed(2),
+        aedPerGram: aedPerGram.toFixed(4),
+        dailyLow:  dailyLowUsdPerOz?.toFixed(2)  ?? "—",
+        dailyHigh: dailyHighUsdPerOz?.toFixed(2) ?? "—",
+      },
+      "[Swissquote] New tick"
+    );
+  } catch (err) {
+    swissquoteFailStreak++;
+    logger.warn({ err, streak: swissquoteFailStreak }, "[Swissquote] Poll failed");
+  }
+}
+
+// ── UniRateAPI — secondary confirmation source (every 90 s) ──────────────────
+// Still polled every 90 s to confirm Swissquote isn't drifting, and to write
+// the canonical AED price to the DB for invoice / non-TV use.
 // Endpoint: GET https://api.unirateapi.com/api/commodities/rates?api_key=KEY&from=USD&to=XAU
 // Response fields used:
 //   rate   → USD per troy oz (direct, e.g. 4054.40)  — preferred
 //   result → XAU per USD (inverse; fallback: 1/result = USD/oz)
 //
-// No OHLC endpoint exists on UniRateAPI — H/L is tracked in-memory and
-// seeded from Yahoo Finance GC=F at startup (see seedDailyRangeFromYahoo).
-//
 // Polling: 90 s (960 req/day) — safely within the 1,000/day paid-plan limit.
 // Adaptive back-off: 300 s when x-ratelimit-remaining < 100.
-//
-// Pricing formula:
-//   mid        = rate (from UniRate)
-//   bid        = mid − HALF_SPREAD_USD
-//   ask        = mid + HALF_SPREAD_USD
-//   Base_24K   = (ask / TROY_OUNCE_TO_GRAM) × USD_TO_AED
-//   AdjustedBase = Base_24K × (1 + adminSpreadPercent / 100)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface UniRateResponse {
@@ -360,35 +477,22 @@ export function triggerUniRatePoll(): void {
 
 // ── Startup sequence ──────────────────────────────────────────────────────────
 // 1. Restore persisted H/L from disk (same day → restores accumulated range)
-// 2. Fire first UniRateAPI poll immediately (initialises H/L from first tick)
-// 3. Schedule recurring polls at POLL_INTERVAL_NORMAL_MS (adaptive)
-//
-// H/L is built exclusively from UniRateAPI live ticks — no Yahoo Finance seed.
-// Using GC=F (futures) for seeding inflated the HIGH by ~$12 vs OTC spot,
-// which caused a visible mismatch against reference apps.  Starting from live
-// ticks means L=H for the first 90 s, but the range quickly widens naturally.
+// 2. Seed today's LOW from Yahoo Finance GC=F (fast, accurate ±$1 vs OTC)
+// 3. Fire first Swissquote poll (real bid/ask immediately available)
+// 4. Fire first UniRateAPI poll (confirmation + DB write)
+// 5. Schedule Swissquote every 15 s (primary fast-tick source)
+// 6. Schedule UniRateAPI every 90 s (confirmation + rate-limited DB writes)
 // ─────────────────────────────────────────────────────────────────────────────
 async function startup(): Promise<void> {
   loadDailyHL();
-  await pollUniRate();
-  scheduleNextPoll(activePollIntervalMs);
+  await seedLowFromYahoo();          // seed today's LOW before first tick
+  await pollSwissquote();            // first real bid/ask tick (~instant)
+  await pollUniRate();               // confirmation poll
+  setInterval(pollSwissquote, SWISSQUOTE_POLL_MS);   // 15 s fast ticks
+  scheduleNextPoll(activePollIntervalMs);             // 90 s confirmation
 }
 
-startup().catch((err: unknown) => logger.warn({ err }, "[UniRateAPI] Startup sequence failed"));
-
-// ── 1-second heartbeat broadcast ─────────────────────────────────────────────
-// Broadcasts the current cached liveSpot to all connected TV clients every
-// second. The TV board's Socket.IO listener (live-price.tsx) immediately
-// invalidates and refetches /api/prices/spot on each broadcast, so the display
-// updates every second even between UniRateAPI polls (which are every 90 s).
-// The HTTP handler for /api/prices/spot reads from in-memory liveSpot — cost
-// is essentially zero. Clients that are not connected receive no traffic.
-// ─────────────────────────────────────────────────────────────────────────────
-setInterval(() => {
-  if (liveSpot) {
-    broadcast("PRICE_MUTATION");
-  }
-}, 1_000);
+startup().catch((err: unknown) => logger.warn({ err }, "[Startup] Startup sequence failed"));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function toNum(v: string | number | null): number | null {
