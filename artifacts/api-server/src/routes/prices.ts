@@ -148,62 +148,11 @@ function trackDailyRange(usdPerOz: number): void {
   if (changed) saveDailyHL();
 }
 
-// ── Yahoo Finance H/L seed ────────────────────────────────────────────────────
-// Called once at startup (and at midnight rollover) to seed today's daily
-// High/Low from Yahoo Finance GC=F (continuous gold futures, free, no auth).
-// This prevents Low=High after a server restart during active trading hours.
-// Yahoo Finance is used ONLY for H/L seeding — UniRateAPI remains the sole
-// live price source. If Yahoo is unreachable, we fall back gracefully.
-// ─────────────────────────────────────────────────────────────────────────────
-async function seedDailyRangeFromYahoo(): Promise<void> {
-  try {
-    const url  = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d";
-    const resp = await fetch(url, {
-      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
-      signal:  AbortSignal.timeout(10_000),
-    });
-    if (!resp.ok) {
-      logger.warn({ status: resp.status }, "[H/L Seed] Yahoo Finance request failed — H/L will build from live ticks");
-      return;
-    }
-    const json = await resp.json() as Record<string, unknown>;
-    const result = (json as any)?.chart?.result?.[0];
-    const meta   = result?.meta as Record<string, unknown> | undefined;
-
-    // Yahoo provides regularMarketDayHigh / Low on the meta object
-    const high = typeof meta?.regularMarketDayHigh === "number" ? meta.regularMarketDayHigh : null;
-    const low  = typeof meta?.regularMarketDayLow  === "number" ? meta.regularMarketDayLow  : null;
-
-    if (!high || !low || high < 500 || low < 500) {
-      logger.warn({ high, low }, "[H/L Seed] Yahoo Finance returned unexpected H/L — skipping seed");
-      return;
-    }
-
-    const today = todayUTC();
-    // Only seed if we don't already have a wider intraday range from the file
-    const seedHigh = (dailyHighUsdPerOz == null || high > dailyHighUsdPerOz) ? high : dailyHighUsdPerOz;
-    const seedLow  = (dailyLowUsdPerOz  == null || low  < dailyLowUsdPerOz)  ? low  : dailyLowUsdPerOz;
-
-    dailyTrackingDateUTC = today;
-    dailyHighUsdPerOz    = seedHigh;
-    dailyLowUsdPerOz     = seedLow;
-    saveDailyHL();
-
-    logger.info(
-      { low: seedLow.toFixed(2), high: seedHigh.toFixed(2), source: "Yahoo Finance GC=F" },
-      "[H/L Seed] Daily H/L seeded from Yahoo Finance — will be refined by live ticks"
-    );
-  } catch (err) {
-    logger.warn({ err }, "[H/L Seed] Yahoo Finance unavailable — H/L will build from live ticks only");
-  }
-}
-
 // ── Midnight watchdog ─────────────────────────────────────────────────────────
-// Checks every minute; when UTC date flips, resets H/L and re-seeds from Yahoo
-// so the new day starts with a proper range from the opening rather than a
-// single-tick Low=High.
+// Checks every minute; when UTC date flips, resets H/L state so the next
+// UniRateAPI tick initialises a fresh range for the new trading day.
 // ─────────────────────────────────────────────────────────────────────────────
-setInterval(async () => {
+setInterval(() => {
   const today = todayUTC();
   if (dailyTrackingDateUTC && dailyTrackingDateUTC !== today) {
     dailyTrackingDateUTC = today;
@@ -211,8 +160,6 @@ setInterval(async () => {
     dailyHighUsdPerOz    = null;
     saveDailyHL();
     logger.info({ date: today }, "[UniRateAPI] Midnight UTC — daily H/L reset for new day");
-    // Re-seed from Yahoo for the new trading session
-    await seedDailyRangeFromYahoo();
   }
 }, 60_000);
 
@@ -413,13 +360,16 @@ export function triggerUniRatePoll(): void {
 
 // ── Startup sequence ──────────────────────────────────────────────────────────
 // 1. Restore persisted H/L from disk (same day → restores accumulated range)
-// 2. Seed H/L from Yahoo Finance GC=F OHLC so day range is valid right away
-// 3. Fire first UniRateAPI poll immediately
-// 4. Schedule recurring polls at POLL_INTERVAL_NORMAL_MS (adaptive)
+// 2. Fire first UniRateAPI poll immediately (initialises H/L from first tick)
+// 3. Schedule recurring polls at POLL_INTERVAL_NORMAL_MS (adaptive)
+//
+// H/L is built exclusively from UniRateAPI live ticks — no Yahoo Finance seed.
+// Using GC=F (futures) for seeding inflated the HIGH by ~$12 vs OTC spot,
+// which caused a visible mismatch against reference apps.  Starting from live
+// ticks means L=H for the first 90 s, but the range quickly widens naturally.
 // ─────────────────────────────────────────────────────────────────────────────
 async function startup(): Promise<void> {
   loadDailyHL();
-  await seedDailyRangeFromYahoo();
   await pollUniRate();
   scheduleNextPoll(activePollIntervalMs);
 }
