@@ -9,3 +9,4 @@
 - [Gold-shop pricing engine (spot-based)](gold-shop-pricing-engine.md) — Base_24K derived from XAU/USD international spot + admin spread/labor%; API server needs a workflow restart to pick up backend route changes (no hot reload).
 - [Gold-shop TV board price_items system](gold-shop-tv-board-price-items.md) — TV board rows driven by `price_items` DB table; frontend computes prices via `computeItemPrice(item, baseAedPerGram)` in showroom-board.tsx; live-price context no longer exposes raw* precomputed fields.
 - [UAE Kilo Bar 995 convention](uae-kilo-bar-995-convention.md) — 995 kilo bar uses 23/24 purity factor (not 0.995); Dubai showroom convention matching livepriceofgold.com reference app.
+- [Gold-shop TV board H/L accuracy](gold-shop-tv-board-hl-accuracy.md) — Yahoo GC=F hourly bars (prePost=true) + $1.50 HIGH correction + 10-min re-seed; UniRateAPI must NOT overwrite Swissquote prices (stale by $2–5).

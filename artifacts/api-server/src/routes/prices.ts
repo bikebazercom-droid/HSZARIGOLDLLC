@@ -292,7 +292,11 @@ interface SwissquoteEntry {
   ts:                  number;
 }
 
-let swissquoteFailStreak = 0;
+let swissquoteFailStreak   = 0;
+let lastSwissquoteTick: Date | null = null;   // tracks last successful Swissquote tick
+// UniRateAPI only updates liveSpot when Swissquote has been silent for this long.
+// This prevents stale UniRateAPI data (~$4 off) from overwriting accurate live Swissquote prices.
+const SWISSQUOTE_STALE_MS = 30_000;
 
 async function pollSwissquote(): Promise<void> {
   try {
@@ -325,6 +329,7 @@ async function pollSwissquote(): Promise<void> {
     }
 
     swissquoteFailStreak = 0;
+    lastSwissquoteTick   = new Date();
     const mid = (bid + ask) / 2;
 
     await loadAdminConfig();
@@ -500,32 +505,46 @@ async function pollUniRate(): Promise<void> {
 
     trackDailyRange(usdPerOz);
 
-    liveSpot = {
-      rawAedPerGram,
-      aedPerGram,
-      baseAedPerGram: rawAedPerGram,
-      usdPerOz,
-      bidUsdPerOz,
-      askUsdPerOz,
-      dailyLowUsdPerOz,
-      dailyHighUsdPerOz,
-      receivedAt: new Date(),
-    };
+    // Only overwrite liveSpot when Swissquote has been silent (fallback mode).
+    // Swissquote provides accurate real-time OTC institutional bid/ask every 1 s.
+    // UniRateAPI can lag by $2–$5 due to caching/batching; overwriting would make
+    // item prices wrong for ~1 s every 90 s.  When Swissquote is alive we only
+    // use UniRateAPI for H/L tracking and the DB write below.
+    const swissquoteStale = !lastSwissquoteTick
+      || (Date.now() - lastSwissquoteTick.getTime() > SWISSQUOTE_STALE_MS);
 
-    uniRateActive = true;
-    broadcast("PRICE_MUTATION");
-
-    logger.info(
-      {
-        usdPerOz:   usdPerOz.toFixed(2),
-        bid:        bidUsdPerOz.toFixed(2),
-        ask:        askUsdPerOz.toFixed(2),
-        aedPerGram: aedPerGram.toFixed(4),
-        dailyLow:   dailyLowUsdPerOz?.toFixed(2)  ?? "—",
-        dailyHigh:  dailyHighUsdPerOz?.toFixed(2) ?? "—",
-      },
-      "[UniRateAPI] New tick received and broadcast to TV"
-    );
+    if (swissquoteStale) {
+      liveSpot = {
+        rawAedPerGram,
+        aedPerGram,
+        baseAedPerGram: rawAedPerGram,
+        usdPerOz,
+        bidUsdPerOz,
+        askUsdPerOz,
+        dailyLowUsdPerOz,
+        dailyHighUsdPerOz,
+        receivedAt: new Date(),
+      };
+      uniRateActive = true;
+      broadcast("PRICE_MUTATION");
+      logger.info(
+        {
+          usdPerOz:   usdPerOz.toFixed(2),
+          bid:        bidUsdPerOz.toFixed(2),
+          ask:        askUsdPerOz.toFixed(2),
+          aedPerGram: aedPerGram.toFixed(4),
+          dailyLow:   dailyLowUsdPerOz?.toFixed(2)  ?? "—",
+          dailyHigh:  dailyHighUsdPerOz?.toFixed(2) ?? "—",
+        },
+        "[UniRateAPI] Fallback tick broadcast (Swissquote silent)"
+      );
+    } else {
+      uniRateActive = true;
+      logger.info(
+        { usdPerOz: usdPerOz.toFixed(2), aedPerGram: aedPerGram.toFixed(4) },
+        "[UniRateAPI] Tick received (Swissquote active — display unchanged, H/L+DB only)"
+      );
+    }
 
     // Throttle DB writes to once per 5 minutes to avoid excessive churn
     const now = Date.now();
