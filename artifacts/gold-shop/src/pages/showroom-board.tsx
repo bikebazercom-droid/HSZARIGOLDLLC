@@ -203,6 +203,48 @@ function iconForItem(item: PriceItem): React.ReactNode {
 }
 
 // ── Gold Spot Widget — dark matte card with BID / ASK / LOW / HIGH boxes ─────
+// Tracks price direction on every tick (up ↑ / down ↓) and briefly flashes
+// the price cell green/red to show movement.  Runs at 1 s Swissquote ticks.
+// ─────────────────────────────────────────────────────────────────────────────
+const SPOT_KEYFRAMES = `
+@keyframes flashUp {
+  0%   { text-shadow: 0 0 32px #22c55ecc, 0 2px 20px #22c55e88; }
+  40%  { text-shadow: 0 0 48px #22c55eff, 0 2px 28px #22c55ecc; }
+  100% { text-shadow: 0 2px 20px #22c55e44; }
+}
+@keyframes flashDown {
+  0%   { text-shadow: 0 0 32px #ef4444cc, 0 2px 20px #ef444488; }
+  40%  { text-shadow: 0 0 48px #ef4444ff, 0 2px 28px #ef4444cc; }
+  100% { text-shadow: 0 2px 20px #ef444444; }
+}
+@keyframes flashUpLg {
+  0%   { text-shadow: 0 0 24px #22c55eaa, 0 2px 16px #22c55e66; }
+  40%  { text-shadow: 0 0 40px #22c55eff, 0 2px 24px #22c55ecc; }
+  100% { text-shadow: 0 2px 16px #22c55e44; }
+}
+@keyframes flashDownLg {
+  0%   { text-shadow: 0 0 24px #ef4444aa, 0 2px 16px #ef444466; }
+  40%  { text-shadow: 0 0 40px #ef4444ff, 0 2px 24px #ef4444cc; }
+  100% { text-shadow: 0 2px 16px #ef444444; }
+}
+`;
+
+type TickDir = "up" | "down" | null;
+
+function useTickDir(value: number | null): { dir: TickDir; key: number } {
+  const prevRef  = useRef<number | null>(null);
+  const [state, setState] = useState<{ dir: TickDir; key: number }>({ dir: null, key: 0 });
+  useEffect(() => {
+    if (value == null) return;
+    const prev = prevRef.current;
+    if (prev != null && value !== prev) {
+      setState(s => ({ dir: value > prev ? "up" : "down", key: s.key + 1 }));
+    }
+    prevRef.current = value;
+  }, [value]);
+  return state;
+}
+
 interface GoldSpotWidgetProps {
   askUsdPerOz:       number | null;
   bidUsdPerOz:       number | null;
@@ -211,6 +253,9 @@ interface GoldSpotWidgetProps {
 }
 
 function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighUsdPerOz }: GoldSpotWidgetProps) {
+  const bid = useTickDir(bidUsdPerOz);
+  const ask = useTickDir(askUsdPerOz);
+
   const BOX_BASE: React.CSSProperties = {
     background: BG_CARD,
     borderRadius: "clamp(0.4rem,0.8vw,0.9rem)",
@@ -224,148 +269,174 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
     minHeight: 0,
   };
 
+  const arrowStyle = (dir: TickDir, baseColor: string): React.CSSProperties => ({
+    fontSize: "clamp(1rem,1.4vw,1.6rem)",
+    lineHeight: 1,
+    color: dir === "up" ? GREEN : dir === "down" ? RED : baseColor,
+    transition: "color 0.15s",
+    userSelect: "none",
+  });
+
+  const priceAnim = (dir: TickDir, isLarge: boolean): React.CSSProperties => {
+    if (!dir) return {};
+    const name = isLarge
+      ? (dir === "up" ? "flashUp" : "flashDown")
+      : (dir === "up" ? "flashUpLg" : "flashDownLg");
+    return { animation: `${name} 0.6s ease-out forwards` };
+  };
+
   return (
-    <div
-      style={{
-        background: "#0d0d0d",
-        border: `1px solid ${GOLD}2a`,
-        borderRadius: "clamp(0.7rem,1.4vw,1.4rem)",
-        padding: "clamp(0.6rem,1.4vh,1.3rem) clamp(0.8rem,2vw,1.8rem)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "clamp(0.4rem,0.9vh,0.85rem)",
-        flexShrink: 0,
-        boxShadow: `0 4px 48px -12px #000000dd`,
-      }}
-    >
-      {/* ── GOLD SPOT label bar ──────────────────────────────────────────────── */}
+    <>
+      <style>{SPOT_KEYFRAMES}</style>
       <div
         style={{
+          background: "#0d0d0d",
+          border: `1px solid ${GOLD}2a`,
+          borderRadius: "clamp(0.7rem,1.4vw,1.4rem)",
+          padding: "clamp(0.6rem,1.4vh,1.3rem) clamp(0.8rem,2vw,1.8rem)",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "0.75em",
-          paddingBottom: "clamp(0.3rem,0.7vh,0.6rem)",
-          borderBottom: `1px solid ${GOLD}28`,
+          flexDirection: "column",
+          gap: "clamp(0.4rem,0.9vh,0.85rem)",
           flexShrink: 0,
+          boxShadow: `0 4px 48px -12px #000000dd`,
         }}
       >
-        <span
+        {/* ── GOLD SPOT label bar ────────────────────────────────────────────── */}
+        <div
           style={{
-            color: GOLD,
-            fontWeight: 800,
-            fontSize: "clamp(0.7rem,calc(0.55vh + 0.55vw),1.1rem)",
-            letterSpacing: "0.3em",
-            textTransform: "uppercase",
-            textShadow: `0 0 20px ${GOLD}44`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.75em",
+            paddingBottom: "clamp(0.3rem,0.7vh,0.6rem)",
+            borderBottom: `1px solid ${GOLD}28`,
+            flexShrink: 0,
           }}
         >
-          GOLD SPOT
-        </span>
+          <span
+            style={{
+              color: GOLD,
+              fontWeight: 800,
+              fontSize: "clamp(0.7rem,calc(0.55vh + 0.55vw),1.1rem)",
+              letterSpacing: "0.3em",
+              textTransform: "uppercase",
+              textShadow: `0 0 20px ${GOLD}44`,
+            }}
+          >
+            GOLD SPOT
+          </span>
+        </div>
+
+        {/* ── 2 × 2 grid: BID / ASK / LOW / HIGH ──────────────────────────── */}
+        <div className="grid grid-cols-2" style={{ gap: "clamp(0.4rem,0.9vw,0.85rem)" }}>
+
+          {/* BID PRICE (oz) */}
+          <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+              <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+              <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                BID PRICE (oz)
+              </span>
+              <span style={arrowStyle(bid.dir, GREEN)}>
+                {bid.dir === "up" ? "▲" : bid.dir === "down" ? "▼" : ""}
+              </span>
+            </div>
+            <div
+              key={bid.key}
+              className="tabular-nums"
+              style={{
+                color: GREEN,
+                fontFamily: "monospace",
+                fontWeight: 900,
+                fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+                lineHeight: 1,
+                letterSpacing: "-0.02em",
+                textAlign: "center",
+                textShadow: `0 2px 20px ${GREEN}44`,
+                ...priceAnim(bid.dir, true),
+              }}
+            >
+              {fmt(bidUsdPerOz, 2)}
+            </div>
+          </div>
+
+          {/* ASK PRICE (oz) */}
+          <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+              <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+              <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                ASK PRICE (oz)
+              </span>
+              <span style={arrowStyle(ask.dir, RED)}>
+                {ask.dir === "up" ? "▲" : ask.dir === "down" ? "▼" : ""}
+              </span>
+            </div>
+            <div
+              key={ask.key}
+              className="tabular-nums"
+              style={{
+                color: RED,
+                fontFamily: "monospace",
+                fontWeight: 900,
+                fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+                lineHeight: 1,
+                letterSpacing: "-0.02em",
+                textAlign: "center",
+                textShadow: `0 2px 20px ${RED}44`,
+                ...priceAnim(ask.dir, true),
+              }}
+            >
+              {fmt(askUsdPerOz, 2)}
+            </div>
+          </div>
+
+          {/* LOW */}
+          <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+            <div style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+              ↓ Low
+            </div>
+            <div
+              className="tabular-nums"
+              style={{
+                color: RED,
+                fontFamily: "monospace",
+                fontWeight: 900,
+                fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
+                lineHeight: 1,
+                letterSpacing: "-0.02em",
+                textAlign: "center",
+                textShadow: `0 2px 16px ${RED}44`,
+              }}
+            >
+              {fmt(dailyLowUsdPerOz, 2)}
+            </div>
+          </div>
+
+          {/* HIGH */}
+          <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
+            <div style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+              ↑ High
+            </div>
+            <div
+              className="tabular-nums"
+              style={{
+                color: GREEN,
+                fontFamily: "monospace",
+                fontWeight: 900,
+                fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
+                lineHeight: 1,
+                letterSpacing: "-0.02em",
+                textAlign: "center",
+                textShadow: `0 2px 16px ${GREEN}44`,
+              }}
+            >
+              {fmt(dailyHighUsdPerOz, 2)}
+            </div>
+          </div>
+
+        </div>
       </div>
-
-      {/* ── 2 × 2 grid: BID / ASK / LOW / HIGH ──────────────────────────────── */}
-      <div
-        className="grid grid-cols-2"
-        style={{ gap: "clamp(0.4rem,0.9vw,0.85rem)" }}
-      >
-
-        {/* BID PRICE (oz) — top-left */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
-            <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
-            <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-              BID PRICE (oz)
-            </span>
-          </div>
-          <div
-            className="tabular-nums"
-            style={{
-              color: GREEN,
-              fontFamily: "monospace",
-              fontWeight: 900,
-              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
-              lineHeight: 1,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              textShadow: `0 2px 20px ${GREEN}44`,
-            }}
-          >
-            {fmt(bidUsdPerOz, 2)}
-          </div>
-        </div>
-
-        {/* ASK PRICE (oz) — top-right */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
-            <span style={{ color: RED, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
-            <span style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-              ASK PRICE (oz)
-            </span>
-          </div>
-          <div
-            className="tabular-nums"
-            style={{
-              color: RED,
-              fontFamily: "monospace",
-              fontWeight: 900,
-              fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
-              lineHeight: 1,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              textShadow: `0 2px 20px ${RED}44`,
-            }}
-          >
-            {fmt(askUsdPerOz, 2)}
-          </div>
-        </div>
-
-        {/* LOW — bottom-left */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
-          <div style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
-            Low
-          </div>
-          <div
-            className="tabular-nums"
-            style={{
-              color: RED,
-              fontFamily: "monospace",
-              fontWeight: 900,
-              fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
-              lineHeight: 1,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              textShadow: `0 2px 16px ${RED}44`,
-            }}
-          >
-            {fmt(dailyLowUsdPerOz, 2)}
-          </div>
-        </div>
-
-        {/* HIGH — bottom-right */}
-        <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
-          <div style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
-            High
-          </div>
-          <div
-            className="tabular-nums"
-            style={{
-              color: GREEN,
-              fontFamily: "monospace",
-              fontWeight: 900,
-              fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
-              lineHeight: 1,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              textShadow: `0 2px 16px ${GREEN}44`,
-            }}
-          >
-            {fmt(dailyHighUsdPerOz, 2)}
-          </div>
-        </div>
-
-      </div>
-    </div>
+    </>
   );
 }
 

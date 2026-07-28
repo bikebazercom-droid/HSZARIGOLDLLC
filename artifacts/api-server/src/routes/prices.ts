@@ -238,7 +238,7 @@ setInterval(async () => {
 // UniRateAPI remains as a slow-poll confirmation source (every 90 s).
 // ─────────────────────────────────────────────────────────────────────────────
 const SWISSQUOTE_URL      = "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD";
-const SWISSQUOTE_POLL_MS  = 15_000;
+const SWISSQUOTE_POLL_MS  = 1_000;   // 1 s — Swissquote returns new tick every ~150 ms, no rate-limit observed
 
 interface SwissquoteProfile {
   spreadProfile: string;
