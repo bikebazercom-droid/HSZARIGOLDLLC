@@ -23,7 +23,11 @@ export const GetSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish()
+  "stampSignatureUrl": zod.string().nullish(),
+  "externalSyncUrl": zod.string().nullish(),
+  "externalSyncEnabled": zod.boolean(),
+  "uniRateApiTokenSet": zod.boolean(),
+  "uniRateApiEnabled": zod.boolean()
 })
 
 
@@ -41,7 +45,11 @@ export const UpdateSettingsBody = zod.object({
   "logoType": zod.string().optional(),
   "logoInitial": zod.string().optional(),
   "logoImageUrl": zod.string().optional(),
-  "stampSignatureUrl": zod.string().optional()
+  "stampSignatureUrl": zod.string().optional(),
+  "externalSyncUrl": zod.string().optional(),
+  "externalSyncEnabled": zod.boolean().optional(),
+  "uniRateApiToken": zod.string().optional(),
+  "uniRateApiEnabled": zod.boolean().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -56,7 +64,11 @@ export const UpdateSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish()
+  "stampSignatureUrl": zod.string().nullish(),
+  "externalSyncUrl": zod.string().nullish(),
+  "externalSyncEnabled": zod.boolean(),
+  "uniRateApiTokenSet": zod.boolean(),
+  "uniRateApiEnabled": zod.boolean()
 })
 
 

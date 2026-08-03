@@ -349,8 +349,42 @@ export default function NewInvoice() {
 
   const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
-  const liveAed: number | undefined = undefined;
-  const tvPriceMap: Map<string, number> | undefined = undefined;
+
+  // ── Live prices from TV board (ExternalSync) ────────────────────────────────
+  // Poll /api/tv/prices every 5s to get the baseAedPerGram and per-item rates.
+  const [tvPrices, setTvPrices] = React.useState<any>(null);
+  React.useEffect(() => {
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const load = async () => {
+      try {
+        const res = await fetch(`${BASE}/api/tv/prices`);
+        if (res.ok) setTvPrices(await res.json());
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Per-gram AED from TV board (live, or fall back to the prices API value)
+  const liveAed: number | null = tvPrices?.baseAedPerGram ?? (prices as any)?.goldPricePerGram ?? null;
+
+  // Map TV board item names → price-per-gram so getRateForDesc can pick them up
+  const tvPriceMap: Map<string, number> | undefined = React.useMemo(() => {
+    if (!tvPrices?.items?.length) return undefined;
+    const map = new Map<string, number>();
+    for (const item of tvPrices.items) {
+      if (item.price != null && item.price > 0) {
+        // item.price for a "spot_per_gram" item is AED/gram — use directly.
+        // For "spot_bar" items (e.g. 1kg = big number), skip — getRateForDesc
+        // handles those through the raw base rate, not the TV price.
+        if (item.formulaType === "spot_per_gram" || item.formulaType === "manual") {
+          map.set(item.name as string, item.price as number);
+        }
+      }
+    }
+    return map.size > 0 ? map : undefined;
+  }, [tvPrices]);
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");

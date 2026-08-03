@@ -1,4 +1,4 @@
-import { pgTable, serial, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean } from "drizzle-orm/pg-core";
 
 export const companySettingsTable = pgTable("company_settings", {
   id: serial("id").primaryKey(),
@@ -13,4 +13,9 @@ export const companySettingsTable = pgTable("company_settings", {
   logoInitial: text("logo_initial").notNull().default("H"),
   logoImageUrl: text("logo_image_url"),
   stampSignatureUrl: text("stamp_signature_url"),
+  // ── External sync / TV board configuration ────────────────────────────────
+  externalSyncUrl:     text("external_sync_url").default("https://www.hazarigold.com/"),
+  externalSyncEnabled: boolean("external_sync_enabled").notNull().default(false),
+  uniRateApiToken:     text("uni_rate_api_token"),
+  uniRateApiEnabled:   boolean("uni_rate_api_enabled").notNull().default(true),
 });

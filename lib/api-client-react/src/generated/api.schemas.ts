@@ -472,6 +472,12 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
+  /** @nullable */
+  externalSyncUrl?: string | null;
+  externalSyncEnabled: boolean;
+  /** True when a UniRateAPI token is stored (never returned). */
+  uniRateApiTokenSet: boolean;
+  uniRateApiEnabled: boolean;
 }
 
 export interface CompanySettingsInput {
@@ -486,6 +492,11 @@ export interface CompanySettingsInput {
   logoInitial?: string;
   logoImageUrl?: string;
   stampSignatureUrl?: string;
+  externalSyncUrl?: string;
+  externalSyncEnabled?: boolean;
+  /** Send empty string to clear. */
+  uniRateApiToken?: string;
+  uniRateApiEnabled?: boolean;
 }
 
 /**

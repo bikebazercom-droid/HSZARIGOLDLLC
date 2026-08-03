@@ -18,4 +18,9 @@ export interface CompanySettingsInput {
   logoInitial?: string;
   logoImageUrl?: string;
   stampSignatureUrl?: string;
+  externalSyncUrl?: string;
+  externalSyncEnabled?: boolean;
+  /** Send empty string to clear. */
+  uniRateApiToken?: string;
+  uniRateApiEnabled?: boolean;
 }
