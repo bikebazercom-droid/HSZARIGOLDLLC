@@ -1,0 +1,75 @@
+================================================================================
+MASTER FEATURE PRD: EXTERNAL WEBSITE SYNC (hazarigold.com) & AUTO-INVOICING SYSTEM
+================================================================================
+
+Target Objective:
+Implement a dynamic external source synchronization system that scrapes/parses live gold spot and product prices from `https://www.hazarigold.com/`, syncs them to the TV Display Board, renders a Live Item Feed Table below TV Settings, and enables automatic price calculations inside the Invoice Creation module.
+
+--------------------------------------------------------------------------------
+MODULE 1: ADMIN PANEL - TV SECTION SETTINGS & SYNC CONTROL
+--------------------------------------------------------------------------------
+1. Admin UI UI Components (`TVSectionSettings.tsx`):
+   - Add "External Source URL" Input Field (Default: `https://www.hazarigold.com/`).
+   - Add Toggle Switch: "Enable External Website Sync" (`isExternalSyncEnabled`: boolean).
+   - Add "Test Connection & Fetch Preview" Button: Sends a test request to inspect scraped payload before enabling.
+   - Save configuration into database/admin settings store (`system_config`).
+
+--------------------------------------------------------------------------------
+MODULE 2: BACKEND WEBSCRAPER & PARSER ENGINE (`server/services/externalSync.ts`)
+--------------------------------------------------------------------------------
+1. Dynamic Web Scraper Pipeline:
+   - Create a background worker service that polls `https://www.hazarigold.com/` at a configurable interval (default: 5 seconds) when `isExternalSyncEnabled` is TRUE.
+   - Use `axios` with standard headers and `cheerio` (or Puppeteer if client-rendered) to parse HTML or intercept internal API responses.
+   - Extract the following exact data points:
+     a) Gold Spot Rates: $BID Price, $ASK Price, High, Low.
+     b) Derived Product Rates (in AED/Gram):
+        - Ten Tola Bar (TTB)
+        - Jewellery 22K (1 GM)
+        - Gold 9999 (1 GM & 1 KG)
+        - Kilo Bar 995 (1 KG)
+
+2. Fallback & Sanitization:
+   - If `hazarigold.com` fails to respond or changes layout, fall back safely to cached prices without crashing server processes.
+   - Log activity clearly as: `[ExternalSync] Scraped hazarigold.com successfully`.
+
+--------------------------------------------------------------------------------
+MODULE 3: REAL-TIME TV BOARD SYNC (`prices.ts` & Socket.IO)
+--------------------------------------------------------------------------------
+1. Override Price Engine:
+   - When External Sync is ACTIVE, route all internal derived calculations (`prices.ts`) through the scraped data from `hazarigold.com`.
+2. Socket.IO Event Dispatch:
+   - On every successful scrape tick, broadcast a `PRICE_MUTATION` WebSocket event.
+   - Connected TV Showroom Boards must automatically re-render without requiring page reloads.
+
+--------------------------------------------------------------------------------
+MODULE 4: LIVE ITEM PRICE FEED DASHBOARD (Admin Settings)
+--------------------------------------------------------------------------------
+1. UI Location: Directly below the TV Settings section.
+2. Dashboard Component (`LivePriceFeedTable.tsx`):
+   - Render a real-time table displaying all active items synced from the website/TV engine.
+   - Table Columns: [Item Name, Unit Type (1GM / 1KG / TTB), Live Base Price (AED), Live Rate with Admin Spread, Last Updated Time].
+   - Must update dynamically on every Socket.IO `PRICE_MUTATION` tick.
+
+--------------------------------------------------------------------------------
+MODULE 5: AUTO-CALCULATING INVOICE SYSTEM (`InvoiceBuilder.tsx`)
+--------------------------------------------------------------------------------
+1. Smart Item Selection & Auto-Population:
+   - In the Invoice Creation UI, link the item selection dropdown directly to the Live Item Price Feed.
+   - When a user selects an item (e.g., "Gold 9999 1GM" or "Jewellery 22K"), automatically populate `unitPrice` with the current live market price fetched from `hazarigold.com`.
+   
+2. Real-Time Calculation Logic:
+   - Implement dynamic formula calculations per invoice row:
+     Row Subtotal = (Weight in Grams or Quantity) * Live Unit Price
+     Making/Handling Charge = User-defined or preset rate
+     Row Total = Row Subtotal + Making Charge
+   - Grand Total Calculation:
+     Grand Total = Sum(Row Totals) + Tax/VAT (%) - Discount
+   
+3. Overrides & Lock Mechanism:
+   - Allow optional manual override of the unit price if an admin needs custom pricing for a specific client, while providing a "Reset to Live Price" button.
+   - Lock invoice prices upon generation so historical invoices do not change when market prices fluctuate later.
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please refactor backend and frontend code to implement this complete pipeline now and confirm server startup status.
+================================================================================
