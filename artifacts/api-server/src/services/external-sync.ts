@@ -1,17 +1,16 @@
 /**
- * ExternalSync service — Module 2 of the PRD.
+ * ExternalSync — live gold price engine.
  *
- * Pipeline:
- *  1. If `externalSyncEnabled` in DB: fetch and parse the configured URL
- *     (default: https://www.hazarigold.com/) using cheerio.
- *  2. If cheerio parse yields 0 prices (site is client-rendered/dynamic),
- *     fall back to the UniRateAPI key (DB-stored or env var).
- *  3. Store parsed data in memory, broadcast PRICE_MUTATION via Socket.IO.
+ * Source priority (automatic fallback chain):
+ *  1. Swissquote public OTC feed  — free, no key, real bid/ask spread, same
+ *     source as the deployed server uses
+ *  2. hazarigold.com HTML scraper — when externalSyncEnabled = true in DB
+ *  3. UniRateAPI (XAUT)           — DB-stored token or UNIRATE_API_KEY env var
  *
- * Exported:
- *  - getExternalSyncState()  — current in-memory snapshot
- *  - triggerExternalSync()   — force an immediate poll (called from settings save)
- *  - startExternalSyncLoop() — starts the background polling timer
+ * GoldAPI (GOLDAPI_KEY) is skipped: the free tier has a ~100 req/month quota
+ * that a 5-second polling loop drains in minutes.
+ *
+ * Broadcasts PRICE_MUTATION via Socket.IO every successful tick.
  */
 
 import * as cheerio from "cheerio";
@@ -19,191 +18,184 @@ import { db, companySettingsTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
 import { logger } from "../lib/logger.js";
 
-const TROY        = 31.1034768;
-const AED_PER_USD = 3.6725;
-const HALF_SPREAD = 0.45; // synthetic bid/ask spread ≈ $0.90
+const TROY        = 31.1034768;   // grams per troy oz
+const AED_PER_USD = 3.6725;       // AED fixed peg
 
 export interface SyncState {
-  // Gold spot (USD / troy oz)
-  bidUsd:     number;
-  askUsd:     number;
-  midUsd:     number;
-  dailyHigh:  number;
-  dailyLow:   number;
-  // Derived AED
-  baseAedPerGram: number;
-  // Item prices in AED (keyed by canonical name from price_items table)
-  itemPrices: Record<string, number>;
-  // Meta
-  updatedAt:  string | null;
-  lastUtcDay: number;
-  source:     "hazarigold.com" | "UniRateAPI" | "none";
-  error:      string | null;
+  bidUsd:          number;
+  askUsd:          number;
+  midUsd:          number;
+  dailyHigh:       number;
+  dailyLow:        number;
+  baseAedPerGram:  number;   // 24 K, AED/gram
+  aed22k:          number;
+  aed21k:          number;
+  aed18k:          number;
+  itemPrices:      Record<string, number>;
+  updatedAt:       string | null;
+  lastUtcDay:      number;
+  source:          "Swissquote" | "hazarigold.com" | "UniRateAPI" | "none";
+  error:           string | null;
 }
 
 const state: SyncState = {
-  bidUsd:        0,
-  askUsd:        0,
-  midUsd:        0,
-  dailyHigh:     0,
-  dailyLow:      Infinity,
-  baseAedPerGram:0,
-  itemPrices:    {},
-  updatedAt:     null,
-  lastUtcDay:    new Date().getUTCDate(),
-  source:        "none",
-  error:         null,
+  bidUsd:         0,
+  askUsd:         0,
+  midUsd:         0,
+  dailyHigh:      0,
+  dailyLow:       Infinity,
+  baseAedPerGram: 0,
+  aed22k:         0,
+  aed21k:         0,
+  aed18k:         0,
+  itemPrices:     {},
+  updatedAt:      null,
+  lastUtcDay:     new Date().getUTCDate(),
+  source:         "none",
+  error:          null,
 };
 
 export function getExternalSyncState(): Readonly<SyncState> {
   return state;
 }
 
-// ── Cheerio scraper for hazarigold.com ──────────────────────────────────────
-// The site is a Next.js app with client-rendered prices. Static scrape will
-// usually return 0.00, so this is best-effort and we fall back to UniRateAPI.
+// ── Daily high / low tracker ───────────────────────────────────────────────────
+function trackHighLow(mid: number): void {
+  const today = new Date().getUTCDate();
+  if (today !== state.lastUtcDay) {
+    state.dailyHigh  = mid;
+    state.dailyLow   = mid;
+    state.lastUtcDay = today;
+  } else {
+    if (state.dailyHigh === 0 || mid > state.dailyHigh) state.dailyHigh = mid;
+    if (state.dailyLow  === Infinity || mid < state.dailyLow)  state.dailyLow  = mid;
+  }
+}
+
+// ── Derive AED/gram karat rates from base ──────────────────────────────────────
+function deriveKarats(baseAedPerGram: number): { aed22k: number; aed21k: number; aed18k: number } {
+  return {
+    aed22k: +(baseAedPerGram * (22 / 24)).toFixed(4),
+    aed21k: +(baseAedPerGram * (21 / 24)).toFixed(4),
+    aed18k: +(baseAedPerGram * (18 / 24)).toFixed(4),
+  };
+}
+
+// ── Source 1: Swissquote public OTC feed ──────────────────────────────────────
+// Endpoint is public — no API key required.
+// Returns multiple spread profiles per platform; we use the "premium" profile
+// from SwissquoteCapitalMarkets as it gives the tightest institutional spread.
+interface SQSpreadProfile { spreadProfile: string; bid: number; ask: number; bidSpread: number; askSpread: number; }
+interface SQEntry { topo: { platform: string }; spreadProfilePrices: SQSpreadProfile[]; ts: number; }
+
+async function fetchSwissquote(): Promise<{ bid: number; ask: number; mid: number } | null> {
+  try {
+    const res = await fetch(
+      "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD",
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+          "Accept": "application/json",
+        },
+        signal: AbortSignal.timeout(8_000),
+      }
+    );
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "[ExternalSync] Swissquote non-200");
+      return null;
+    }
+
+    const entries: SQEntry[] = await res.json();
+    // Pick SwissquoteCapitalMarkets (first entry), prefer "premium" spread profile
+    const entry  = entries.find(e => e.topo.platform === "SwissquoteCapitalMarkets") ?? entries[0];
+    if (!entry) return null;
+
+    const profile =
+      entry.spreadProfilePrices.find(p => p.spreadProfile === "premium") ??
+      entry.spreadProfilePrices.find(p => p.spreadProfile === "prime")   ??
+      entry.spreadProfilePrices[0];
+    if (!profile || !profile.bid || !profile.ask) return null;
+
+    return {
+      bid: +profile.bid.toFixed(3),
+      ask: +profile.ask.toFixed(3),
+      mid: +((profile.bid + profile.ask) / 2).toFixed(3),
+    };
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, "[ExternalSync] Swissquote fetch failed");
+    return null;
+  }
+}
+
+// ── Source 2: hazarigold.com HTML scraper ─────────────────────────────────────
+// Best-effort — Next.js client-rendered, prices usually 0 in static HTML.
 async function scrapeUrl(url: string): Promise<{
-  bidUsd: number; askUsd: number; highUsd: number; lowUsd: number;
-  items: Record<string, number>;
+  bidUsd: number; askUsd: number; items: Record<string, number>;
 } | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+        "Accept": "text/html,*/*",
       },
       signal: AbortSignal.timeout(12_000),
     });
-
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // ── Strategy 1: try to parse any embedded __NEXT_DATA__ JSON ──────────
-    let nextData: any = null;
-    try {
-      const raw = $("#__NEXT_DATA__").html() || $("script[id='__NEXT_DATA__']").html();
-      if (raw) nextData = JSON.parse(raw);
-    } catch {}
-
-    // ── Strategy 2: text-based price extraction from rendered HTML ─────────
-    // hazarigold.com DOM (from screenshot analysis):
-    // - Gold Spot section: "ASK PRICE (oz)" / "BID PRICE (oz)" boxes
-    // - Items table rows with "TEN TOLA BAR", "JEWELLERY 22K", etc.
-    const extractNum = (text: string): number => {
-      const m = text.match(/[\d,]+\.?\d*/);
-      if (!m) return 0;
-      return parseFloat(m[0].replace(/,/g, ""));
-    };
-
-    // Collect ALL text nodes that look like prices
-    const allText = $("body").text();
-    const pricePattern = /\b(\d{2,6}\.\d{2})\b/g;
-    const allPrices: number[] = [];
-    let m;
-    while ((m = pricePattern.exec(allText)) !== null) {
-      allPrices.push(parseFloat(m[1]));
-    }
-
-    // Try specific class/structure selectors
-    let bidUsd = 0, askUsd = 0, highUsd = 0, lowUsd = 0;
+    let bidUsd = 0, askUsd = 0;
     const items: Record<string, number> = {};
 
-    // Look for BID/ASK values — typically >= 1000 for gold oz price
-    const ozPrices = allPrices.filter(p => p >= 1000 && p <= 10000);
+    const extractNum = (t: string) => { const m = t.match(/[\d,]+\.?\d*/); return m ? parseFloat(m[0].replace(/,/g, "")) : 0; };
 
-    // Try to find spot prices from text context
     $("*").each((_: number, el: any) => {
-      const text = $(el).text().trim().toLowerCase();
-      const parent = $(el).parent().text().trim();
-
-      if ((text.includes("bid") || parent.toLowerCase().includes("bid")) && !bidUsd) {
-        const n = extractNum($(el).text());
-        if (n >= 1000) bidUsd = n;
-      }
-      if ((text.includes("ask") || parent.toLowerCase().includes("ask")) && !askUsd) {
-        const n = extractNum($(el).text());
-        if (n >= 1000) askUsd = n;
-      }
-      if (text.includes("high") && !highUsd) {
-        const n = extractNum($(el).text());
-        if (n >= 1000) highUsd = n;
-      }
-      if (text.includes("low") && !lowUsd) {
-        const n = extractNum($(el).text());
-        if (n >= 1000) lowUsd = n;
-      }
-
-      // AED item prices (100–1,000,000 range)
-      if (text.includes("tola") || text.includes("ttb")) {
-        const n = extractNum($(el).next().text() || $(el).parent().text());
-        if (n >= 10000) items["TEN TOLA BAR"] = n;
-      }
-      if (text.includes("jewellery") || text.includes("22k")) {
-        const n = extractNum($(el).next().text() || $(el).parent().text());
-        if (n >= 100) items["JEWELLERY 22K"] = n;
-      }
-      if (text.includes("9999") && text.includes("1gm")) {
-        const n = extractNum($(el).next().text() || $(el).parent().text());
-        if (n >= 100) items["GOLD 9999 1GM"] = n;
-      }
-      if (text.includes("9999") && text.includes("1kg")) {
-        const n = extractNum($(el).next().text() || $(el).parent().text());
-        if (n >= 100000) items["GOLD 9999 1KG"] = n;
-      }
-      if (text.includes("kilo") || text.includes("995")) {
-        const n = extractNum($(el).next().text() || $(el).parent().text());
-        if (n >= 100000) items["KILO BAR 995"] = n;
-      }
+      const txt = $(el).text().trim().toLowerCase();
+      if (!txt || txt.length > 200) return;
+      if (txt.includes("bid") && !bidUsd) { const n = extractNum($(el).text()); if (n >= 1000) bidUsd = n; }
+      if (txt.includes("ask") && !askUsd) { const n = extractNum($(el).text()); if (n >= 1000) askUsd = n; }
+      if (txt.includes("tola") || txt.includes("ttb"))  { const n = extractNum($(el).next().text() || $(el).parent().text()); if (n >= 10000) items["TEN TOLA BAR"] = n; }
+      if (txt.includes("jewellery") || txt.includes("22k")) { const n = extractNum($(el).next().text() || $(el).parent().text()); if (n >= 100) items["JEWELLERY 22K"] = n; }
+      if (txt.includes("9999") && txt.includes("1gm"))  { const n = extractNum($(el).next().text() || $(el).parent().text()); if (n >= 100) items["GOLD 9999"] = n; }
+      if (txt.includes("9999") && txt.includes("1kg"))  { const n = extractNum($(el).next().text() || $(el).parent().text()); if (n >= 100000) items["GOLD 9999 1KG"] = n; }
+      if (txt.includes("kilo") || (txt.includes("995") && !txt.includes("9999"))) { const n = extractNum($(el).next().text() || $(el).parent().text()); if (n >= 100000) items["KILO BAR 995"] = n; }
     });
 
-    // If ozPrices exist and bid/ask still 0, guess from them
-    if (!bidUsd && ozPrices.length >= 2) {
-      bidUsd = ozPrices[0];
-      askUsd = ozPrices[1];
-    }
-
-    // Check nextData for embedded prices
-    if (nextData) {
-      const str = JSON.stringify(nextData);
-      const nums = (str.match(/:\s*(\d{4,5}\.\d{2})/g) || []).map((x: string) => parseFloat(x.replace(/:\s*/, "")));
-      if (nums.length > 0 && !bidUsd) {
-        const candidates = nums.filter((n: number) => n >= 1000 && n <= 9999);
-        if (candidates.length >= 2) { bidUsd = candidates[0]; askUsd = candidates[1]; }
-      }
-    }
-
-    const allZero = bidUsd === 0 && askUsd === 0;
-    if (allZero) return null; // client-rendered — trigger fallback
-
-    return { bidUsd, askUsd, highUsd, lowUsd, items };
+    if (bidUsd === 0 && askUsd === 0) return null;
+    return { bidUsd, askUsd, items };
   } catch (err: any) {
     logger.warn({ err: err?.message }, "[ExternalSync] Scrape failed");
     return null;
   }
 }
 
-// ── UniRateAPI fallback ──────────────────────────────────────────────────────
+// ── Source 3: UniRateAPI (XAUT = Tether Gold ≈ XAU spot) ─────────────────────
 async function fetchUniRateApi(apiKey: string): Promise<{ mid: number } | null> {
   try {
-    const url = `https://api.unirateapi.com/api/rates?api_key=${apiKey}&symbols=XAUT`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(
+      `https://api.unirateapi.com/api/rates?api_key=${apiKey}&symbols=XAUT`,
+      { signal: AbortSignal.timeout(10_000) }
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json() as Record<string, any>;
-    const rates: Record<string, number> = data?.rates ?? data?.data ?? {};
-    const rawRate = rates.XAU ?? rates.XAUT;
-    if (!rawRate || rawRate <= 0) return null;
-    return { mid: 1 / rawRate };
+    const rate = data?.rates?.XAUT ?? data?.rates?.XAU;
+    if (!rate || rate <= 0) return null;
+    return { mid: +(1 / rate).toFixed(3) };
   } catch (err: any) {
-    logger.warn({ err: err?.message }, "[ExternalSync] UniRateAPI fallback failed");
+    logger.warn({ err: err?.message }, "[ExternalSync] UniRateAPI failed");
     return null;
   }
 }
 
 // ── Core tick ─────────────────────────────────────────────────────────────────
 export async function doSyncTick(): Promise<void> {
-  // Read config from DB
-  let cfg: { externalSyncEnabled: boolean; externalSyncUrl: string | null; uniRateApiToken: string | null; uniRateApiEnabled: boolean } | null = null;
+  let cfg: {
+    externalSyncEnabled: boolean;
+    externalSyncUrl:     string | null;
+    uniRateApiToken:     string | null;
+    uniRateApiEnabled:   boolean;
+  } | null = null;
+
   try {
     const [row] = await db.select({
       externalSyncEnabled: companySettingsTable.externalSyncEnabled,
@@ -212,93 +204,103 @@ export async function doSyncTick(): Promise<void> {
       uniRateApiEnabled:   companySettingsTable.uniRateApiEnabled,
     }).from(companySettingsTable).limit(1);
     cfg = row ?? null;
-  } catch {
-    // DB not ready on first tick; use env-only fallback
+  } catch { /* DB not ready yet */ }
+
+  const syncEnabled = cfg?.externalSyncEnabled ?? false;
+  const syncUrl     = cfg?.externalSyncUrl ?? "https://www.hazarigold.com/";
+  const uniToken    = cfg?.uniRateApiToken ?? process.env.UNIRATE_API_KEY ?? "";
+  const uniEnabled  = cfg?.uniRateApiEnabled ?? true;
+
+  // ── Step 1: Swissquote OTC (primary, always attempted) ───────────────────
+  const sq = await fetchSwissquote();
+  if (sq) {
+    trackHighLow(sq.mid);
+    const baseAed   = +((sq.mid / TROY) * AED_PER_USD).toFixed(4);
+    const karats    = deriveKarats(baseAed);
+
+    state.bidUsd         = sq.bid;
+    state.askUsd         = sq.ask;
+    state.midUsd         = sq.mid;
+    state.baseAedPerGram = baseAed;
+    Object.assign(state, karats);
+    state.itemPrices     = {};
+    state.source         = "Swissquote";
+    state.updatedAt      = new Date().toISOString();
+    state.error          = null;
+
+    logger.info(
+      `[ExternalSync] Swissquote ✓  bid=$${sq.bid} ask=$${sq.ask}  ` +
+      `H=$${state.dailyHigh} L=$${state.dailyLow}  AED/g=${baseAed}`
+    );
+    broadcast("PRICE_MUTATION", { source: "Swissquote", bid: sq.bid, ask: sq.ask, baseAedPerGram: baseAed });
+    return;
   }
 
-  const syncEnabled  = cfg?.externalSyncEnabled ?? false;
-  const syncUrl      = cfg?.externalSyncUrl ?? "https://www.hazarigold.com/";
-  const uniToken     = cfg?.uniRateApiToken ?? process.env.UNIRATE_API_KEY ?? "";
-  const uniEnabled   = cfg?.uniRateApiEnabled ?? true;
-
-  let mid = 0;
-  let source: SyncState["source"] = "none";
-
-  // ── Step 1: Try scraping the external URL ───────────────────────────────
+  // ── Step 2: hazarigold.com scraper ───────────────────────────────────────
   if (syncEnabled && syncUrl) {
     const scraped = await scrapeUrl(syncUrl);
     if (scraped && (scraped.bidUsd > 0 || scraped.askUsd > 0)) {
-      mid = ((scraped.bidUsd + scraped.askUsd) / 2) || scraped.bidUsd || scraped.askUsd;
-      source = "hazarigold.com";
+      const mid     = ((scraped.bidUsd + scraped.askUsd) / 2) || scraped.bidUsd || scraped.askUsd;
+      trackHighLow(mid);
+      const baseAed = +((mid / TROY) * AED_PER_USD).toFixed(4);
+      const karats  = deriveKarats(baseAed);
 
-      const today = new Date().getUTCDate();
-      if (today !== state.lastUtcDay) { state.dailyHigh = mid; state.dailyLow = mid; state.lastUtcDay = today; }
+      state.bidUsd         = scraped.bidUsd  || +(mid - 0.45).toFixed(3);
+      state.askUsd         = scraped.askUsd  || +(mid + 0.45).toFixed(3);
+      state.midUsd         = +mid.toFixed(3);
+      state.baseAedPerGram = baseAed;
+      Object.assign(state, karats);
+      state.itemPrices     = scraped.items;
+      state.source         = "hazarigold.com";
+      state.updatedAt      = new Date().toISOString();
+      state.error          = null;
 
-      state.bidUsd    = scraped.bidUsd  || (mid - HALF_SPREAD);
-      state.askUsd    = scraped.askUsd  || (mid + HALF_SPREAD);
-      state.dailyHigh = Math.max(state.dailyHigh || 0, scraped.highUsd || mid);
-      state.dailyLow  = Math.min(state.dailyLow === Infinity ? mid : state.dailyLow, scraped.lowUsd || mid);
-      state.midUsd        = mid;
-      state.baseAedPerGram = (mid / TROY) * AED_PER_USD;
-      state.itemPrices    = scraped.items;
-      state.source        = source;
-      state.updatedAt     = new Date().toISOString();
-      state.error         = null;
-
-      logger.info(`[ExternalSync] Scraped hazarigold.com successfully — $${mid.toFixed(2)}/oz`);
+      logger.info(`[ExternalSync] hazarigold.com ✓  $${mid.toFixed(2)}/oz`);
       broadcast("PRICE_MUTATION", { source: "hazarigold.com", midUsd: mid });
       return;
     }
   }
 
-  // ── Step 2: UniRateAPI fallback ──────────────────────────────────────────
+  // ── Step 3: UniRateAPI fallback ──────────────────────────────────────────
   if (uniEnabled && uniToken) {
     const uni = await fetchUniRateApi(uniToken);
     if (uni) {
-      mid    = uni.mid;
-      source = "UniRateAPI";
+      trackHighLow(uni.mid);
+      const baseAed = +((uni.mid / TROY) * AED_PER_USD).toFixed(4);
+      const karats  = deriveKarats(baseAed);
 
-      const today = new Date().getUTCDate();
-      if (today !== state.lastUtcDay) { state.dailyHigh = mid; state.dailyLow = mid; state.lastUtcDay = today; }
+      state.bidUsd         = +(uni.mid - 0.45).toFixed(3);
+      state.askUsd         = +(uni.mid + 0.45).toFixed(3);
+      state.midUsd         = uni.mid;
+      state.baseAedPerGram = baseAed;
+      Object.assign(state, karats);
+      state.itemPrices     = {};
+      state.source         = "UniRateAPI";
+      state.updatedAt      = new Date().toISOString();
+      state.error          = null;
 
-      state.bidUsd        = mid - HALF_SPREAD;
-      state.askUsd        = mid + HALF_SPREAD;
-      state.midUsd        = mid;
-      state.dailyHigh     = state.dailyHigh === 0 ? mid : Math.max(state.dailyHigh, mid);
-      state.dailyLow      = state.dailyLow === Infinity ? mid : Math.min(state.dailyLow, mid);
-      state.baseAedPerGram = (mid / TROY) * AED_PER_USD;
-      state.itemPrices    = {}; // derived by TV route from price_items table
-      state.source        = source;
-      state.updatedAt     = new Date().toISOString();
-      state.error         = null;
-
-      logger.info(`[ExternalSync] UniRateAPI — $${mid.toFixed(2)}/oz`);
-      broadcast("PRICE_MUTATION", { source: "UniRateAPI", midUsd: mid });
+      logger.info(`[ExternalSync] UniRateAPI ✓  $${uni.mid.toFixed(2)}/oz`);
+      broadcast("PRICE_MUTATION", { source: "UniRateAPI", midUsd: uni.mid });
       return;
     }
   }
 
-  // ── Nothing worked ────────────────────────────────────────────────────────
-  state.error = syncEnabled
-    ? "Both hazarigold.com and UniRateAPI unavailable"
-    : uniToken
-      ? "UniRateAPI failed to respond"
-      : "No data source configured — add UniRateAPI key or enable External Sync";
-  logger.warn(`[ExternalSync] ${state.error}`);
+  // ── No source worked ─────────────────────────────────────────────────────
+  state.error = "All price sources unavailable (Swissquote + UniRateAPI failed)";
+  logger.warn("[ExternalSync] " + state.error);
 }
 
-// ── Public trigger (settings save → immediate refresh) ─────────────────────
+// ── Public API ────────────────────────────────────────────────────────────────
 export function triggerExternalSync(): void {
   doSyncTick().catch(() => {});
 }
 
-// ── Background polling loop ──────────────────────────────────────────────────
 let _timer: ReturnType<typeof setInterval> | null = null;
-const DEFAULT_INTERVAL_MS = 5_000; // 5 seconds per PRD
+const INTERVAL_MS = 5_000;
 
 export function startExternalSyncLoop(): void {
-  if (_timer) return; // already running
-  doSyncTick().catch(() => {}); // immediate first tick
-  _timer = setInterval(() => { doSyncTick().catch(() => {}); }, DEFAULT_INTERVAL_MS);
-  logger.info("[ExternalSync] Background sync loop started (5s interval)");
+  if (_timer) return;
+  doSyncTick().catch(() => {});
+  _timer = setInterval(() => doSyncTick().catch(() => {}), INTERVAL_MS);
+  logger.info("[ExternalSync] Sync loop started — Swissquote primary, 5 s interval");
 }

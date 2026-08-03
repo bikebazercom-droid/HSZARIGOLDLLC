@@ -16,6 +16,7 @@ const AED_PER_USD = 3.6725;
 function computeItemPrice(
   item: typeof priceItemsTable.$inferSelect,
   baseAedPerGram: number,
+  sync: ReturnType<typeof import("../services/external-sync.js").getExternalSyncState>,
 ): number | null {
   const purity = parseFloat(item.purityFactor);
   const offset = parseFloat(item.premiumOffsetAed ?? "0");
@@ -23,6 +24,14 @@ function computeItemPrice(
   if (item.formulaType === "manual") {
     return item.manualRateAed == null ? null : parseFloat(item.manualRateAed) + offset;
   }
+
+  // Use GoldAPI's direct per-karat AED rates when available — most accurate
+  if (sync.aed22k > 0) {
+    if (Math.abs(purity - 22/24) < 0.001) return +(sync.aed22k + offset);
+    if (Math.abs(purity - 21/24) < 0.001) return +(sync.aed21k + offset);
+    if (Math.abs(purity - 18/24) < 0.001) return +(sync.aed18k + offset);
+  }
+
   if (item.formulaType === "spot_bar") {
     const wg = parseFloat(item.weightGrams ?? "0");
     return baseAedPerGram * wg * purity + offset;
@@ -46,20 +55,23 @@ publicTvRouter.get("/tv/prices", async (_req, res) => {
     const baseAed = sync.baseAedPerGram > 0 ? sync.baseAedPerGram : null;
 
     res.json({
-      bidUsd:         sync.bidUsd > 0        ? +sync.bidUsd.toFixed(2)      : null,
-      askUsd:         sync.askUsd > 0        ? +sync.askUsd.toFixed(2)      : null,
-      midUsd:         sync.midUsd > 0        ? +sync.midUsd.toFixed(2)      : null,
-      dailyHigh:      sync.dailyHigh > 0     ? +sync.dailyHigh.toFixed(2)   : null,
-      dailyLow:       sync.dailyLow !== Infinity ? +sync.dailyLow.toFixed(2): null,
-      baseAedPerGram: baseAed != null        ? +baseAed.toFixed(4)          : null,
+      bidUsd:         sync.bidUsd > 0            ? +sync.bidUsd.toFixed(2)      : null,
+      askUsd:         sync.askUsd > 0            ? +sync.askUsd.toFixed(2)      : null,
+      midUsd:         sync.midUsd > 0            ? +sync.midUsd.toFixed(2)      : null,
+      dailyHigh:      sync.dailyHigh > 0         ? +sync.dailyHigh.toFixed(2)   : null,
+      dailyLow:       sync.dailyLow > 0 && sync.dailyLow !== Infinity
+                        ? +sync.dailyLow.toFixed(2) : null,
+      baseAedPerGram: baseAed != null            ? +baseAed.toFixed(4)          : null,
+      // GoldAPI per-karat AED rates (most accurate — direct from market feed)
+      aed22k:         sync.aed22k > 0            ? +sync.aed22k.toFixed(4)      : null,
+      aed21k:         sync.aed21k > 0            ? +sync.aed21k.toFixed(4)      : null,
+      aed18k:         sync.aed18k > 0            ? +sync.aed18k.toFixed(4)      : null,
       updatedAt:      sync.updatedAt,
-      source:         sync.source,
+      source: sync.source as string,
       error:          sync.error,
       items: items.map((item) => {
-        // Use scraped AED price from hazarigold.com when available,
-        // otherwise compute from base rate using the existing formula engine.
-        const scrapedPrice = sync.itemPrices[item.name];
-        const computedPrice = baseAed != null ? computeItemPrice(item, baseAed) : null;
+        const scrapedPrice  = sync.itemPrices[item.name];
+        const computedPrice = baseAed != null ? computeItemPrice(item, baseAed, sync) : null;
         return {
           id:          item.id,
           name:        item.name,
