@@ -151,7 +151,7 @@ export default function InvoiceDetail() {
   };
 
   return (
-    <div className="mx-auto pb-20 px-2 sm:px-0 print:p-0 print:m-0 print:w-full print:max-w-full" style={{ maxWidth: "210mm" }}>
+    <div data-invoice-page className="mx-auto pb-20 px-2 sm:px-0 print:p-0 print:m-0 print:w-full print:max-w-full" style={{ maxWidth: "210mm" }}>
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6 no-print">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link href="/invoices">
@@ -169,7 +169,7 @@ export default function InvoiceDetail() {
           Fixed A4 (210mm) width by design for print/PDF fidelity — on narrow
           viewports it scrolls horizontally inside this contained wrapper
           instead of breaking the page's own layout. */}
-      <div className="overflow-x-auto print:overflow-visible">
+      <div data-invoice-scroll className="overflow-x-auto print:overflow-hidden">
       <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", paddingTop: "15mm", paddingLeft: "15mm", paddingRight: "15mm", paddingBottom: "58mm", position: "relative", display: "flex", flexDirection: "column" }}>
 
         {/* Gold top border — negative margin escapes the 15mm container padding
@@ -489,42 +489,55 @@ export default function InvoiceDetail() {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 0 !important;
+            margin: 0;
           }
-          html {
+
+          /* ── Clamp every layer to a single A4 page ── */
+          html, body {
             width: 210mm !important;
             height: 297mm !important;
             max-height: 297mm !important;
             margin: 0 !important;
             padding: 0 !important;
             overflow: hidden !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          body {
-            width: 210mm !important;
-            height: 297mm !important;
-            max-height: 297mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
+
+          /* React root */
           #root, [data-reactroot] {
             width: 210mm !important;
             height: 297mm !important;
             max-height: 297mm !important;
             overflow: hidden !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            page-break-after: avoid !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
           }
-          .no-print { display: none !important; }
+
+          /* Outer page wrapper */
+          [data-invoice-page] {
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+
+          /* Horizontal-scroll wrapper — must NOT be overflow:visible in print */
+          [data-invoice-scroll] {
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* The invoice document itself */
           [data-invoice-doc] {
             width: 210mm !important;
             height: 297mm !important;
@@ -533,9 +546,14 @@ export default function InvoiceDetail() {
             overflow: hidden !important;
             box-shadow: none !important;
             border: none !important;
+            margin: 0 !important;
             page-break-inside: avoid !important;
             page-break-after: avoid !important;
+            break-inside: avoid !important;
+            break-after: avoid !important;
           }
+
+          .no-print { display: none !important; }
         }
       `}</style>
     </div>
