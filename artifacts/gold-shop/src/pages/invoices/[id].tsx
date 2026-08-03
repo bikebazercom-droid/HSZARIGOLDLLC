@@ -170,7 +170,7 @@ export default function InvoiceDetail() {
           viewports it scrolls horizontally inside this contained wrapper
           instead of breaking the page's own layout. */}
       <div className="overflow-x-auto print:overflow-visible">
-      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", paddingTop: "15mm", paddingLeft: "15mm", paddingRight: "15mm", paddingBottom: "32mm", position: "relative", display: "flex", flexDirection: "column" }}>
+      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", paddingTop: "15mm", paddingLeft: "15mm", paddingRight: "15mm", paddingBottom: "58mm", position: "relative", display: "flex", flexDirection: "column" }}>
 
         {/* Gold top border — negative margin escapes the 15mm container padding
             so it stays flush with the outer div edges */}
