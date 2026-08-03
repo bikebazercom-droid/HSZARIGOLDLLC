@@ -174,7 +174,15 @@ function trackDailyRange(usdPerOz: number): void {
 const DUBAI_OFFSET_MS = 4 * 3600 * 1000;   // UTC+4
 const GCF_CHART_URL   = "https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1h&range=2d&includePrePost=true";
 
-/** GC=F hourly bars with dynamic basis correction → OTC spot H/L. No API key needed. */
+/** GC=F hourly bars + regularMarketDayHigh/Low with dynamic basis correction → OTC spot H/L.
+ *
+ *  Two sources are compared and the most extreme wins:
+ *  1. Hourly bars filtered by Dubai date  (catches intraday moves during our market day)
+ *  2. meta.regularMarketDayHigh/Low       (Yahoo's own day extreme — never misses a bar)
+ *
+ *  Dynamic basis = GC=F current price − Swissquote OTC mid (stable intraday, < ±$2 drift).
+ *  No API key required.
+ */
 async function seedHLFromGCF(): Promise<{ high: number | null; low: number | null } | null> {
   if (!liveSpot) return null;
   try {
@@ -196,6 +204,8 @@ async function seedHLFromGCF(): Promise<{ high: number | null; low: number | nul
 
     const dynamicBasis = gcfCurrentPrice - liveSpot.usdPerOz;
     const dubaiToday   = new Date(Date.now() + DUBAI_OFFSET_MS).toISOString().slice(0, 10);
+
+    // ── Source 1: hourly bars filtered by Dubai date ──────────────────────────
     const tsList = (result?.timestamp ?? []) as number[];
     const qHigh  = (result?.indicators?.quote?.[0]?.high  ?? []) as (number | null)[];
     const qLow   = (result?.indicators?.quote?.[0]?.low   ?? []) as (number | null)[];
@@ -209,8 +219,20 @@ async function seedHLFromGCF(): Promise<{ high: number | null; low: number | nul
       if (h != null && h > 500 && (gcfHigh == null || h > gcfHigh)) gcfHigh = h;
       if (l != null && l > 500 && (gcfLow  == null || l < gcfLow))  gcfLow  = l;
     }
+
+    // ── Source 2: Yahoo's own day High/Low from meta ──────────────────────────
+    // regularMarketDayHigh/Low is Yahoo's authoritative daily extreme; it never
+    // misses a bar.  We compare with hourly results and use whichever is more extreme.
+    const metaDayHigh = typeof meta?.regularMarketDayHigh === "number" && (meta.regularMarketDayHigh as number) > 500
+      ? (meta.regularMarketDayHigh as number) : null;
+    const metaDayLow  = typeof meta?.regularMarketDayLow  === "number" && (meta.regularMarketDayLow  as number) > 500
+      ? (meta.regularMarketDayLow  as number) : null;
+
+    if (metaDayHigh != null && (gcfHigh == null || metaDayHigh > gcfHigh)) gcfHigh = metaDayHigh;
+    if (metaDayLow  != null && (gcfLow  == null || metaDayLow  < gcfLow))  gcfLow  = metaDayLow;
+
     if (gcfHigh == null && gcfLow == null) {
-      logger.warn({ dubaiToday }, "[H/L GC=F] No bars for today's Dubai date");
+      logger.warn({ dubaiToday }, "[H/L GC=F] No H/L data available");
       return null;
     }
 
@@ -219,13 +241,17 @@ async function seedHLFromGCF(): Promise<{ high: number | null; low: number | nul
     logger.info(
       {
         dubaiToday,
-        gcfH: gcfHigh?.toFixed(2), gcfL: gcfLow?.toFixed(2),
+        gcfH:      gcfHigh?.toFixed(2),
+        gcfL:      gcfLow?.toFixed(2),
+        metaDayH:  metaDayHigh?.toFixed(2),
+        metaDayL:  metaDayLow?.toFixed(2),
         gcfCurrent: gcfCurrentPrice.toFixed(2),
-        otcMid: liveSpot.usdPerOz.toFixed(2),
-        basis: dynamicBasis.toFixed(2),
-        otcH: high?.toFixed(2), otcL: low?.toFixed(2),
+        otcMid:    liveSpot.usdPerOz.toFixed(2),
+        basis:     dynamicBasis.toFixed(2),
+        otcH:      high?.toFixed(2),
+        otcL:      low?.toFixed(2),
       },
-      "[H/L GC=F] Dynamic-basis seed (fallback)"
+      "[H/L GC=F] Dynamic-basis seed"
     );
     return { high, low };
   } catch (err) {
