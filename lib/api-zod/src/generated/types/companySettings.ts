@@ -23,9 +23,4 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
-  /** @nullable */
-  externalSyncUrl?: string | null;
-  externalSyncEnabled: boolean;
-  uniRateApiTokenSet: boolean;
-  uniRateApiEnabled: boolean;
 }

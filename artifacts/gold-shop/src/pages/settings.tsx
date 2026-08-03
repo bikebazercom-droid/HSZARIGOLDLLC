@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   useGetSettings,
   useUpdateSettings,
@@ -14,8 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key, Eye, EyeOff, RefreshCw, Wifi, WifiOff, CheckCircle2, XCircle, Activity } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp } from "lucide-react";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
 
@@ -41,33 +40,7 @@ export default function SettingsPage() {
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
 
-  // ── TV / Sync state ─────────────────────────────────────────────────────────
-  const [externalSyncUrl,     setExternalSyncUrl]     = useState("https://www.hazarigold.com/");
-  const [externalSyncEnabled, setExternalSyncEnabled] = useState(false);
-  const [uniRateApiToken,     setUniRateApiToken]     = useState("");
-  const [uniRateApiEnabled,   setUniRateApiEnabled]   = useState(true);
-  const [showToken,           setShowToken]           = useState(false);
-  const [tvSaving,            setTvSaving]            = useState(false);
-  const [testResult,          setTestResult]          = useState<{ ok: boolean; source?: string; midUsd?: number; error?: string } | null>(null);
-  const [testing,             setTesting]             = useState(false);
-  const [livePrices,          setLivePrices]          = useState<any>(null);
-
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-  const fetchLivePrices = useCallback(async () => {
-    try {
-      const res = await fetch(`${BASE}/api/tv/prices`);
-      if (res.ok) setLivePrices(await res.json());
-    } catch {}
-  }, [BASE]);
-
-  // Poll live prices every 5s on the TV tab
-  useEffect(() => {
-    if (activeTab !== "tv") return;
-    fetchLivePrices();
-    const t = setInterval(fetchLivePrices, 5000);
-    return () => clearInterval(t);
-  }, [activeTab, fetchLivePrices]);
 
   useEffect(() => {
     if (settings) {
@@ -82,9 +55,6 @@ export default function SettingsPage() {
       setLogoInitial(settings.logoInitial ?? "H");
       setLogoImageUrl(settings.logoImageUrl ?? "");
       setStampSignatureUrl(settings.stampSignatureUrl ?? "");
-      setExternalSyncUrl((settings as any).externalSyncUrl ?? "https://www.hazarigold.com/");
-      setExternalSyncEnabled((settings as any).externalSyncEnabled ?? false);
-      setUniRateApiEnabled((settings as any).uniRateApiEnabled ?? true);
     }
   }, [settings]);
 
@@ -139,9 +109,6 @@ export default function SettingsPage() {
             <TabsTrigger value="company" className="flex items-center gap-2">
               <Building2 className="w-4 h-4" /> Company Settings
             </TabsTrigger>
-            <TabsTrigger value="tv" className="flex items-center gap-2">
-              <Tv className="w-4 h-4" /> Live TV & Sync
-            </TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2">
               <Users className="w-4 h-4" /> User Management
             </TabsTrigger>
@@ -151,286 +118,6 @@ export default function SettingsPage() {
             <AdminUsersPanel />
           </TabsContent>
 
-          {/* ── TV & Sync Tab ──────────────────────────────────────────────── */}
-          <TabsContent value="tv">
-            <div className="space-y-6">
-
-              {/* External Source Sync */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Wifi className="w-5 h-5 text-primary" />
-                    <CardTitle>External Price Source</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Configure a URL to scrape live gold prices from (e.g. hazarigold.com).
-                    When enabled, the server polls it every 5 seconds and broadcasts updates.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="ext-sync-toggle"
-                      checked={externalSyncEnabled}
-                      onCheckedChange={setExternalSyncEnabled}
-                    />
-                    <Label htmlFor="ext-sync-toggle" className="text-sm font-medium cursor-pointer">
-                      {externalSyncEnabled ? "External sync enabled" : "External sync disabled"}
-                    </Label>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Source URL</Label>
-                    <Input
-                      value={externalSyncUrl}
-                      onChange={e => setExternalSyncUrl(e.target.value)}
-                      placeholder="https://www.hazarigold.com/"
-                      disabled={!externalSyncEnabled}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      The server will attempt to parse gold prices from this page's HTML.
-                      If the site is client-rendered (prices load via JavaScript), the server
-                      automatically falls back to UniRateAPI.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* UniRateAPI Config */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Key className="w-5 h-5 text-primary" />
-                    <CardTitle>UniRateAPI (Fallback / Primary)</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Used when the external scrape fails or is disabled. Provides live
-                    XAU/USD gold spot pricing via the UniRateAPI service.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="uni-toggle"
-                      checked={uniRateApiEnabled}
-                      onCheckedChange={setUniRateApiEnabled}
-                    />
-                    <Label htmlFor="uni-toggle" className="text-sm font-medium cursor-pointer">
-                      {uniRateApiEnabled ? "UniRateAPI enabled" : "UniRateAPI disabled"}
-                    </Label>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>API Key</Label>
-                    <div className="relative">
-                      <Input
-                        type={showToken ? "text" : "password"}
-                        value={uniRateApiToken}
-                        onChange={e => setUniRateApiToken(e.target.value)}
-                        placeholder={(settings as any)?.uniRateApiTokenSet ? "••••••••••••••••••••••••••••••••" : "Enter your UniRateAPI key…"}
-                        className="pr-10"
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-                        onClick={() => setShowToken(v => !v)}
-                      >
-                        {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {(settings as any)?.uniRateApiTokenSet
-                        ? "✓ A key is stored. Leave blank to keep the existing key, or enter a new one to replace it."
-                        : "No key stored. The UNIRATE_API_KEY environment variable will be used as a fallback."}
-                    </p>
-                  </div>
-
-                  {/* Test Connection */}
-                  <div className="flex items-center gap-3 pt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={testing}
-                      onClick={async () => {
-                        setTesting(true);
-                        setTestResult(null);
-                        try {
-                          const res = await fetch(`${BASE}/api/tv/test`);
-                          const data = await res.json();
-                          setTestResult(data);
-                        } catch(e: any) {
-                          setTestResult({ ok: false, error: e.message });
-                        } finally {
-                          setTesting(false);
-                        }
-                      }}
-                    >
-                      {testing
-                        ? <><RefreshCw className="w-4 h-4 mr-1.5 animate-spin" /> Testing…</>
-                        : <><Wifi className="w-4 h-4 mr-1.5" /> Test Connection</>}
-                    </Button>
-                    {testResult && (
-                      <div className={`flex items-center gap-1.5 text-sm font-medium ${testResult.ok ? "text-green-600" : "text-red-500"}`}>
-                        {testResult.ok
-                          ? <><CheckCircle2 className="w-4 h-4" /> Connected via {testResult.source} — ${testResult.midUsd?.toFixed(2)}/oz</>
-                          : <><XCircle className="w-4 h-4" /> {testResult.error ?? "Connection failed"}</>}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Save button */}
-              <div className="flex justify-end">
-                <Button
-                  disabled={tvSaving}
-                  onClick={async () => {
-                    setTvSaving(true);
-                    try {
-                      updateSettings.mutate({
-                        data: {
-                          externalSyncUrl,
-                          externalSyncEnabled,
-                          uniRateApiEnabled,
-                          ...(uniRateApiToken ? { uniRateApiToken } : {}),
-                        }
-                      }, {
-                        onSuccess: () => {
-                          queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-                          toast({ title: "TV & Sync settings saved" });
-                          setUniRateApiToken(""); // clear field after save
-                        },
-                        onError: (err: any) => {
-                          toast({ title: "Failed to save", description: err.message, variant: "destructive" });
-                        },
-                        onSettled: () => setTvSaving(false),
-                      });
-                    } catch {
-                      setTvSaving(false);
-                    }
-                  }}
-                >
-                  {tvSaving ? "Saving…" : "Save TV & Sync Settings"}
-                </Button>
-              </div>
-
-              {/* Live Price Feed Dashboard */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-primary" />
-                    <CardTitle>Live Price Feed</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Real-time prices from the active source. Updates every 5 seconds automatically.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {!livePrices && (
-                    <div className="text-center text-muted-foreground py-6">Loading live prices…</div>
-                  )}
-                  {livePrices?.error && !livePrices?.baseAedPerGram && (
-                    <div className="flex items-center gap-2 text-sm text-red-500 mb-4">
-                      <WifiOff className="w-4 h-4" />
-                      {livePrices.error}
-                    </div>
-                  )}
-                  {livePrices && (
-                    <div className="space-y-4">
-                      {/* Gold Spot row */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[
-                          { label: "Gold Spot BID", value: livePrices?.bidUsd != null ? `$${livePrices.bidUsd.toFixed(2)}/oz` : "—" },
-                          { label: "Gold Spot ASK", value: livePrices?.askUsd != null ? `$${livePrices.askUsd.toFixed(2)}/oz` : "—" },
-                          { label: "Daily High",    value: livePrices?.dailyHigh != null ? `$${livePrices.dailyHigh.toFixed(2)}` : "—" },
-                          { label: "Daily Low",     value: livePrices?.dailyLow  != null ? `$${livePrices.dailyLow.toFixed(2)}`  : "—" },
-                        ].map(({ label, value }) => (
-                          <div key={label} className="rounded-lg border bg-muted/30 p-3 space-y-1">
-                            <p className="text-xs text-muted-foreground">{label}</p>
-                            <p className="font-bold text-base">{value}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* AED/gram */}
-                      <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Base Rate (AED/gram)</p>
-                          <p className="font-bold text-xl text-amber-700 dark:text-amber-300">
-                            AED {livePrices?.baseAedPerGram != null ? livePrices.baseAedPerGram.toFixed(4) : "—"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Source</p>
-                          <p className="font-medium text-sm">{livePrices?.source ?? "—"}</p>
-                          {livePrices?.updatedAt && (
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(livePrices.updatedAt).toLocaleTimeString()}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Item prices table */}
-                      {livePrices?.items?.length > 0 && (
-                        <div className="rounded-lg border overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/50">
-                              <tr>
-                                <th className="text-left px-4 py-2.5 font-semibold">Item</th>
-                                <th className="text-left px-4 py-2.5 font-semibold">Unit</th>
-                                <th className="text-right px-4 py-2.5 font-semibold">Live Price (AED)</th>
-                                <th className="text-center px-4 py-2.5 font-semibold text-xs text-muted-foreground">Source</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {livePrices.items.map((item: any, i: number) => (
-                                <tr key={item.id} className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}>
-                                  <td className="px-4 py-2.5 font-medium">{item.name}</td>
-                                  <td className="px-4 py-2.5 text-muted-foreground">{item.weightLabel}</td>
-                                  <td className="px-4 py-2.5 text-right font-mono font-bold">
-                                    {item.price != null
-                                      ? item.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                      : "—"}
-                                  </td>
-                                  <td className="px-4 py-2.5 text-center">
-                                    <span className={`text-xs px-1.5 py-0.5 rounded ${item.source === "scraped" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}`}>
-                                      {item.source === "scraped" ? "scraped" : "computed"}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* TV Board link */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Tv className="w-5 h-5 text-primary" />
-                    <CardTitle>TV Display Board</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Open the full-screen TV board for displaying live prices on a showroom screen.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.open(`${BASE}/tv`, "_blank")}
-                  >
-                    <Tv className="w-4 h-4 mr-2" />
-                    Open TV Board
-                  </Button>
-                </CardContent>
-              </Card>
-
-            </div>
-          </TabsContent>
         </Tabs>
       )}
 

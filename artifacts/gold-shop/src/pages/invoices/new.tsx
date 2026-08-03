@@ -157,17 +157,6 @@ const KG_BAR_DESCS = new Set([
 const SILVER_DESCS = new Set(["Silver", "Silver (0.999)", "Silver 999"]);
 
 
-// Invoice descriptions that map to the TV board's "GOLD 9999" pinned item
-const TV_GOLD_9999_DESCS = new Set([
-  ...GOLD_DESCS, "Gold 9999 1GM", "Gold 9999 1KG", "GOLD 9999",
-]);
-// Invoice descriptions that map to the TV board's "JEWELLERY 22K" pinned item
-// 21K/18K are intentionally excluded — they are not displayed on the TV board.
-const TV_JEWELLERY_22K_DESCS = new Set([
-  "Gold Jewelry 22K", "Gold 22K (0.916)", "Gold Jewelry 22k",
-  "Gold Jewelry", "22K Gold Jewelry", "Jewellery 22K 1GM", "JEWELLERY 22K",
-]);
-
 function descToCategory(desc: string): string {
   if (JEWELRY_DESCS.has(desc)) return "gold_jewelry";
   if (GOLD_DESCS.has(desc))    return "gold";
@@ -224,22 +213,7 @@ function getRateForDesc(
   fallback: number,
   rawAedPerGram?: number | null,
   laborPct = 0,
-  tvPriceMap?: Map<string, number>,
 ): number {
-  // TV board prices take highest priority in Live mode — they use the exact
-  // per-item DB record (purityFactor + premiumOffsetAed) so the invoice rate
-  // is always identical to what's displayed on the TV screen.
-  if (tvPriceMap) {
-    if (TV_GOLD_9999_DESCS.has(description)) {
-      const tv = tvPriceMap.get("GOLD 9999");
-      if (tv != null) return tv;
-    }
-    if (TV_JEWELLERY_22K_DESCS.has(description)) {
-      const tv = tvPriceMap.get("JEWELLERY 22K");
-      if (tv != null) return tv;
-    }
-  }
-
   const lm = 1 + laborPct / 100;
 
   if (rawAedPerGram && rawAedPerGram > 0) {
@@ -322,11 +296,10 @@ function resolvePrimaryRate(
   fallback: number,
   rawAedPerGram?: number | null,
   laborPct = 0,
-  tvPriceMap?: Map<string, number>,
 ): number {
   const primary = currentItems.find(i => i.description || i.purity);
   if (!primary) return fallback;
-  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborPct, tvPriceMap);
+  if (primary.description) return getRateForDesc(primary.description, prices, fallback, rawAedPerGram, laborPct);
   return getRateForPurity(primary.purity, primary.category, prices, fallback, rawAedPerGram, laborPct);
 }
 
@@ -350,41 +323,8 @@ export default function NewInvoice() {
   const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
 
-  // ── Live prices from TV board (ExternalSync) ────────────────────────────────
-  // Poll /api/tv/prices every 5s to get the baseAedPerGram and per-item rates.
-  const [tvPrices, setTvPrices] = React.useState<any>(null);
-  React.useEffect(() => {
-    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const load = async () => {
-      try {
-        const res = await fetch(`${BASE}/api/tv/prices`);
-        if (res.ok) setTvPrices(await res.json());
-      } catch {}
-    };
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Per-gram AED from TV board (live, or fall back to the prices API value)
-  const liveAed: number | null = tvPrices?.baseAedPerGram ?? (prices as any)?.goldPricePerGram ?? null;
-
-  // Map TV board item names → price-per-gram so getRateForDesc can pick them up
-  const tvPriceMap: Map<string, number> | undefined = React.useMemo(() => {
-    if (!tvPrices?.items?.length) return undefined;
-    const map = new Map<string, number>();
-    for (const item of tvPrices.items) {
-      if (item.price != null && item.price > 0) {
-        // item.price for a "spot_per_gram" item is AED/gram — use directly.
-        // For "spot_bar" items (e.g. 1kg = big number), skip — getRateForDesc
-        // handles those through the raw base rate, not the TV price.
-        if (item.formulaType === "spot_per_gram" || item.formulaType === "manual") {
-          map.set(item.name as string, item.price as number);
-        }
-      }
-    }
-    return map.size > 0 ? map : undefined;
-  }, [tvPrices]);
+  // Per-gram AED from the prices API (live, polled every 5s)
+  const liveAed: number | null = (prices as any)?.goldPricePerGram ?? null;
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");
@@ -475,7 +415,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, 0, tvPriceMap);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, 0);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.

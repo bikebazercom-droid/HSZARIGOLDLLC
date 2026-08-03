@@ -8,7 +8,6 @@ import { AppLayout } from "@/components/layout";
 import { emitSessionExpired } from "@/lib/session-events";
 import { useAdminSocket } from "@/hooks/use-admin-socket";
 
-import TvDisplay from "@/pages/tv-display";
 import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Invoices from "@/pages/invoices/index";
@@ -112,8 +111,6 @@ function AuthGate() {
 function PublicRouter() {
   return (
     <Switch>
-      {/* TV display board — public, no login required */}
-      <Route path="/tv" component={TvDisplay} />
       <Route>{() => <AuthGate />}</Route>
     </Switch>
   );
