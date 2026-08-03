@@ -3,7 +3,7 @@ import { db, companySettingsTable } from "@workspace/db";
 import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
 import { broadcast } from "../lib/socket.js";
-import { triggerGoldApiPoll, setGoldApiActive, triggerUniRatePoll, setUniRateActive } from "./prices.js";
+import { triggerUniRatePoll, setUniRateActive } from "./prices.js";
 
 const router: IRouter = Router();
 
@@ -17,7 +17,6 @@ async function getOrCreate() {
 function toSettingsResponse(row: typeof companySettingsTable.$inferSelect) {
   return {
     ...row,
-    goldApiTokenSet:    !!(row.goldApiToken),
     uniRateApiTokenSet: !!(row.uniRateApiToken),
   };
 }
@@ -42,16 +41,14 @@ router.put("/settings", async (req, res): Promise<void> => {
     logoImageUrl?: string;
     stampSignatureUrl?: string;
     showroomLogoUrl?: string;
-    goldApiToken?: string;
-    goldApiEnabled?: boolean;
     uniRateApiToken?: string;
     uniRateApiEnabled?: boolean;
   };
 
   // Build the patch explicitly — only include keys that were actually sent in
   // the request body. Passing req.body directly to Drizzle's .set() can
-  // accidentally null out columns (e.g. goldApiToken) when the client omits
-  // them but Drizzle maps the missing key to NULL. This guards against that.
+  // accidentally null out columns when the client omits them but Drizzle maps
+  // the missing key to NULL. This guards against that.
   type Patch = Partial<typeof companySettingsTable.$inferInsert>;
   const patch: Patch = {};
   if (body.companyName       !== undefined) patch.companyName       = body.companyName;
@@ -66,10 +63,7 @@ router.put("/settings", async (req, res): Promise<void> => {
   if (body.logoImageUrl      !== undefined) patch.logoImageUrl      = body.logoImageUrl;
   if (body.stampSignatureUrl !== undefined) patch.stampSignatureUrl = body.stampSignatureUrl;
   if (body.showroomLogoUrl   !== undefined) patch.showroomLogoUrl   = body.showroomLogoUrl;
-  // goldApiToken: only touch when explicitly sent — empty string clears the token.
-  if (body.goldApiToken !== undefined) patch.goldApiToken = body.goldApiToken || null;
-  if (body.goldApiEnabled !== undefined) patch.goldApiEnabled = body.goldApiEnabled;
-  // uniRateApiToken: same sentinel pattern as goldApiToken
+  // uniRateApiToken: only touch when explicitly sent — empty string clears the token.
   if (body.uniRateApiToken !== undefined) patch.uniRateApiToken = body.uniRateApiToken || null;
   if (body.uniRateApiEnabled !== undefined) patch.uniRateApiEnabled = body.uniRateApiEnabled;
 
@@ -81,11 +75,7 @@ router.put("/settings", async (req, res): Promise<void> => {
   res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
   broadcast("SETTINGS_MUTATION");
 
-  // If the GoldAPI toggle was explicitly turned OFF, immediately deactivate in-memory.
-  if (body.goldApiEnabled === false) setGoldApiActive(false);
-  if (body.goldApiToken || body.goldApiEnabled === true) triggerGoldApiPoll();
-
-  // UniRate: same immediate-effect pattern
+  // UniRate: immediate-effect pattern
   if (body.uniRateApiEnabled === false) setUniRateActive(false);
   if (body.uniRateApiToken || body.uniRateApiEnabled === true) triggerUniRatePoll();
 });

@@ -14,8 +14,6 @@ export const companySettingsTable = pgTable("company_settings", {
   logoImageUrl: text("logo_image_url"),
   stampSignatureUrl: text("stamp_signature_url"),
   showroomLogoUrl: text("showroom_logo_url"),
-  goldApiToken: text("gold_api_token"),
-  goldApiEnabled: boolean("gold_api_enabled").notNull().default(true),
   uniRateApiToken: text("uni_rate_api_token"),
   uniRateApiEnabled: boolean("uni_rate_api_enabled").notNull().default(true),
 });

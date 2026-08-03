@@ -270,7 +270,7 @@ setInterval(() => {
     dailyLowUsdPerOz     = null;
     dailyHighUsdPerOz    = null;
     saveDailyHL();
-    logger.info({ date: today }, "[H/L] Midnight UTC — daily H/L reset; re-seeding (GoldAPI → GC=F fallback)");
+    logger.info({ date: today }, "[H/L] Midnight UTC — daily H/L reset; re-seeding from GC=F");
     seedHL().catch((err: unknown) => logger.warn({ err }, "[H/L] Midnight re-seed failed"));
   }
 }, 60_000);
@@ -402,8 +402,6 @@ export function setUniRateActive(val: boolean): void {
 }
 
 // No-op stubs kept for backward-compat with settings.ts imports
-export function setGoldApiActive(_val: boolean): void { /* removed — UniRate is sole source */ }
-export function triggerGoldApiPoll(): void              { /* removed — UniRate is sole source */ }
 
 // ── Adaptive poll scheduler ────────────────────────────────────────────────────
 // We use a self-rescheduling setTimeout (rather than setInterval) so we can
