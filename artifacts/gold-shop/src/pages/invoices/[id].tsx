@@ -170,7 +170,7 @@ export default function InvoiceDetail() {
           viewports it scrolls horizontally inside this contained wrapper
           instead of breaking the page's own layout. */}
       <div className="overflow-x-auto print:overflow-visible">
-      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", padding: "15mm", position: "relative" }}>
+      <div ref={invoiceRef} data-invoice-doc className="bg-white text-black print:shadow-none" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", border: `2px solid ${GOLD}`, width: "210mm", minHeight: "297mm", maxWidth: "none", margin: "0 auto", boxSizing: "border-box", paddingTop: "15mm", paddingLeft: "15mm", paddingRight: "15mm", paddingBottom: "32mm", position: "relative", display: "flex", flexDirection: "column" }}>
 
         {/* Gold top border — negative margin escapes the 15mm container padding
             so it stays flush with the outer div edges */}
@@ -411,8 +411,11 @@ export default function InvoiceDetail() {
           </table>
         </div>
 
+        {/* Flex spacer — pushes Amount In Words / Payment Mode down to fill blank space */}
+        <div style={{ flex: 1 }} />
+
         {/* Amount in Words + Payment Mode */}
-        <div style={{ margin: "28px 16px 2px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
+        <div style={{ margin: "0 16px 8px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #eee", gap: "8px" }}>
             <span style={{ fontSize: "14px" }}>💰</span>
             <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Amount In Words (AED):</span>
