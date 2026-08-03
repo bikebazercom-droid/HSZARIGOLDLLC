@@ -6,3 +6,4 @@
 - [Gold-shop public routes pattern](gold-shop-public-routes.md) — unauthenticated pages need both a public API sub-router mounted before `requireAuth` and a wouter route matched before the AuthGate.
 - [Gold-shop per-item live rate injection](gold-shop-per-item-live-rate.md) — each invoice row derives its own metal rate; never reintroduce a single shared page-level rate driving heterogeneous rows.
 - [Gold-shop TV board fully removed](gold-shop-tv-removed.md) — entire TV/showroom board system hard-deleted; no live polling, no /tv route, no UniRateAPI/GoldAPI/Swissquote/Yahoo, no TV columns in prices or company_settings tables.
+- [Gold-shop TV display (standalone)](gold-shop-tv-standalone.md) — rebuilt TV board at /tv; UniRateAPI `/api/rates` returns XAUT (Tether Gold, 1:1 gold-backed), not XAU; price = 1/rates.XAUT; synthesised bid/ask spread ±$0.45.
