@@ -53,19 +53,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/CompanySettings"
 
-  /settings/public:
-    get:
-      operationId: getPublicSettings
-      tags: [settings]
-      summary: Get public showroom display settings (unauthenticated)
-      responses:
-        "200":
-          description: Public showroom settings
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PublicSettings"
-
   /healthz:
     get:
       operationId: healthCheck
@@ -145,38 +132,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Prices"
-
-  /prices/spot:
-    get:
-      operationId: getPricesSpot
-      tags: [prices]
-      summary: Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
-      responses:
-        "200":
-          description: Current spot price
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpotPrice"
-        "503":
-          description: Spot price temporarily unavailable
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /prices/public:
-    get:
-      operationId: getPublicPrices
-      tags: [prices]
-      summary: Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
-      responses:
-        "200":
-          description: Current public display rates
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PublicPrices"
 
   /prices/items/public:
     get:
@@ -753,7 +708,7 @@ components:
 
     Prices:
       type: object
-      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, goldKg9999Rate, spreadPremiumPercent, laborCostPercent, customDescriptions, updatedAt, liveModeConnected, manualInvoiceMode, tvShowTtBar995, tvShowTtBar999, tvShowGold9999, tvShowKgBar995, tvShowGold22k, tvShowGold21k, tvShowGold18k, tvShowGoldKg9999]
+      required: [id, goldPricePerGram, silverPricePerGram, goldJewelryRate, goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, goldKg9999Rate, customDescriptions, updatedAt, manualInvoiceMode]
       properties:
         id:
           type: integer
@@ -781,130 +736,16 @@ components:
           type: number
         goldKg9999Rate:
           type: number
-          description: GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.
-        spreadPremiumPercent:
-          type: number
-          description: Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100).
-        laborCostPercent:
-          type: number
-          description: Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base.
-        gold9999Offset:
-          type: number
-          description: Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount).
-        jewellery22kOffset:
-          type: number
-          description: Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount).
+          description: GOLD KG (0.9999) per-gram rate for admin and invoices.
         customDescriptions:
           type: array
           items:
             $ref: "#/components/schemas/CustomDescription"
         updatedAt:
           type: string
-        liveModeConnected:
-          type: boolean
         manualInvoiceMode:
           type: boolean
-          description: When true, invoice creation uses admin-set manual rates instead of the live spot feed.
-        liveGoldRate24k:
-          type: ["number", "null"]
-        liveGoldRate22k:
-          type: ["number", "null"]
-        liveSilverRate:
-          type: ["number", "null"]
-        liveGoldBid:
-          type: ["number", "null"]
-          description: Last persisted Bid snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-        liveGoldAsk:
-          type: ["number", "null"]
-          description: Last persisted Ask snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-        liveGoldHigh:
-          type: ["number", "null"]
-          description: Last persisted daily High snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-        liveGoldLow:
-          type: ["number", "null"]
-          description: Last persisted daily Low snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-        liveLastSyncedAt:
-          type: ["string", "null"]
-        tvShowTtBar995:
-          type: boolean
-          description: Whether the TT. BAR (0.995) row is visible on the showroom TV board.
-        tvShowTtBar999:
-          type: boolean
-          description: Whether the TT. BAR (0.999) row is visible on the showroom TV board.
-        tvShowGold9999:
-          type: boolean
-          description: Whether the GOLD (0.9999) row is visible on the showroom TV board.
-        tvShowKgBar995:
-          type: boolean
-          description: Whether the KG BAR (0.995) row is visible on the showroom TV board.
-        tvShowGold22k:
-          type: boolean
-          description: Whether the Gold Jewelry 22K row is visible on the showroom TV board.
-        tvShowGold21k:
-          type: boolean
-          description: Whether the Gold Jewelry 21K row is visible on the showroom TV board.
-        tvShowGold18k:
-          type: boolean
-          description: Whether the Gold Jewelry 18K row is visible on the showroom TV board.
-        tvShowGoldKg9999:
-          type: boolean
-          description: Whether the GOLD KG (0.9999) row is visible on the showroom TV board.
-
-    PublicPrices:
-      type: object
-      description: Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
-      required: [goldBullionRate, ttBarRate, ttBar24kRate, kgBarRate, silverPricePerGram, gold22kRate, gold21kRate, gold18kRate, gold9999Rate, goldKg9999Rate, liveModeConnected, updatedAt, tvShowTtBar995, tvShowTtBar999, tvShowGold9999, tvShowKgBar995, tvShowGold22k, tvShowGold21k, tvShowGold18k, tvShowGoldKg9999]
-      properties:
-        goldBullionRate:
-          type: number
-        ttBarRate:
-          type: number
-        ttBar24kRate:
-          type: number
-        kgBarRate:
-          type: number
-        silverPricePerGram:
-          type: number
-        gold22kRate:
-          type: number
-        gold21kRate:
-          type: number
-        gold18kRate:
-          type: number
-        gold9999Rate:
-          type: number
-        goldKg9999Rate:
-          type: number
-        liveModeConnected:
-          type: boolean
-        liveSilverRate:
-          type: ["number", "null"]
-        liveGoldBid:
-          type: ["number", "null"]
-        liveGoldAsk:
-          type: ["number", "null"]
-        liveGoldHigh:
-          type: ["number", "null"]
-        liveGoldLow:
-          type: ["number", "null"]
-        updatedAt:
-          type: string
-        tvShowTtBar995:
-          type: boolean
-        tvShowTtBar999:
-          type: boolean
-        tvShowGold9999:
-          type: boolean
-        tvShowKgBar995:
-          type: boolean
-        tvShowGold22k:
-          type: boolean
-        tvShowGold21k:
-          type: boolean
-        tvShowGold18k:
-          type: boolean
-        tvShowGoldKg9999:
-          type: boolean
+          description: When true, invoice creation uses admin-set manual rates.
 
 
     CustomDescription:
@@ -943,41 +784,13 @@ components:
           type: number
         goldKg9999Rate:
           type: number
-        spreadPremiumPercent:
-          type: ["number", "null"]
-          description: Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100).
-        laborCostPercent:
-          type: ["number", "null"]
-          description: Labor markup percentage for jewelry rows (22K/21K/18K).
-        gold9999Offset:
-          type: ["number", "null"]
-          description: Fixed AED offset added to live GOLD 9999 price.
-        jewellery22kOffset:
-          type: ["number", "null"]
-          description: Fixed AED offset added to live Jewellery 22K price.
         customDescriptions:
           type: array
           items:
             $ref: "#/components/schemas/CustomDescription"
         manualInvoiceMode:
           type: boolean
-          description: When true, invoice creation uses admin-set manual rates instead of the live spot feed.
-        tvShowTtBar995:
-          type: boolean
-        tvShowTtBar999:
-          type: boolean
-        tvShowGold9999:
-          type: boolean
-        tvShowKgBar995:
-          type: boolean
-        tvShowGold22k:
-          type: boolean
-        tvShowGold21k:
-          type: boolean
-        tvShowGold18k:
-          type: boolean
-        tvShowGoldKg9999:
-          type: boolean
+          description: When true, invoice creation uses admin-set manual rates.
 
     Customer:
       type: object
@@ -1273,7 +1086,7 @@ components:
 
     CompanySettings:
       type: object
-      required: [id, companyName, address, phone, email, trn, logoType, logoInitial, uniRateApiTokenSet, uniRateApiEnabled]
+      required: [id, companyName, address, phone, email, trn, logoType, logoInitial]
       properties:
         id:
           type: integer
@@ -1299,15 +1112,6 @@ components:
           type: ["string", "null"]
         stampSignatureUrl:
           type: ["string", "null"]
-        showroomLogoUrl:
-          type: ["string", "null"]
-          description: Optional custom logo image shown at the top of the public showroom TV price display board.
-        uniRateApiTokenSet:
-          type: boolean
-          description: Whether a UniRateAPI token has been configured. The token itself is never returned.
-        uniRateApiEnabled:
-          type: boolean
-          description: Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.
 
     CompanySettingsInput:
       type: object
@@ -1334,63 +1138,6 @@ components:
           type: string
         stampSignatureUrl:
           type: string
-        showroomLogoUrl:
-          type: string
-        uniRateApiToken:
-          type: string
-          description: UniRateAPI token. Send an empty string to clear the token.
-        uniRateApiEnabled:
-          type: boolean
-          description: Enable or disable UniRateAPI polling without clearing the token.
-
-    PublicSettings:
-      type: object
-      description: Minimal, non-sensitive settings exposed publicly for the showroom price display board.
-      required: [showroomLogoUrl]
-      properties:
-        showroomLogoUrl:
-          type: ["string", "null"]
-
-    SpotPrice:
-      type: object
-      required: [usdPerOz, aedPerGram, updatedAt]
-      properties:
-        usdPerOz:
-          type: number
-          description: Live international Gold Spot (XAU/USD) price in USD per troy ounce.
-        aedPerGram:
-          type: number
-          description: "Base_24K_AED in AED per gram: (usdPerOz / 31.1034768) * 3.6725. Verified to match livepriceofgold.com Dubai AED/gram display to ±1¢."
-        baseAedPerGram:
-          type: ["number", "null"]
-          description: Same as aedPerGram — (usdPerOz / 31.1034768) * 3.6725.
-        bidUsdPerOz:
-          type: ["number", "null"]
-          description: Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.
-        askUsdPerOz:
-          type: ["number", "null"]
-          description: Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.
-        dailyLowUsdPerOz:
-          type: ["number", "null"]
-          description: Lowest usdPerOz tick observed since UTC midnight today.
-        dailyHighUsdPerOz:
-          type: ["number", "null"]
-          description: Highest usdPerOz tick observed since UTC midnight today.
-        spreadPercent:
-          type: ["number", "null"]
-          description: Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.
-        laborCostPercent:
-          type: ["number", "null"]
-          description: Currently active admin labor markup (%) for jewelry rows.
-        gold9999Offset:
-          type: ["number", "null"]
-          description: Fixed AED offset added to the live GOLD 9999 price on each tick.
-        jewellery22kOffset:
-          type: ["number", "null"]
-          description: Fixed AED offset added to the live Jewellery 22K price on each tick.
-        updatedAt:
-          type: string
-          description: ISO-8601 timestamp of when this price was fetched.
 
     PriceItem:
       type: object

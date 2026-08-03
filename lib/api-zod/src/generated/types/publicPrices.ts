@@ -6,38 +6,5 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
- */
-export interface PublicPrices {
-  goldBullionRate: number;
-  ttBarRate: number;
-  ttBar24kRate: number;
-  kgBarRate: number;
-  silverPricePerGram: number;
-  gold22kRate: number;
-  gold21kRate: number;
-  gold18kRate: number;
-  gold9999Rate: number;
-  goldKg9999Rate: number;
-  liveModeConnected: boolean;
-  /** @nullable */
-  liveSilverRate?: number | null;
-  /** @nullable */
-  liveGoldBid?: number | null;
-  /** @nullable */
-  liveGoldAsk?: number | null;
-  /** @nullable */
-  liveGoldHigh?: number | null;
-  /** @nullable */
-  liveGoldLow?: number | null;
-  updatedAt: string;
-  tvShowTtBar995: boolean;
-  tvShowTtBar999: boolean;
-  tvShowGold9999: boolean;
-  tvShowKgBar995: boolean;
-  tvShowGold22k: boolean;
-  tvShowGold21k: boolean;
-  tvShowGold18k: boolean;
-  tvShowGoldKg9999: boolean;
-}
+// PublicPrices removed — TV/showroom board system has been removed.
+export type PublicPrices = Record<string, never>;

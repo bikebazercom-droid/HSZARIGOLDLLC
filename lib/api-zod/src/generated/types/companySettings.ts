@@ -23,13 +23,4 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
-  /**
-     * Optional custom logo image shown at the top of the public showroom TV price display board.
-     * @nullable
-     */
-  showroomLogoUrl?: string | null;
-  /** Whether a UniRateAPI token has been configured. The token itself is never returned. */
-  uniRateApiTokenSet: boolean;
-  /** Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured. */
-  uniRateApiEnabled: boolean;
 }

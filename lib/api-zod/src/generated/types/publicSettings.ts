@@ -6,10 +6,5 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Minimal, non-sensitive settings exposed publicly for the showroom price display board.
- */
-export interface PublicSettings {
-  /** @nullable */
-  showroomLogoUrl: string | null;
-}
+// PublicSettings removed — TV/showroom board system has been removed.
+export type PublicSettings = Record<string, never>;

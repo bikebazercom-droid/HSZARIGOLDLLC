@@ -9,7 +9,6 @@ import {
 } from "@workspace/api-client-react";
 import type { PriceItem, PriceItemInput } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLivePrice } from "@/context/live-price";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Tv, Trash2, Lock, Zap } from "lucide-react";
+import { Lock, Plus, Trash2, Zap } from "lucide-react";
 
 const NAVY = "#1e3a5f";
 
@@ -148,18 +147,6 @@ function ItemCard({
             </div>
           </div>
 
-          {/* TV visibility */}
-          <div className="flex items-center gap-1 flex-shrink-0 pt-0.5">
-            <Tv
-              className="w-3.5 h-3.5 transition-colors"
-              style={{ color: item.tvVisible ? "#10b981" : "#d1d5db" }}
-            />
-            <Switch
-              checked={item.tvVisible}
-              onCheckedChange={handleToggleTv}
-              className="scale-75 origin-right"
-            />
-          </div>
         </div>
 
         {/* Live price */}
@@ -437,7 +424,6 @@ function AddItemDialog({
 export default function PriceItemsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { liveRates } = useLivePrice();
   const [addOpen, setAddOpen] = useState(false);
 
   const { data: items, isLoading } = useListPriceItems({
@@ -448,7 +434,7 @@ export default function PriceItemsPage() {
   const createItem = useCreatePriceItem();
   const deleteItem = useDeletePriceItem();
 
-  const base = liveRates.adjustedBaseAedPerGram;
+  const base: number | null = null;
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: getListPriceItemsQueryKey() });
@@ -515,9 +501,7 @@ export default function PriceItemsPage() {
               Live Pricing Engine
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {base != null
-                ? `Base: AED ${base.toFixed(2)}/g · ${sorted.length} items · ${tvCount} shown on TV`
-                : "Connecting to live XAU/USD feed…"}
+              {sorted.length} price items configured
             </p>
           </div>
         </div>

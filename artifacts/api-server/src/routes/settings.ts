@@ -1,9 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db, companySettingsTable } from "@workspace/db";
-import { GetSettingsResponse, UpdateSettingsResponse, GetPublicSettingsResponse } from "@workspace/api-zod";
+import { GetSettingsResponse, UpdateSettingsResponse } from "@workspace/api-zod";
 import { eq } from "drizzle-orm";
 import { broadcast } from "../lib/socket.js";
-import { triggerUniRatePoll, setUniRateActive } from "./prices.js";
 
 const router: IRouter = Router();
 
@@ -14,16 +13,9 @@ async function getOrCreate() {
   return created;
 }
 
-function toSettingsResponse(row: typeof companySettingsTable.$inferSelect) {
-  return {
-    ...row,
-    uniRateApiTokenSet: !!(row.uniRateApiToken),
-  };
-}
-
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await getOrCreate();
-  res.json(GetSettingsResponse.parse(toSettingsResponse(settings)));
+  res.json(GetSettingsResponse.parse(settings));
 });
 
 router.put("/settings", async (req, res): Promise<void> => {
@@ -40,15 +32,8 @@ router.put("/settings", async (req, res): Promise<void> => {
     logoInitial?: string;
     logoImageUrl?: string;
     stampSignatureUrl?: string;
-    showroomLogoUrl?: string;
-    uniRateApiToken?: string;
-    uniRateApiEnabled?: boolean;
   };
 
-  // Build the patch explicitly — only include keys that were actually sent in
-  // the request body. Passing req.body directly to Drizzle's .set() can
-  // accidentally null out columns when the client omits them but Drizzle maps
-  // the missing key to NULL. This guards against that.
   type Patch = Partial<typeof companySettingsTable.$inferInsert>;
   const patch: Patch = {};
   if (body.companyName       !== undefined) patch.companyName       = body.companyName;
@@ -62,34 +47,14 @@ router.put("/settings", async (req, res): Promise<void> => {
   if (body.logoInitial       !== undefined) patch.logoInitial       = body.logoInitial;
   if (body.logoImageUrl      !== undefined) patch.logoImageUrl      = body.logoImageUrl;
   if (body.stampSignatureUrl !== undefined) patch.stampSignatureUrl = body.stampSignatureUrl;
-  if (body.showroomLogoUrl   !== undefined) patch.showroomLogoUrl   = body.showroomLogoUrl;
-  // uniRateApiToken: only touch when explicitly sent — empty string clears the token.
-  if (body.uniRateApiToken !== undefined) patch.uniRateApiToken = body.uniRateApiToken || null;
-  if (body.uniRateApiEnabled !== undefined) patch.uniRateApiEnabled = body.uniRateApiEnabled;
 
   const [updated] = await db
     .update(companySettingsTable)
     .set(patch)
     .where(eq(companySettingsTable.id, settings.id))
     .returning();
-  res.json(UpdateSettingsResponse.parse(toSettingsResponse(updated)));
+  res.json(UpdateSettingsResponse.parse(updated));
   broadcast("SETTINGS_MUTATION");
-
-  // UniRate: immediate-effect pattern
-  if (body.uniRateApiEnabled === false) setUniRateActive(false);
-  if (body.uniRateApiToken || body.uniRateApiEnabled === true) triggerUniRatePoll();
-});
-
-// Public, unauthenticated router — mounted separately, before the requireAuth
-// gate, so the showroom TV price-display board can fetch its custom logo
-// without a logged in session. Only exposes the showroom logo URL; never
-// leaks company contact details or other admin-only settings.
-export const publicSettingsRouter: IRouter = Router();
-publicSettingsRouter.get("/settings/public", async (_req, res): Promise<void> => {
-  const settings = await getOrCreate();
-  res.json(GetPublicSettingsResponse.parse({
-    showroomLogoUrl: settings.showroomLogoUrl,
-  }));
 });
 
 export default router;

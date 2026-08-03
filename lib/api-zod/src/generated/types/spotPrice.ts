@@ -6,56 +6,5 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface SpotPrice {
-  /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
-  usdPerOz: number;
-  /** Base_24K_AED in AED per gram: (usdPerOz / 31.1034768) * 3.6725. Verified to match livepriceofgold.com Dubai AED/gram display to ±1¢. */
-  aedPerGram: number;
-  /**
-     * Same as aedPerGram — (usdPerOz / 31.1034768) * 3.6725.
-     * @nullable
-     */
-  baseAedPerGram?: number | null;
-  /**
-     * Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.
-     * @nullable
-     */
-  bidUsdPerOz?: number | null;
-  /**
-     * Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.
-     * @nullable
-     */
-  askUsdPerOz?: number | null;
-  /**
-     * Lowest usdPerOz tick observed since UTC midnight today.
-     * @nullable
-     */
-  dailyLowUsdPerOz?: number | null;
-  /**
-     * Highest usdPerOz tick observed since UTC midnight today.
-     * @nullable
-     */
-  dailyHighUsdPerOz?: number | null;
-  /**
-     * Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.
-     * @nullable
-     */
-  spreadPercent?: number | null;
-  /**
-     * Currently active admin labor markup (%) for jewelry rows.
-     * @nullable
-     */
-  laborCostPercent?: number | null;
-  /**
-     * Fixed AED offset added to the live GOLD 9999 price on each tick.
-     * @nullable
-     */
-  gold9999Offset?: number | null;
-  /**
-     * Fixed AED offset added to the live Jewellery 22K price on each tick.
-     * @nullable
-     */
-  jewellery22kOffset?: number | null;
-  /** ISO-8601 timestamp of when this price was fetched. */
-  updatedAt: string;
-}
+// SpotPrice removed — live gold spot price system has been removed.
+export type SpotPrice = Record<string, never>;

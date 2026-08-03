@@ -23,10 +23,7 @@ export const GetSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish(),
-  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.'),
-  "uniRateApiTokenSet": zod.boolean().describe('Whether a UniRateAPI token has been configured. The token itself is never returned.'),
-  "uniRateApiEnabled": zod.boolean().describe('Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.')
+  "stampSignatureUrl": zod.string().nullish()
 })
 
 
@@ -44,10 +41,7 @@ export const UpdateSettingsBody = zod.object({
   "logoType": zod.string().optional(),
   "logoInitial": zod.string().optional(),
   "logoImageUrl": zod.string().optional(),
-  "stampSignatureUrl": zod.string().optional(),
-  "showroomLogoUrl": zod.string().optional(),
-  "uniRateApiToken": zod.string().optional().describe('UniRateAPI token. Send an empty string to clear the token.'),
-  "uniRateApiEnabled": zod.boolean().optional().describe('Enable or disable UniRateAPI polling without clearing the token.')
+  "stampSignatureUrl": zod.string().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -62,19 +56,8 @@ export const UpdateSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish(),
-  "showroomLogoUrl": zod.string().nullish().describe('Optional custom logo image shown at the top of the public showroom TV price display board.'),
-  "uniRateApiTokenSet": zod.boolean().describe('Whether a UniRateAPI token has been configured. The token itself is never returned.'),
-  "uniRateApiEnabled": zod.boolean().describe('Whether UniRateAPI polling is currently enabled. When false the system uses the fallback live-price feed even if a token is configured.')
+  "stampSignatureUrl": zod.string().nullish()
 })
-
-
-/**
- * @summary Get public showroom display settings (unauthenticated)
- */
-export const GetPublicSettingsResponse = zod.object({
-  "showroomLogoUrl": zod.string().nullable()
-}).describe('Minimal, non-sensitive settings exposed publicly for the showroom price display board.')
 
 
 /**
@@ -226,34 +209,13 @@ export const GetPricesResponse = zod.object({
   "gold21kRate": zod.number(),
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
-  "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
-  "spreadPremiumPercent": zod.number().describe('Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
-  "laborCostPercent": zod.number().describe('Admin-configurable labor markup (%) applied to jewelry rows (22K\/21K\/18K) on top of the spread-adjusted base.'),
-  "gold9999Offset": zod.number().optional().describe('Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount).'),
-  "jewellery22kOffset": zod.number().optional().describe('Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount).'),
+  "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
 })),
   "updatedAt": zod.string(),
-  "liveModeConnected": zod.boolean(),
-  "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.'),
-  "liveGoldRate24k": zod.number().nullish(),
-  "liveGoldRate22k": zod.number().nullish(),
-  "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish().describe('Last persisted Bid snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveGoldAsk": zod.number().nullish().describe('Last persisted Ask snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveGoldHigh": zod.number().nullish().describe('Last persisted daily High snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveGoldLow": zod.number().nullish().describe('Last persisted daily Low snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveLastSyncedAt": zod.string().nullish(),
-  "tvShowTtBar995": zod.boolean().describe('Whether the TT. BAR (0.995) row is visible on the showroom TV board.'),
-  "tvShowTtBar999": zod.boolean().describe('Whether the TT. BAR (0.999) row is visible on the showroom TV board.'),
-  "tvShowGold9999": zod.boolean().describe('Whether the GOLD (0.9999) row is visible on the showroom TV board.'),
-  "tvShowKgBar995": zod.boolean().describe('Whether the KG BAR (0.995) row is visible on the showroom TV board.'),
-  "tvShowGold22k": zod.boolean().describe('Whether the Gold Jewelry 22K row is visible on the showroom TV board.'),
-  "tvShowGold21k": zod.boolean().describe('Whether the Gold Jewelry 21K row is visible on the showroom TV board.'),
-  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.'),
-  "tvShowGoldKg9999": zod.boolean().describe('Whether the GOLD KG (0.9999) row is visible on the showroom TV board.')
+  "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates.')
 })
 
 
@@ -273,23 +235,11 @@ export const UpdatePricesBody = zod.object({
   "gold18kRate": zod.number().optional(),
   "gold9999Rate": zod.number().optional(),
   "goldKg9999Rate": zod.number().optional(),
-  "spreadPremiumPercent": zod.number().nullish().describe('Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
-  "laborCostPercent": zod.number().nullish().describe('Labor markup percentage for jewelry rows (22K\/21K\/18K).'),
-  "gold9999Offset": zod.number().nullish().describe('Fixed AED offset added to live GOLD 9999 price.'),
-  "jewellery22kOffset": zod.number().nullish().describe('Fixed AED offset added to live Jewellery 22K price.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
 })).optional(),
-  "manualInvoiceMode": zod.boolean().optional().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.'),
-  "tvShowTtBar995": zod.boolean().optional(),
-  "tvShowTtBar999": zod.boolean().optional(),
-  "tvShowGold9999": zod.boolean().optional(),
-  "tvShowKgBar995": zod.boolean().optional(),
-  "tvShowGold22k": zod.boolean().optional(),
-  "tvShowGold21k": zod.boolean().optional(),
-  "tvShowGold18k": zod.boolean().optional(),
-  "tvShowGoldKg9999": zod.boolean().optional()
+  "manualInvoiceMode": zod.boolean().optional().describe('When true, invoice creation uses admin-set manual rates.')
 })
 
 export const UpdatePricesResponse = zod.object({
@@ -305,41 +255,21 @@ export const UpdatePricesResponse = zod.object({
   "gold21kRate": zod.number(),
   "gold18kRate": zod.number(),
   "gold9999Rate": zod.number(),
-  "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total.'),
-  "spreadPremiumPercent": zod.number().describe('Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent \/ 100).'),
-  "laborCostPercent": zod.number().describe('Admin-configurable labor markup (%) applied to jewelry rows (22K\/21K\/18K) on top of the spread-adjusted base.'),
-  "gold9999Offset": zod.number().optional().describe('Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount).'),
-  "jewellery22kOffset": zod.number().optional().describe('Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount).'),
+  "goldKg9999Rate": zod.number().describe('GOLD KG (0.9999) per-gram rate for admin and invoices.'),
   "customDescriptions": zod.array(zod.object({
   "name": zod.string(),
   "rate": zod.number()
 })),
   "updatedAt": zod.string(),
-  "liveModeConnected": zod.boolean(),
-  "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates instead of the live spot feed.'),
-  "liveGoldRate24k": zod.number().nullish(),
-  "liveGoldRate22k": zod.number().nullish(),
-  "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish().describe('Last persisted Bid snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveGoldAsk": zod.number().nullish().describe('Last persisted Ask snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveGoldHigh": zod.number().nullish().describe('Last persisted daily High snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveGoldLow": zod.number().nullish().describe('Last persisted daily Low snapshot (USD\/oz). Live values stream via \/prices\/spot, not this field.'),
-  "liveLastSyncedAt": zod.string().nullish(),
-  "tvShowTtBar995": zod.boolean().describe('Whether the TT. BAR (0.995) row is visible on the showroom TV board.'),
-  "tvShowTtBar999": zod.boolean().describe('Whether the TT. BAR (0.999) row is visible on the showroom TV board.'),
-  "tvShowGold9999": zod.boolean().describe('Whether the GOLD (0.9999) row is visible on the showroom TV board.'),
-  "tvShowKgBar995": zod.boolean().describe('Whether the KG BAR (0.995) row is visible on the showroom TV board.'),
-  "tvShowGold22k": zod.boolean().describe('Whether the Gold Jewelry 22K row is visible on the showroom TV board.'),
-  "tvShowGold21k": zod.boolean().describe('Whether the Gold Jewelry 21K row is visible on the showroom TV board.'),
-  "tvShowGold18k": zod.boolean().describe('Whether the Gold Jewelry 18K row is visible on the showroom TV board.'),
-  "tvShowGoldKg9999": zod.boolean().describe('Whether the GOLD KG (0.9999) row is visible on the showroom TV board.')
+  "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates.')
 })
 
 
 /**
  * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
  */
-export const GetPricesSpotResponse = zod.object({
+// GetPricesSpotResponse removed (live price system removed)
+export const _GetPricesSpotResponse_REMOVED = zod.object({
   "usdPerOz": zod.number().describe('Live international Gold Spot (XAU\/USD) price in USD per troy ounce.'),
   "aedPerGram": zod.number().describe('Base_24K_AED in AED per gram: (usdPerOz \/ 31.1034768) \* 3.6725. Verified to match livepriceofgold.com Dubai AED\/gram display to ±1¢.'),
   "baseAedPerGram": zod.number().nullish().describe('Same as aedPerGram — (usdPerOz \/ 31.1034768) \* 3.6725.'),

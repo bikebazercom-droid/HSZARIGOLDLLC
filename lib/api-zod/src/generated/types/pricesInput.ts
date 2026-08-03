@@ -20,35 +20,7 @@ export interface PricesInput {
   gold18kRate?: number;
   gold9999Rate?: number;
   goldKg9999Rate?: number;
-  /**
-     * Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100).
-     * @nullable
-     */
-  spreadPremiumPercent?: number | null;
-  /**
-     * Labor markup percentage for jewelry rows (22K/21K/18K).
-     * @nullable
-     */
-  laborCostPercent?: number | null;
-  /**
-     * Fixed AED offset added to live GOLD 9999 price.
-     * @nullable
-     */
-  gold9999Offset?: number | null;
-  /**
-     * Fixed AED offset added to live Jewellery 22K price.
-     * @nullable
-     */
-  jewellery22kOffset?: number | null;
   customDescriptions?: CustomDescription[];
-  /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
+  /** When true, invoice creation uses admin-set manual rates. */
   manualInvoiceMode?: boolean;
-  tvShowTtBar995?: boolean;
-  tvShowTtBar999?: boolean;
-  tvShowGold9999?: boolean;
-  tvShowKgBar995?: boolean;
-  tvShowGold22k?: boolean;
-  tvShowGold21k?: boolean;
-  tvShowGold18k?: boolean;
-  tvShowGoldKg9999?: boolean;
 }

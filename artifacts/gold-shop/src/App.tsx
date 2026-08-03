@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@ta
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/context/auth";
-import { LivePriceProvider } from "@/context/live-price";
 import { AppLayout } from "@/components/layout";
 import { emitSessionExpired } from "@/lib/session-events";
 import { useAdminSocket } from "@/hooks/use-admin-socket";
@@ -23,7 +22,6 @@ import ProductDetail from "@/pages/products/[id]";
 import Prices from "@/pages/prices";
 import PriceItemsPage from "@/pages/price-items";
 import SettingsPage from "@/pages/settings";
-import ShowroomBoard from "@/pages/showroom-board";
 import NotFound from "@/pages/not-found";
 
 // A 401 from any query or mutation means the server-side session is gone
@@ -110,12 +108,9 @@ function AuthGate() {
   return <StaffRouter />;
 }
 
-// Public, unauthenticated routes — matched before the auth gate so they never
-// require a login session (e.g. an always-on showroom TV display).
 function PublicRouter() {
   return (
     <Switch>
-      <Route path="/tv" component={ShowroomBoard} />
       <Route>{() => <AuthGate />}</Route>
     </Switch>
   );
@@ -124,16 +119,14 @@ function PublicRouter() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <LivePriceProvider>
-        <TooltipProvider>
-          <AuthProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <PublicRouter />
-            </WouterRouter>
-          </AuthProvider>
-          <Toaster />
-        </TooltipProvider>
-      </LivePriceProvider>
+      <TooltipProvider>
+        <AuthProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <PublicRouter />
+          </WouterRouter>
+        </AuthProvider>
+        <Toaster />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

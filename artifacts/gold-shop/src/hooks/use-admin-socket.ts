@@ -8,12 +8,9 @@ import {
   getGetMonthlySalesQueryKey,
   getGetCategorySummaryQueryKey,
   getGetPricesQueryKey,
-  getGetPricesSpotQueryKey,
   getListPriceItemsQueryKey,
-  getGetPublicPriceItemsQueryKey,
   getListProductsQueryKey,
   getGetSettingsQueryKey,
-  getGetPublicSettingsQueryKey,
 } from "@workspace/api-client-react";
 
 // Module-level singleton — one socket shared across all hook instances.
@@ -64,13 +61,8 @@ export function useAdminSocket(): void {
     }
 
     function onPriceMutation() {
-      // Invalidate all price-related caches so every consumer (admin pages,
-      // live-price context, TV board) gets an immediate push-driven update
-      // without waiting for their individual poll intervals.
       queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetPricesSpotQueryKey() });
       queryClient.invalidateQueries({ queryKey: getListPriceItemsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetPublicPriceItemsQueryKey() });
     }
 
     function onProductMutation() {
@@ -79,7 +71,6 @@ export function useAdminSocket(): void {
 
     function onSettingsMutation() {
       queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetPublicSettingsQueryKey() });
     }
 
     sock.on("INVOICE_MUTATION",  onInvoiceMutation);

@@ -18,9 +18,4 @@ export interface CompanySettingsInput {
   logoInitial?: string;
   logoImageUrl?: string;
   stampSignatureUrl?: string;
-  showroomLogoUrl?: string;
-  /** UniRateAPI token. Send an empty string to clear the token. */
-  uniRateApiToken?: string;
-  /** Enable or disable UniRateAPI polling without clearing the token. */
-  uniRateApiEnabled?: boolean;
 }

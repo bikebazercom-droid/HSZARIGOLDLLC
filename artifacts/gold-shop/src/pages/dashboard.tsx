@@ -6,10 +6,8 @@ import {
   useGetCategorySummary, getGetCategorySummaryQueryKey,
   useGetSettings, getGetSettingsQueryKey,
   useGetPrices, getGetPricesQueryKey,
-  useUpdatePrices,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLivePrice } from "@/context/live-price";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import { Plus, Filter, FileDown, Sliders, Check, Loader2 } from "lucide-react";
+import { Plus, Filter, FileDown } from "lucide-react";
 import { useAuth } from "@/context/auth";
 
 const NAVY = "#1e3a5f";
@@ -321,151 +319,6 @@ function CategorySalesSummary() {
   );
 }
 
-// ── Live Price Tuning ─────────────────────────────────────────────────────────
-function LivePriceTuning() {
-  const queryClient = useQueryClient();
-  const { data: prices } = useGetPrices({ query: { queryKey: getGetPricesQueryKey(), refetchInterval: 5000 } });
-  const { liveRates } = useLivePrice();
-  const mutation = useUpdatePrices();
-
-  const [spread, setSpread]   = useState("");
-  const [labor,  setLabor]    = useState("");
-  const [saved,  setSaved]    = useState(false);
-
-  // Seed inputs from DB values once they load
-  useEffect(() => {
-    if (prices && spread === "" && labor === "") {
-      setSpread(String((prices as any).spreadPremiumPercent ?? 0));
-      setLabor(String((prices as any).laborCostPercent ?? 0));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prices]);
-
-  const handleSave = () => {
-    const spreadVal = parseFloat(spread);
-    const laborVal  = parseFloat(labor);
-    if (!Number.isFinite(spreadVal) || !Number.isFinite(laborVal)) return;
-    mutation.mutate(
-      { data: { spreadPremiumPercent: spreadVal, laborCostPercent: laborVal } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-          setSaved(true);
-          setTimeout(() => setSaved(false), 2500);
-        },
-      },
-    );
-  };
-
-  // Live preview: show what the adjusted base and key rates will look like
-  const rawBase  = liveRates.baseAedPerGram;
-  const spreadPct = parseFloat(spread) || 0;
-  const laborPct  = parseFloat(labor)  || 0;
-  const adjBase  = rawBase != null ? rawBase * (1 + spreadPct / 100) : null;
-  const preview22k = adjBase != null ? adjBase * (22 / 24) * (1 + laborPct / 100) : null;
-  const previewBar = adjBase != null ? adjBase * 0.9999 : null;
-
-  const fmt2 = (n: number | null) =>
-    n == null ? "—" : n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  return (
-    <Card className="border-amber-200/40">
-      <CardHeader className="pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-amber-500" />
-          Live Price Tuning
-          <span className="text-xs font-normal text-muted-foreground ml-1">
-            — adjustments applied instantly to the /tv board
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
-          {/* Spread % input */}
-          <div className="flex-1 min-w-[140px]">
-            <Label htmlFor="spread-pct" className="text-xs font-medium mb-1.5 block">
-              Spread % <span className="text-muted-foreground font-normal">(margin on top of raw spot)</span>
-            </Label>
-            <div className="relative">
-              <Input
-                id="spread-pct"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={spread}
-                onChange={e => setSpread(e.target.value)}
-                className="pr-8 h-9"
-                placeholder="0"
-              />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
-            </div>
-          </div>
-
-          {/* Labor Cost % input */}
-          <div className="flex-1 min-w-[140px]">
-            <Label htmlFor="labor-pct" className="text-xs font-medium mb-1.5 block">
-              Labor Cost % <span className="text-muted-foreground font-normal">(jewelry rows only)</span>
-            </Label>
-            <div className="relative">
-              <Input
-                id="labor-pct"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={labor}
-                onChange={e => setLabor(e.target.value)}
-                className="pr-8 h-9"
-                placeholder="0"
-              />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
-            </div>
-          </div>
-
-          {/* Save button */}
-          <Button
-            onClick={handleSave}
-            disabled={mutation.isPending}
-            size="sm"
-            className="h-9 min-w-[90px] shrink-0"
-          >
-            {mutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : saved ? (
-              <><Check className="w-4 h-4 mr-1.5" /> Saved</>
-            ) : (
-              "Save"
-            )}
-          </Button>
-        </div>
-
-        {/* Live preview strip */}
-        {liveRates.isLive && (
-          <div className="mt-4 flex flex-wrap gap-3 text-xs">
-            <div className="flex items-center gap-1.5 bg-muted/50 rounded-md px-3 py-1.5">
-              <span className="text-muted-foreground">Adj. Base (24K)</span>
-              <span className="font-mono font-semibold tabular-nums">{fmt2(adjBase)} AED/g</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-muted/50 rounded-md px-3 py-1.5">
-              <span className="text-muted-foreground">Gold 9999</span>
-              <span className="font-mono font-semibold tabular-nums">{fmt2(previewBar)} AED/g</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-muted/50 rounded-md px-3 py-1.5">
-              <span className="text-muted-foreground">Jewellery 22K</span>
-              <span className="font-mono font-semibold tabular-nums">{fmt2(preview22k)} AED/g</span>
-            </div>
-          </div>
-        )}
-
-        {mutation.isError && (
-          <p className="mt-2 text-xs text-destructive">Failed to save — please try again.</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function Dashboard() {
   const { data, isLoading } = useGetDashboard({ query: { queryKey: getGetDashboardQueryKey() } });
   const { data: monthlySales, isLoading: isMonthlySalesLoading } = useGetMonthlySales({ query: { queryKey: getGetMonthlySalesQueryKey() } });
@@ -545,9 +398,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Live Price Tuning */}
-      <LivePriceTuning />
 
       {/* Charts + recent invoices */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

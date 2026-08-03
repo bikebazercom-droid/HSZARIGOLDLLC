@@ -3,9 +3,6 @@ import {
   useGetSettings,
   useUpdateSettings,
   getGetSettingsQueryKey,
-  useGetPrices,
-  useUpdatePrices,
-  getGetPricesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
@@ -17,15 +14,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key, Power, Plus, Minus, Sliders } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
-
-// Sentinel shown in the password input when a token is already stored in DB.
-// Any non-empty string works since the field renders bullet characters — this
-// constant is never sent to the API. It is ONLY used for UI state detection.
-const CONFIGURED_SENTINEL = "__token_configured__";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -36,9 +28,6 @@ export default function SettingsPage() {
     query: { queryKey: getGetSettingsQueryKey() }
   });
   const updateSettings = useUpdateSettings();
-
-  const { data: prices } = useGetPrices({ query: { queryKey: getGetPricesQueryKey() } });
-  const updatePrices = useUpdatePrices();
 
   const [companyName, setCompanyName] = useState("");
   const [tagline, setTagline] = useState("");
@@ -51,46 +40,6 @@ export default function SettingsPage() {
   const [logoInitial, setLogoInitial] = useState("H");
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
-  const [showroomLogoUrl, setShowroomLogoUrl] = useState<string>("");
-  // uniRateApiToken holds the new token the user types, OR the sentinel when a
-  // token is already configured (so the password field shows bullet characters
-  // rather than appearing blank on page load / tab navigation).
-  const [uniRateApiToken, setUniRateApiToken] = useState<string>("");
-  // uniRateApiEnabled mirrors the DB boolean — toggled immediately without a
-  // separate "Save" click so it feels instantaneous.
-  const [uniRateApiEnabled, setUniRateApiEnabled] = useState<boolean>(true);
-
-  // ── Live rate manual offsets ───────────────────────────────────────────────
-  const [gold9999Offset, setGold9999Offset] = useState<number>(0);
-  const [jewellery22kOffset, setJewellery22kOffset] = useState<number>(0);
-  const [savingOffsets, setSavingOffsets] = useState(false);
-
-  useEffect(() => {
-    if (prices) {
-      setGold9999Offset((prices as any).gold9999Offset ?? 0);
-      setJewellery22kOffset((prices as any).jewellery22kOffset ?? 0);
-    }
-  }, [prices]);
-
-  const handleSaveOffsets = () => {
-    setSavingOffsets(true);
-    updatePrices.mutate(
-      { data: { gold9999Offset, jewellery22kOffset } as any },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetPricesQueryKey() });
-          toast({
-            title: "Live Rate Offsets Saved",
-            description: "The TV board and price cards will reflect the new adjustments on the next 1-second tick.",
-          });
-        },
-        onError: (err: any) => {
-          toast({ title: "Failed to save offsets", description: err.message, variant: "destructive" });
-        },
-        onSettled: () => setSavingOffsets(false),
-      },
-    );
-  };
 
   useEffect(() => {
     if (settings) {
@@ -105,51 +54,8 @@ export default function SettingsPage() {
       setLogoInitial(settings.logoInitial ?? "H");
       setLogoImageUrl(settings.logoImageUrl ?? "");
       setStampSignatureUrl(settings.stampSignatureUrl ?? "");
-      setShowroomLogoUrl(settings.showroomLogoUrl ?? "");
-      // Pre-populate with sentinel so the password field shows bullet chars
-      // instead of an empty box — the raw token is never returned by the API.
-      setUniRateApiToken((settings as any).uniRateApiTokenSet ? CONFIGURED_SENTINEL : "");
-      setUniRateApiEnabled((settings as any).uniRateApiEnabled ?? true);
     }
   }, [settings]);
-
-  const handleSaveUniRate = () => {
-    if (uniRateApiToken === CONFIGURED_SENTINEL) {
-      toast({
-        title: "No changes made",
-        description: "The existing token is already saved. Paste a new token to replace it, or clear the field to remove it.",
-      });
-      return;
-    }
-    updateSettings.mutate({ data: { uniRateApiToken } as any }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-        toast({ title: "UniRateAPI token saved", description: "Live pricing will use UniRateAPI on the next poll." });
-      },
-      onError: (err: any) => {
-        toast({ title: "Failed to save token", description: err.message, variant: "destructive" });
-      }
-    });
-  };
-
-  const handleToggleUniRate = (checked: boolean) => {
-    setUniRateApiEnabled(checked);
-    updateSettings.mutate({ data: { uniRateApiEnabled: checked } as any }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-        toast({
-          title: checked ? "UniRateAPI enabled" : "UniRateAPI disabled",
-          description: checked
-            ? "UniRateAPI is now the active fallback price source."
-            : "Switched to other fallback feeds.",
-        });
-      },
-      onError: (err: any) => {
-        setUniRateApiEnabled(!checked);
-        toast({ title: "Failed to update toggle", description: err.message, variant: "destructive" });
-      }
-    });
-  };
 
   const handleSave = () => {
     updateSettings.mutate({
@@ -165,7 +71,6 @@ export default function SettingsPage() {
         logoInitial,
         logoImageUrl,
         stampSignatureUrl,
-        showroomLogoUrl,
       }
     }, {
       onSuccess: () => {
@@ -490,73 +395,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Showroom TV Logo */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Tv className="w-5 h-5 text-primary" />
-            <CardTitle>Showroom TV Logo</CardTitle>
-          </div>
-          <CardDescription>
-            Upload a custom logo to display at the top of the Showroom Live Price Board (/tv). Leave empty to show the default text header.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {showroomLogoUrl ? (
-            <div className="flex items-center gap-4">
-              <div className="w-28 h-20 rounded-lg border overflow-hidden bg-black flex items-center justify-center p-2">
-                <img src={showroomLogoUrl} alt="Showroom TV logo" className="max-w-full max-h-full object-contain" />
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-green-700 font-medium">✓ Showroom logo uploaded</p>
-                <label className="cursor-pointer">
-                  <span className="text-xs text-primary underline">Replace image</span>
-                  <input
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
-                    className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = ev => setShowroomLogoUrl(ev.target?.result as string);
-                      reader.readAsDataURL(file);
-                    }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowroomLogoUrl("")}
-                  className="block text-xs text-destructive underline"
-                >
-                  Remove logo
-                </button>
-              </div>
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all">
-              <Tv className="w-8 h-8 text-muted-foreground" />
-              <div className="text-center">
-                <div className="text-sm font-medium">Click to upload your showroom TV logo</div>
-                <div className="text-xs text-muted-foreground mt-0.5">PNG, JPG, SVG · Transparent background recommended</div>
-              </div>
-              <input
-                type="file"
-                accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = ev => setShowroomLogoUrl(ev.target?.result as string);
-                  reader.readAsDataURL(file);
-                }}
-              />
-            </label>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Location QR Code */}
       <Card>
         <CardHeader>
@@ -602,211 +440,6 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* UniRateAPI Settings */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Key className="w-5 h-5 text-primary" />
-              <CardTitle>UniRateAPI Settings</CardTitle>
-            </div>
-            {/* Enable / Disable toggle — only meaningful when a token is set */}
-            {(settings as any)?.uniRateApiTokenSet && (
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-muted-foreground">
-                  {uniRateApiEnabled ? "Enabled" : "Disabled"}
-                </span>
-                <Switch
-                  checked={uniRateApiEnabled}
-                  onCheckedChange={handleToggleUniRate}
-                  disabled={updateSettings.isPending}
-                  aria-label="Enable UniRateAPI"
-                  className={uniRateApiEnabled ? "data-[state=checked]:bg-green-500" : ""}
-                />
-              </div>
-            )}
-          </div>
-          <CardDescription>
-            Configure your UniRateAPI token to fetch the official XAU/USD spot price (LBMA-blended, updates every 15 minutes).
-            Use the toggle to enable or disable it without losing the token.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-
-          {/* Status badge */}
-          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 bg-muted/30">
-            <Power className={`w-4 h-4 flex-shrink-0 ${(settings as any)?.uniRateApiTokenSet && uniRateApiEnabled ? "text-green-500" : "text-muted-foreground"}`} />
-            <span className="text-sm font-medium">Status:</span>
-            {(settings as any)?.uniRateApiTokenSet ? (
-              uniRateApiEnabled ? (
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-600">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-                  Token configured — UniRateAPI active
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-                  Token configured — UniRateAPI paused (toggle OFF)
-                </span>
-              )
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-muted-foreground/50 inline-block" />
-                No token set — using fallback feed
-              </span>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="uniRateApiToken">API Token</Label>
-            <Input
-              id="uniRateApiToken"
-              type="password"
-              value={uniRateApiToken}
-              onFocus={() => {
-                if (uniRateApiToken === CONFIGURED_SENTINEL) setUniRateApiToken("");
-              }}
-              onBlur={() => {
-                if (uniRateApiToken === "" && (settings as any)?.uniRateApiTokenSet) {
-                  setUniRateApiToken(CONFIGURED_SENTINEL);
-                }
-              }}
-              onChange={e => setUniRateApiToken(e.target.value)}
-              placeholder={
-                (settings as any)?.uniRateApiTokenSet
-                  ? "Paste new token to replace, or clear to remove…"
-                  : "Paste your UniRateAPI token here…"
-              }
-              autoComplete="off"
-            />
-            <p className="text-xs text-muted-foreground">
-              Get your token from{" "}
-              <a href="https://unirateapi.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                unirateapi.com
-              </a>
-              . To remove the token, clear the field and click Save API Settings.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <Button
-              onClick={handleSaveUniRate}
-              disabled={updateSettings.isPending}
-              variant="outline"
-              className="gap-2"
-            >
-              <Key className="w-4 h-4" />
-              {updateSettings.isPending ? "Saving…" : "Save API Settings"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Live Rate Manual Offset ──────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-primary" />
-            <CardTitle>Live Rate Manual Offset</CardTitle>
-          </div>
-          <CardDescription>
-            Add or subtract a flat AED amount to the computed live price for each item type.
-            Applied every second — the TV board and price cards update instantly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* GOLD 9999 */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold">GOLD 9999 Live Adjust (AED/g)</Label>
-            <p className="text-xs text-muted-foreground">
-              Final Price = Live Dubai Rate + this offset. E.g. +2 adds AED 2.00 per gram.
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setGold9999Offset(v => Math.round((v - 0.5) * 100) / 100)}
-                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
-              <div className="relative flex-1 max-w-[180px]">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-                <Input
-                  type="number"
-                  step="0.5"
-                  value={gold9999Offset}
-                  onChange={e => setGold9999Offset(parseFloat(e.target.value) || 0)}
-                  className="pl-14 text-base font-bold h-10 text-center"
-                  style={{ fontFamily: "monospace" }}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setGold9999Offset(v => Math.round((v + 0.5) * 100) / 100)}
-                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${gold9999Offset > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : gold9999Offset < 0 ? "bg-red-50 text-red-700 border border-red-200" : "bg-muted text-muted-foreground"}`}>
-                {gold9999Offset > 0 ? `+${gold9999Offset.toFixed(2)}` : gold9999Offset.toFixed(2)} AED
-              </span>
-            </div>
-          </div>
-
-          {/* JEWELLERY 22K */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold">JEWELLERY 22K Live Adjust (AED/g)</Label>
-            <p className="text-xs text-muted-foreground">
-              Final Price = (Spot × 22/24 × labor%) + this offset. E.g. −1.5 subtracts AED 1.50 per gram.
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setJewellery22kOffset(v => Math.round((v - 0.5) * 100) / 100)}
-                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
-              <div className="relative flex-1 max-w-[180px]">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium select-none">AED</span>
-                <Input
-                  type="number"
-                  step="0.5"
-                  value={jewellery22kOffset}
-                  onChange={e => setJewellery22kOffset(parseFloat(e.target.value) || 0)}
-                  className="pl-14 text-base font-bold h-10 text-center"
-                  style={{ fontFamily: "monospace" }}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setJewellery22kOffset(v => Math.round((v + 0.5) * 100) / 100)}
-                className="w-10 h-10 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${jewellery22kOffset > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : jewellery22kOffset < 0 ? "bg-red-50 text-red-700 border border-red-200" : "bg-muted text-muted-foreground"}`}>
-                {jewellery22kOffset > 0 ? `+${jewellery22kOffset.toFixed(2)}` : jewellery22kOffset.toFixed(2)} AED
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t">
-            <p className="text-xs text-muted-foreground">
-              Offset = 0 means no adjustment — the raw computed live price is used as-is.
-            </p>
-            <Button
-              onClick={handleSaveOffsets}
-              disabled={savingOffsets}
-              className="gap-2 min-w-36"
-            >
-              <Sliders className="w-4 h-4" />
-              {savingOffsets ? "Saving…" : "Save Offsets"}
-            </Button>
-          </div>
         </CardContent>
       </Card>
 

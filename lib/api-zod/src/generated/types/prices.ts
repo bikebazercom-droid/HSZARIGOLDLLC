@@ -20,63 +20,10 @@ export interface Prices {
   gold21kRate: number;
   gold18kRate: number;
   gold9999Rate: number;
-  /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
+  /** GOLD KG (0.9999) per-gram rate for admin and invoices. */
   goldKg9999Rate: number;
-  /** Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100). */
-  spreadPremiumPercent: number;
-  /** Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base. */
-  laborCostPercent: number;
-  /** Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount). */
-  gold9999Offset?: number;
-  /** Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount). */
-  jewellery22kOffset?: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
-  liveModeConnected: boolean;
-  /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
+  /** When true, invoice creation uses admin-set manual rates. */
   manualInvoiceMode: boolean;
-  /** @nullable */
-  liveGoldRate24k?: number | null;
-  /** @nullable */
-  liveGoldRate22k?: number | null;
-  /** @nullable */
-  liveSilverRate?: number | null;
-  /**
-     * Last persisted Bid snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldBid?: number | null;
-  /**
-     * Last persisted Ask snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldAsk?: number | null;
-  /**
-     * Last persisted daily High snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldHigh?: number | null;
-  /**
-     * Last persisted daily Low snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldLow?: number | null;
-  /** @nullable */
-  liveLastSyncedAt?: string | null;
-  /** Whether the TT. BAR (0.995) row is visible on the showroom TV board. */
-  tvShowTtBar995: boolean;
-  /** Whether the TT. BAR (0.999) row is visible on the showroom TV board. */
-  tvShowTtBar999: boolean;
-  /** Whether the GOLD (0.9999) row is visible on the showroom TV board. */
-  tvShowGold9999: boolean;
-  /** Whether the KG BAR (0.995) row is visible on the showroom TV board. */
-  tvShowKgBar995: boolean;
-  /** Whether the Gold Jewelry 22K row is visible on the showroom TV board. */
-  tvShowGold22k: boolean;
-  /** Whether the Gold Jewelry 21K row is visible on the showroom TV board. */
-  tvShowGold21k: boolean;
-  /** Whether the Gold Jewelry 18K row is visible on the showroom TV board. */
-  tvShowGold18k: boolean;
-  /** Whether the GOLD KG (0.9999) row is visible on the showroom TV board. */
-  tvShowGoldKg9999: boolean;
 }

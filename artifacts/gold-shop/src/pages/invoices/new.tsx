@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useLivePrice } from "@/context/live-price";
 import { Link, useLocation } from "wouter";
 import {
   useCreateInvoice,
@@ -11,8 +10,6 @@ import {
   getGetPricesQueryKey,
   useListProducts,
   getListProductsQueryKey,
-  useGetPublicPriceItems,
-  getGetPublicPriceItemsQueryKey,
   PriceItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,7 +64,6 @@ interface PricesData {
   gold18kRate: number;
   gold9999Rate: number;
   goldKg9999Rate: number;
-  liveModeConnected?: boolean;
   manualInvoiceMode?: boolean;
 }
 
@@ -160,20 +156,6 @@ const KG_BAR_DESCS = new Set([
 ]);
 const SILVER_DESCS = new Set(["Silver", "Silver (0.999)", "Silver 999"]);
 
-// ── TV board price engine ─────────────────────────────────────────────────────
-// Mirrors computeItemPrice in showroom-board.tsx exactly.
-// When Live mode is active, invoice rate resolution checks this first for GOLD 9999
-// and JEWELLERY 22K so the invoice always reflects the precise per-item price
-// (purityFactor + premiumOffsetAed from the DB item record) shown on the TV board.
-const r2tv = (n: number) => Math.round(n * 100) / 100;
-function computeTvItemPrice(item: PriceItem, base: number | null): number | null {
-  if (item.formulaType === "manual")
-    return item.manualRateAed == null ? null : r2tv(item.manualRateAed + item.premiumOffsetAed);
-  if (base == null) return null;
-  if (item.formulaType === "spot_bar")
-    return r2tv(base * (item.weightGrams ?? 0) * item.purityFactor + item.premiumOffsetAed);
-  return r2tv(base * item.purityFactor + item.premiumOffsetAed);
-}
 
 // Invoice descriptions that map to the TV board's "GOLD 9999" pinned item
 const TV_GOLD_9999_DESCS = new Set([
@@ -365,43 +347,10 @@ export default function NewInvoice() {
   });
   const { data: products } = useListProducts({}, { query: { queryKey: getListProductsQueryKey({}) } });
 
-  const { liveRates } = useLivePrice();
-  // Use the live-price context (1s polling) instead of the stale prices query
-  // field so the Metal Rate lock/unlock state tracks the live feed in real time.
-  const isLive = liveRates.isLive;
   const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
-  // When manual mode is ON, pass undefined so rate helpers fall back to DB values.
-  const liveAed = isManualMode ? undefined : liveRates.aedPerGram;
-
-  // ── TV board price sync ────────────────────────────────────────────────────
-  // Poll the same public price items the TV board uses so we can compute
-  // per-item prices via the exact same engine (purityFactor + premiumOffsetAed
-  // from the DB record). Refetch every second so invoice rates stay locked to
-  // what's currently displayed on the TV screen.
-  const { data: publicPriceItems } = useGetPublicPriceItems({
-    query: {
-      queryKey: getGetPublicPriceItemsQueryKey(),
-      refetchInterval: 1000,
-      refetchIntervalInBackground: true,
-      staleTime: 0,
-    },
-  });
-
-  // tvPriceMap: item.name → computed AED/g price (same formula as TV board).
-  // Only populated when live mode is active; undefined in manual mode so the
-  // existing DB-based fallback chain kicks in instead.
-  const tvPriceMap = useMemo<Map<string, number> | undefined>(() => {
-    if (isManualMode) return undefined;
-    const base = liveRates.adjustedBaseAedPerGram;
-    if (!base || !publicPriceItems?.length) return undefined;
-    const m = new Map<string, number>();
-    for (const item of publicPriceItems) {
-      const price = computeTvItemPrice(item, base);
-      if (price != null) m.set(item.name, price);
-    }
-    return m;
-  }, [isManualMode, liveRates.adjustedBaseAedPerGram, publicPriceItems]);
+  const liveAed: number | undefined = undefined;
+  const tvPriceMap: Map<string, number> | undefined = undefined;
 
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [customerName, setCustomerName] = useState("");
@@ -435,19 +384,7 @@ export default function NewInvoice() {
   // disconnected, the user can type it directly.
   const [metalRate, setMetalRate] = useState<number>(0);
 
-  // Baseline/fallback figure used only to seed `metalRate` before any item
-  // has a description/purity chosen, and as the `fallback` argument to
-  // getRateForDesc/getRateForPurity.
-  // Prefers the live 3-second spot rate so a freshly opened invoice always
-  // starts from the current market price, not the 5-minute-stale DB value.
-  // Manual mode: use the admin-set gold9999Rate from the DB (frozen baseline).
-  // Live mode: use the real-time 1s XAUUSD spot.
-  // Offline (no scraper): fall back to goldPricePerGram.
-  const baselineRate = (!isManualMode && isLive)
-    ? (liveAed ?? prices?.goldBullionRate ?? goldRate)
-    : isManualMode
-      ? (prices?.gold9999Rate ?? prices?.goldBullionRate ?? goldRate)
-      : (prices?.goldPricePerGram ?? goldRate);
+  const baselineRate = prices?.gold9999Rate ?? prices?.goldBullionRate ?? goldRate;
 
   const handleCustomerSelect = (id: string) => {
     if (id === "walk-in") { setCustomerId(undefined); return; }
@@ -504,7 +441,7 @@ export default function NewInvoice() {
         const autoCategory = descToCategory(value as string);
         const autoPurity = DESC_TO_PURITY[value as string] ?? "";
         if (value) {
-          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, liveRates.laborCostPercent, tvPriceMap);
+          pushedRate = getRateForDesc(value as string, prices as PricesData | undefined, metalRate || baselineRate, liveAed, 0, tvPriceMap);
         }
         // Gross Weight is never auto-filled — it stays exactly as-is (blank/0
         // for a fresh line item) so every weight is entered manually.
@@ -548,14 +485,6 @@ export default function NewInvoice() {
   // Purity is intentionally excluded — purity changes must NOT re-trigger a
   // rate recalculation. Only description/category changes should re-sync the rate.
   const itemSignature = items.map(i => `${i.description}|${i.category}`).join("~");
-  useEffect(() => {
-    // In manual mode the live 1s tick must NOT override admin-set rates.
-    if (!isLive || isManualMode) return;
-    // Pass tvPriceMap so GOLD 9999 + JEWELLERY 22K rates mirror the TV board exactly.
-    setMetalRate(resolvePrimaryRate(items, prices as PricesData | undefined, baselineRate, liveAed, liveRates.laborCostPercent, tvPriceMap));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, isManualMode, prices, itemSignature, liveAed, liveRates.laborCostPercent, tvPriceMap]);
-
   // Seed the global Metal Rate with a sensible baseline the moment prices
   // first load (covers page load / Live Mode toggling before any item has a
   // description or purity chosen yet).
@@ -981,41 +910,19 @@ export default function NewInvoice() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-base font-semibold">Metal Rate (AED/g)</Label>
-                  {isLive && tvPriceMap ? (
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600">
-                      <span className="text-amber-500">◆</span> Synced from TV Board
-                    </span>
-                  ) : isLive ? (
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                      <span className="text-emerald-500">●</span> Live Market Rate
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                      <span>●</span> Manual Mode (Offline)
-                    </span>
-                  )}
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                    <span>●</span> Manual Rate
+                  </span>
                 </div>
-                {isLive ? (
-                  // Live Mode connected: this is the single, absolute source
-                  // of truth for every line item and the invoice total — no
-                  // manual override is offered at all.
-                  <div
-                    className="h-11 flex items-center px-3 rounded-md border-2 border-primary/40 bg-muted/40 font-mono text-base font-bold"
-                    title="Live spot gold rate — every line item and the invoice total compute from this single number automatically"
-                  >
-                    {metalRate ? metalRate.toFixed(3) : "0.000"}
-                  </div>
-                ) : (
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.001"
-                    className="h-11 text-base font-bold font-mono border-2 border-primary/40"
-                    value={metalRate || ""}
-                    onChange={e => setMetalRate(parseFloat(e.target.value) || 0)}
-                    placeholder="e.g. 320.000"
-                  />
-                )}
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  className="h-11 text-base font-bold font-mono border-2 border-primary/40"
+                  value={metalRate || ""}
+                  onChange={e => setMetalRate(parseFloat(e.target.value) || 0)}
+                  placeholder="e.g. 320.000"
+                />
                 <p className="text-[11px] text-muted-foreground">
                   Every line item's Gold Value and the invoice total are calculated from this single rate.
                 </p>
