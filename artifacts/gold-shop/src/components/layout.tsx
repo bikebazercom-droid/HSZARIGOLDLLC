@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Package,
-  DollarSign, Settings, LogOut, Menu, X, FilePlus,
-  ChevronDown, ChevronRight, Zap,
+  Settings, LogOut, Menu, X, FilePlus,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { useGetSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/context/auth";
@@ -15,8 +15,6 @@ const ADMIN_SETTINGS_SUB = [
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
-  { href: "/prices", label: "Prices", icon: DollarSign },
-  { href: "/price-items", label: "Live Pricing", icon: Zap },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
