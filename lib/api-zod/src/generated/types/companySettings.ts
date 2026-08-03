@@ -23,4 +23,7 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
+  /** True when a UniRateAPI token is saved. The token itself is never returned. */
+  uniRateApiTokenSet: boolean;
+  uniRateApiEnabled: boolean;
 }

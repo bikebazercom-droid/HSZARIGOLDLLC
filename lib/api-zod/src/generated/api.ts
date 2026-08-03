@@ -23,7 +23,9 @@ export const GetSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish()
+  "stampSignatureUrl": zod.string().nullish(),
+  "uniRateApiTokenSet": zod.boolean().describe('True when a UniRateAPI token is saved in the DB. The token itself is never returned.'),
+  "uniRateApiEnabled": zod.boolean().describe('Whether the UniRateAPI integration is enabled.')
 })
 
 
@@ -41,7 +43,9 @@ export const UpdateSettingsBody = zod.object({
   "logoType": zod.string().optional(),
   "logoInitial": zod.string().optional(),
   "logoImageUrl": zod.string().optional(),
-  "stampSignatureUrl": zod.string().optional()
+  "stampSignatureUrl": zod.string().optional(),
+  "uniRateApiToken": zod.string().optional().describe('Send an empty string to clear the token.'),
+  "uniRateApiEnabled": zod.boolean().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -56,7 +60,9 @@ export const UpdateSettingsResponse = zod.object({
   "logoType": zod.string(),
   "logoInitial": zod.string(),
   "logoImageUrl": zod.string().nullish(),
-  "stampSignatureUrl": zod.string().nullish()
+  "stampSignatureUrl": zod.string().nullish(),
+  "uniRateApiTokenSet": zod.boolean(),
+  "uniRateApiEnabled": zod.boolean()
 })
 
 

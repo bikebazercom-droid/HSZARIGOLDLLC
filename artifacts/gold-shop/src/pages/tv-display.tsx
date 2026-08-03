@@ -182,7 +182,7 @@ export default function TvDisplay() {
               className="font-bold leading-none"
               style={{ fontSize: "clamp(1.6rem, 4vw, 3.2rem)", color: "#f0c040" }}
             >
-              {loading ? "—" : fmtNum(data?.bidUsd)}
+              {loading ? "—" : fmtNum(data?.bidUsd ?? null)}
             </span>
           </div>
           {/* ASK */}
@@ -195,7 +195,7 @@ export default function TvDisplay() {
               className="font-bold leading-none"
               style={{ fontSize: "clamp(1.6rem, 4vw, 3.2rem)", color: "#f0c040" }}
             >
-              {loading ? "—" : fmtNum(data?.askUsd)}
+              {loading ? "—" : fmtNum(data?.askUsd ?? null)}
             </span>
           </div>
         </div>
@@ -212,7 +212,7 @@ export default function TvDisplay() {
               <span className="font-semibold text-red-400 text-base">Low</span>
             </div>
             <span className="font-bold text-gray-100 text-xl font-mono">
-              {loading ? "—" : fmtNum(data?.dailyLow)}
+              {loading ? "—" : fmtNum(data?.dailyLow ?? null)}
             </span>
           </div>
           {/* High */}
@@ -225,7 +225,7 @@ export default function TvDisplay() {
               <span className="font-semibold text-green-400 text-base">High</span>
             </div>
             <span className="font-bold text-gray-100 text-xl font-mono">
-              {loading ? "—" : fmtNum(data?.dailyHigh)}
+              {loading ? "—" : fmtNum(data?.dailyHigh ?? null)}
             </span>
           </div>
         </div>
