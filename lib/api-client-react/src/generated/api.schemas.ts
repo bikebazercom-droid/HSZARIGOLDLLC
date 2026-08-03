@@ -472,9 +472,6 @@ export interface CompanySettings {
   logoImageUrl?: string | null;
   /** @nullable */
   stampSignatureUrl?: string | null;
-  /** True when a UniRateAPI token is saved. The token itself is never returned. */
-  uniRateApiTokenSet: boolean;
-  uniRateApiEnabled: boolean;
 }
 
 export interface CompanySettingsInput {
@@ -489,9 +486,6 @@ export interface CompanySettingsInput {
   logoInitial?: string;
   logoImageUrl?: string;
   stampSignatureUrl?: string;
-  /** Send an empty string to clear the token. */
-  uniRateApiToken?: string;
-  uniRateApiEnabled?: boolean;
 }
 
 /**

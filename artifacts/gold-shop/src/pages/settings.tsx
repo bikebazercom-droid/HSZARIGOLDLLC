@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp, Tv, Key, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { Settings, Building2, MapPin, Image, Upload, X, Users, Stamp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth";
 import AdminUsersPanel from "@/pages/admin/users";
@@ -41,12 +41,6 @@ export default function SettingsPage() {
   const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [stampSignatureUrl, setStampSignatureUrl] = useState<string>("");
 
-  // ── UniRateAPI / Live TV state ──────────────────────────────────────────────
-  const [uniRateApiToken,   setUniRateApiToken]   = useState("");
-  const [uniRateApiEnabled, setUniRateApiEnabled] = useState(true);
-  const [showApiKey,        setShowApiKey]        = useState(false);
-  const [tvSaving,          setTvSaving]          = useState(false);
-
   useEffect(() => {
     if (settings) {
       setCompanyName(settings.companyName ?? "");
@@ -60,8 +54,6 @@ export default function SettingsPage() {
       setLogoInitial(settings.logoInitial ?? "H");
       setLogoImageUrl(settings.logoImageUrl ?? "");
       setStampSignatureUrl(settings.stampSignatureUrl ?? "");
-      setUniRateApiEnabled((settings as any).uniRateApiEnabled ?? true);
-      // Never pre-fill the token — only show the set/not-set indicator
     }
   }, [settings]);
 
@@ -116,9 +108,6 @@ export default function SettingsPage() {
             <TabsTrigger value="company" className="flex items-center gap-2">
               <Building2 className="w-4 h-4" /> Company Settings
             </TabsTrigger>
-            <TabsTrigger value="tv" className="flex items-center gap-2">
-              <Tv className="w-4 h-4" /> Live TV
-            </TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2">
               <Users className="w-4 h-4" /> User Management
             </TabsTrigger>
@@ -126,144 +115,6 @@ export default function SettingsPage() {
 
           <TabsContent value="users">
             <AdminUsersPanel />
-          </TabsContent>
-
-          <TabsContent value="tv">
-            <div className="space-y-6">
-
-              {/* UniRateAPI card */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Key className="w-5 h-5 text-primary" />
-                    <CardTitle>UniRateAPI — Live Gold Price</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Your UniRateAPI key powers the live BID/ASK prices on the TV board at <code className="text-xs bg-muted px-1 py-0.5 rounded">/tv</code>.
-                    Get your key from <a href="https://unirateapi.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">unirateapi.com</a>.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-5">
-
-                  {/* Token set status banner */}
-                  <div
-                    className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm"
-                    style={{
-                      background: (settings as any)?.uniRateApiTokenSet
-                        ? "rgba(34,197,94,0.08)" : "rgba(234,179,8,0.08)",
-                      border: `1px solid ${(settings as any)?.uniRateApiTokenSet
-                        ? "rgba(34,197,94,0.3)" : "rgba(234,179,8,0.3)"}`,
-                    }}
-                  >
-                    {(settings as any)?.uniRateApiTokenSet
-                      ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      : <XCircle      className="w-4 h-4 text-yellow-500 flex-shrink-0" />}
-                    <span className={(settings as any)?.uniRateApiTokenSet ? "text-green-700" : "text-yellow-700"}>
-                      {(settings as any)?.uniRateApiTokenSet
-                        ? "API key is configured. Enter a new key below to replace it, or leave blank to keep the current one."
-                        : "No API key configured yet. Paste your UniRateAPI key below to enable live prices."}
-                    </span>
-                  </div>
-
-                  {/* API Key input */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5">
-                      <Key className="w-3.5 h-3.5" /> API Key
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type={showApiKey ? "text" : "password"}
-                        value={uniRateApiToken}
-                        onChange={e => setUniRateApiToken(e.target.value)}
-                        placeholder={(settings as any)?.uniRateApiTokenSet
-                          ? "Leave blank to keep current key"
-                          : "Paste your UniRateAPI key here…"}
-                        className="pr-10 font-mono text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey(v => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Your key is stored securely in the database and never shown in full again.
-                    </p>
-                  </div>
-
-                  {/* Enable / Disable toggle */}
-                  <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
-                    <div>
-                      <p className="text-sm font-medium">Enable live price polling</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        When off, the TV board will show "Waiting for live data" until re-enabled.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={uniRateApiEnabled}
-                      onCheckedChange={setUniRateApiEnabled}
-                    />
-                  </div>
-
-                  {/* Save button */}
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={async () => {
-                        setTvSaving(true);
-                        try {
-                          const payload: Record<string, any> = { uniRateApiEnabled };
-                          // Only send the token if the user typed something
-                          if (uniRateApiToken.trim()) {
-                            payload.uniRateApiToken = uniRateApiToken.trim();
-                          }
-                          await updateSettings.mutateAsync({ data: payload });
-                          queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-                          setUniRateApiToken("");
-                          toast({ title: "Live TV settings saved", description: "The TV board will start showing live data shortly." });
-                        } catch (err: any) {
-                          toast({ title: "Save failed", description: err.message, variant: "destructive" });
-                        } finally {
-                          setTvSaving(false);
-                        }
-                      }}
-                      disabled={tvSaving}
-                      className="flex items-center gap-2"
-                    >
-                      {tvSaving
-                        ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</>
-                        : <><Key className="w-4 h-4" /> Save API Key</>}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* TV board info card */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Tv className="w-5 h-5 text-primary" />
-                    <CardTitle>TV Board Access</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <p>
-                    Open the TV board by navigating to <strong className="text-foreground">/tv</strong> on your app URL.
-                    No login is required — you can display it directly on any screen or TV.
-                  </p>
-                  <p>
-                    Prices update every <strong className="text-foreground">90 seconds</strong> from UniRateAPI
-                    (≤ 960 requests/day, within the paid plan limit).
-                  </p>
-                  <p>
-                    To control which items appear on the board, go to the
-                    <strong className="text-foreground"> Price Items</strong> page and toggle the TV visibility for each item.
-                  </p>
-                </CardContent>
-              </Card>
-
-            </div>
           </TabsContent>
         </Tabs>
       )}

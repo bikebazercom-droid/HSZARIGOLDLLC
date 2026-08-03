@@ -18,7 +18,4 @@ export interface CompanySettingsInput {
   logoInitial?: string;
   logoImageUrl?: string;
   stampSignatureUrl?: string;
-  /** Send an empty string to clear the token. */
-  uniRateApiToken?: string;
-  uniRateApiEnabled?: boolean;
 }
