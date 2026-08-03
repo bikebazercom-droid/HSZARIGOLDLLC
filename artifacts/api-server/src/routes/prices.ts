@@ -621,23 +621,47 @@ export function triggerUniRatePoll(): void {
 // ── Startup sequence ──────────────────────────────────────────────────────────
 // 1. Restore today's H/L from disk (date-checked — stale day starts fresh)
 // 2. Fire first Swissquote poll → liveSpot now available
-// 3. Seed H/L: GoldAPI.io (exact OTC) → fallback to GC=F dynamic basis
+// 3. Seed H/L: GoldAPI.io startup (exact OTC, free plan = 100 req/month →
+//    used ONLY on startup + midnight to stay within ~62 req/month budget)
 // 4. Fire first UniRateAPI poll (confirmation + DB write)
 // 5. Schedule Swissquote every 1 s (primary live-tick source)
 // 6. Schedule UniRateAPI every 90 s (confirmation + rate-limited DB writes)
-// 7. Re-seed H/L every 5 min (picks up new bars + refreshes basis)
+// 7. Periodic H/L refresh every 10 min via GC=F dynamic basis (free/unlimited)
+//    — GoldAPI.io NOT called here to conserve the 100 req/month free quota
 // ─────────────────────────────────────────────────────────────────────────────
 async function startup(): Promise<void> {
   loadDailyHL();
   await pollSwissquote();                            // first real bid/ask tick → liveSpot ready
-  await seedHL();                                    // GoldAPI.io → GC=F fallback
-  await pollUniRate();                              // confirmation poll
-  setInterval(pollSwissquote, SWISSQUOTE_POLL_MS); // 1 s fast ticks
-  scheduleNextPoll(activePollIntervalMs);           // 90 s confirmation
-  setInterval(                                      // re-seed every 5 min (fresh basis + new bars)
-    () => seedHL().catch((err: unknown) => logger.warn({ err }, "[H/L Seed] Periodic re-seed failed")),
-    5 * 60_000,
+  await seedHL();                                    // GoldAPI.io (exact OTC) → GC=F fallback
+  await pollUniRate();                               // confirmation poll
+  setInterval(pollSwissquote, SWISSQUOTE_POLL_MS);  // 1 s fast ticks
+  scheduleNextPoll(activePollIntervalMs);            // 90 s confirmation
+  // Periodic basis refresh via GC=F only (free/unlimited).
+  // GoldAPI.io is NOT called here — reserved for startup & midnight to stay
+  // within the 100 req/month free plan limit (~2/day = ~62/month).
+  setInterval(
+    () => applyHL(seedHLFromGCF()).catch((err: unknown) => logger.warn({ err }, "[H/L Seed] Periodic GC=F re-seed failed")),
+    10 * 60_000,
   );
+}
+
+/** Apply a seed result (from any source) into the daily H/L, save, and broadcast. */
+async function applyHL(promise: Promise<{ high: number | null; low: number | null } | null>): Promise<void> {
+  const gcf = await promise;
+  if (!gcf) return;
+  const today2 = todayUTC();
+  let changed = false;
+  if (gcf.high != null && gcf.high > 500 && (dailyHighUsdPerOz == null || gcf.high > dailyHighUsdPerOz)) {
+    dailyHighUsdPerOz    = gcf.high;
+    dailyTrackingDateUTC = today2;
+    changed = true;
+  }
+  if (gcf.low != null && gcf.low > 500 && (dailyLowUsdPerOz == null || gcf.low < dailyLowUsdPerOz)) {
+    dailyLowUsdPerOz     = gcf.low;
+    dailyTrackingDateUTC = today2;
+    changed = true;
+  }
+  if (changed) { saveDailyHL(); broadcast("PRICE_MUTATION"); }
 }
 
 startup().catch((err: unknown) => logger.warn({ err }, "[Startup] Startup sequence failed"));
