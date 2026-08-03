@@ -148,124 +148,20 @@ function trackDailyRange(usdPerOz: number): void {
   if (changed) saveDailyHL();
 }
 
-// ── Yahoo Finance H/L seed ────────────────────────────────────────────────────
-// Seeds today's High AND Low from Yahoo Finance GC=F hourly bars with
-// pre/post-market data included.  This covers the full 23-hour gold session
-// (00:00 UTC onward) rather than just the 9:30 AM ET open.
-//
-// BASIS CORRECTION: GC=F futures trade at a small premium over OTC spot.
-//   • At the daily HIGH (overnight Asian session) the premium is typically
-//     $1–$2 (high volatility, thin liquidity).
-//   • At the daily LOW (regular session) the premium is usually < $0.20.
-// We estimate the current intraday basis by comparing the last GC=F bar's
-// close with the current Swissquote OTC mid and subtract it from the seeded
-// HIGH (capped at $3 to avoid bad data).  LOW is left unadjusted because the
-// futures-spot spread is negligible at the low.
-//
-// PERIODIC RE-SEED: called on startup AND every 10 minutes throughout the day
-// so new intraday extremes are captured without waiting for a restart.
-// ─────────────────────────────────────────────────────────────────────────────
-async function seedHLFromYahoo(): Promise<void> {
-  try {
-    // range=2d gives yesterday+today bars; filter to today's UTC date only
-    const url  = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1h&range=2d&includePrePost=true";
-    const resp = await fetch(url, {
-      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
-      signal:  AbortSignal.timeout(12_000),
-    });
-    if (!resp.ok) {
-      logger.warn({ status: resp.status }, "[H/L Seed] Yahoo request failed — H/L builds from live ticks");
-      return;
-    }
-    const json   = await resp.json() as Record<string, unknown>;
-    const result = (json as any)?.chart?.result?.[0];
-    const tsList = (result?.timestamp ?? []) as number[];
-    const qHigh  = (result?.indicators?.quote?.[0]?.high  ?? []) as (number | null)[];
-    const qLow   = (result?.indicators?.quote?.[0]?.low   ?? []) as (number | null)[];
-    const qClose = (result?.indicators?.quote?.[0]?.close ?? []) as (number | null)[];
-
-    const today = todayUTC();
-    let seedHigh: number | null = null;
-    let seedLow:  number | null = null;
-    let lastClose: number | null = null;   // most recent GC=F bar close (proxy for current futures price)
-
-    for (let i = 0; i < tsList.length; i++) {
-      const barDate = new Date(tsList[i] * 1000).toISOString().slice(0, 10);
-      if (barDate !== today) continue;
-      const h = qHigh[i], l = qLow[i], c = qClose[i];
-      if (h != null && h > 500 && (seedHigh == null || h > seedHigh)) seedHigh = h;
-      if (l != null && l > 500 && (seedLow  == null || l < seedLow))  seedLow  = l;
-      if (c != null && c > 500) lastClose = c;   // keep updating — last valid close wins
-    }
-
-    if (!seedHigh && !seedLow) {
-      logger.warn("[H/L Seed] No today bars found in Yahoo hourly data");
-      return;
-    }
-
-    // ── Basis correction for HIGH ─────────────────────────────────────────────
-    // GC=F futures trade at a small premium over OTC spot (XAU/USD).
-    // The daily HIGH is typically hit during the overnight Asian session when
-    // the GC=F-to-spot basis is ~$1–$2.  Yahoo data is stale relative to live
-    // OTC feeds (Swissquote), so dynamic basis computation yields a negative
-    // number — we instead apply the empirically observed fixed correction.
-    //
-    // Evidence (Dubai market, 2026-07-28):
-    //   GC=F hourly HIGH = 4,075.50  |  OTC spot HIGH = 4,074.02  → basis $1.48
-    //   GC=F hourly LOW  = 4,034.60  |  OTC spot LOW  = 4,034.56  → basis $0.04
-    //
-    // LOW is left unadjusted — GC=F low ≈ OTC spot low (< $0.10 off).
-    const GCF_HIGH_BASIS_CORRECTION = 1.50;   // $/oz; applied to HIGH only
-
-    const adjustedHigh = seedHigh != null ? seedHigh - GCF_HIGH_BASIS_CORRECTION : null;
-    const adjustedLow  = seedLow;   // No correction — GC=F LOW ≈ OTC spot LOW
-
-    // Yahoo seed is the authoritative H/L for the day (includes overnight bars).
-    // Always update HIGH to the basis-corrected seed — a previously stored HIGH
-    // may have been recorded before the correction was applied.
-    // For LOW, also always apply since the hourly bars are more complete than
-    // any partial accumulation from a short-lived prior session.
-    const today2 = todayUTC();
-    if (adjustedHigh != null) {
-      dailyHighUsdPerOz    = adjustedHigh;
-      dailyTrackingDateUTC = today2;
-    }
-    if (adjustedLow != null) {
-      // For LOW: take the minimum of seed vs any live-tick-accumulated low
-      // (live ticks may have caught a new low that Yahoo hasn't yet recorded)
-      if (dailyLowUsdPerOz == null || adjustedLow < dailyLowUsdPerOz) {
-        dailyLowUsdPerOz     = adjustedLow;
-        dailyTrackingDateUTC = today2;
-      }
-    }
-    saveDailyHL();
-
-    logger.info(
-      {
-        low:        dailyLowUsdPerOz?.toFixed(2)  ?? "—",
-        high:       dailyHighUsdPerOz?.toFixed(2) ?? "—",
-        correction: `-${GCF_HIGH_BASIS_CORRECTION.toFixed(2)} applied to HIGH`,
-      },
-      "[H/L Seed] H/L seeded from Yahoo GC=F hourly bars (basis-corrected)"
-    );
-  } catch (err) {
-    logger.warn({ err }, "[H/L Seed] Yahoo seed failed — H/L builds from live ticks");
-  }
-}
-
 // ── Midnight watchdog ─────────────────────────────────────────────────────────
-// Checks every minute; when UTC date flips, resets H/L and re-seeds LOW from
-// Yahoo so the new day starts with a reasonable low rather than the first tick.
+// Checks every minute; when UTC date flips, resets H/L so the new day starts
+// clean.  H/L builds organically from live Swissquote OTC ticks — no futures
+// seeding.  GC=F futures were removed because the basis vs OTC spot is
+// unpredictable (< $2 near contract expiry, > $50 after a roll).
 // ─────────────────────────────────────────────────────────────────────────────
-setInterval(async () => {
+setInterval(() => {
   const today = todayUTC();
   if (dailyTrackingDateUTC && dailyTrackingDateUTC !== today) {
     dailyTrackingDateUTC = today;
     dailyLowUsdPerOz     = null;
     dailyHighUsdPerOz    = null;
     saveDailyHL();
-    logger.info({ date: today }, "[UniRateAPI] Midnight UTC — daily H/L reset for new day");
-    await seedHLFromYahoo();
+    logger.info({ date: today }, "[H/L] Midnight UTC — daily H/L reset for new day");
   }
 }, 60_000);
 
@@ -571,25 +467,23 @@ export function triggerUniRatePoll(): void {
 }
 
 // ── Startup sequence ──────────────────────────────────────────────────────────
-// 1. Restore persisted H/L from disk (same day → restores accumulated range)
-// 2. Seed today's LOW from Yahoo Finance GC=F (fast, accurate ±$1 vs OTC)
-// 3. Fire first Swissquote poll (real bid/ask immediately available)
-// 4. Fire first UniRateAPI poll (confirmation + DB write)
-// 5. Schedule Swissquote every 15 s (primary fast-tick source)
-// 6. Schedule UniRateAPI every 90 s (confirmation + rate-limited DB writes)
+// 1. Restore today's H/L from disk (date-checked — stale day starts fresh)
+// 2. Fire first Swissquote poll (real OTC bid/ask immediately available)
+// 3. Fire first UniRateAPI poll (confirmation + DB write)
+// 4. Schedule Swissquote every 1 s (primary live-tick source)
+// 5. Schedule UniRateAPI every 90 s (confirmation + rate-limited DB writes)
+//
+// H/L is built purely from live Swissquote OTC ticks via trackDailyRange().
+// Yahoo GC=F futures seeding was removed: GC=F basis vs OTC spot ranges from
+// < $2 (near contract expiry) to > $50 (after roll), making any fixed
+// correction unreliable.  Accuracy: H/L tracks OTC spot exactly.
 // ─────────────────────────────────────────────────────────────────────────────
 async function startup(): Promise<void> {
   loadDailyHL();
-  await seedHLFromYahoo();           // seed today's H/L from hourly bars (basis-corrected)
-  await pollSwissquote();            // first real bid/ask tick (~instant)
-  await pollUniRate();               // confirmation poll
+  await pollSwissquote();                             // first real bid/ask tick (~instant)
+  await pollUniRate();                                // confirmation poll
   setInterval(pollSwissquote, SWISSQUOTE_POLL_MS);   // 1 s fast ticks
   scheduleNextPoll(activePollIntervalMs);             // 90 s confirmation
-  // Re-seed H/L from Yahoo every 10 minutes so new intraday lows/highs
-  // are captured without requiring a server restart.
-  setInterval(() => {
-    seedHLFromYahoo().catch((err: unknown) => logger.warn({ err }, "[H/L Seed] Periodic re-seed failed"));
-  }, 10 * 60_000);
 }
 
 startup().catch((err: unknown) => logger.warn({ err }, "[Startup] Startup sequence failed"));

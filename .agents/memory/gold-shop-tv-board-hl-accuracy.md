@@ -1,40 +1,48 @@
 ---
 name: Gold-shop TV board H/L accuracy
-description: How daily High/Low is seeded and corrected for the TV display board, and why UniRateAPI must not overwrite Swissquote prices.
+description: How daily High/Low is tracked for the TV display board — OTC spot ticks only, no futures seeding.
 ---
 
-## Daily H/L seeding (Yahoo GC=F hourly bars)
+## H/L strategy (current — Aug 2026)
 
-**Rule:** Use `interval=1h&range=2d&includePrePost=true` to get full 23-hour gold session bars (midnight UTC onward). Seed BOTH HIGH and LOW from today's bars, re-run every 10 minutes throughout the day to catch new intraday extremes.
+**Rule:** H/L is built **exclusively from live Swissquote OTC spot ticks** via `trackDailyRange(mid)`.
+No futures or external seeding. `loadDailyHL()` restores today's persisted H/L on restart (date-checked).
+At UTC midnight the watchdog resets H/L to null; the first Swissquote tick seeds both.
 
-**Why:** `interval=1d` only gives the regular session (04:00 UTC / 9:30 AM ET). `regularMarketDayHigh` includes the full session but is futures-inflated by ~$12. Hourly bars with `includePrePost=true` give the overnight Asian session high which matches OTC spot to within ~$1.5.
+**Why:**
+- Yahoo GC=F futures basis vs OTC spot is **unpredictable**: ~$1.50 in late July 2026 (near contract expiry), but $55+ in early August 2026 (after roll to next delivery month).
+- A fixed `−$1.50` correction was calibrated on ONE day and broke completely after the futures roll.
+- No free OTC spot H/L API was found to work: GoldAPI.io returned 403 (invalid key), XAUUSD=X returns no hourly bars, Kitco 404, metals.live broken.
+- Best approach: track H/L from the Swissquote OTC feed that drives all other prices — guaranteed to be consistent.
 
-**How to apply:** Call `seedHLFromYahoo()` in startup AND via `setInterval(seedHLFromYahoo, 10 * 60_000)`. Use `range=2d` to ensure today's bars appear. Filter bars by today's UTC date.
+**How to apply:**
+- Do NOT reinstate Yahoo GC=F / any futures seeding for H/L.
+- `trackDailyRange(mid)` is called on each Swissquote tick (every 1 s) → accurate intraday H/L.
+- `saveDailyHL()` writes `{ date, low, high }` to `daily_hl.json` on every change.
+- `loadDailyHL()` on restart: restores if `state.date === todayUTC()`, else starts fresh (both null).
+- On fresh start, H/L begins at the first Swissquote tick value and expands naturally.
+- On production deployment (24/7 uptime), H/L is captured for the full 23-hour OTC session.
 
 ---
 
-## GC=F futures basis correction (HIGH only)
+## UniRateAPI must NOT overwrite Swissquote prices (display)
 
-**Rule:** Subtract `GCF_HIGH_BASIS_CORRECTION = 1.50` USD/oz from the seeded HIGH. Do NOT adjust LOW.
+**Rule:** In `pollUniRate()`, only assign to `liveSpot` when `lastSwissquoteTick` is null or older than `SWISSQUOTE_STALE_MS` (30 s). Otherwise, only call `trackDailyRange()` and do the DB write.
 
-**Why:** Empirical measurement (Dubai market, 2026-07-28): GC=F hourly HIGH = 4,075.50 vs OTC spot HIGH = 4,074.02 → basis +$1.48. LOW discrepancy was only $0.04. The overnight Asian session has the largest futures premium (~$1–2) which is why HIGH is inflated but LOW is not.
+**Why:** UniRateAPI can lag by $2–$20 depending on day. On 2026-07-28 it was stuck at $4,042 while Swissquote showed $4,044–$4,047. Would cause visible 1-second dip every 90 s.
 
-**How to apply:** `adjustedHigh = seedHigh - GCF_HIGH_BASIS_CORRECTION`. Always overwrite `dailyHighUsdPerOz` with the adjusted value (don't use "only expand" merge — stored value may predate the correction being added).
+**How to apply:** Track `let lastSwissquoteTick: Date | null`. Set on each successful Swissquote tick. Check `Date.now() - lastSwissquoteTick.getTime() > SWISSQUOTE_STALE_MS` before assigning `liveSpot` in UniRateAPI handler.
 
 ---
 
-## UniRateAPI must NOT overwrite Swissquote prices
+## GC=F futures basis — NEVER use for OTC spot H/L
 
-**Rule:** In `pollUniRate()`, only update `liveSpot` when `lastSwissquoteTick` is null or older than `SWISSQUOTE_STALE_MS` (30 s). Otherwise, just track H/L and write to DB — do NOT broadcast or update the display price.
-
-**Why:** UniRateAPI has been observed returning a stale price (e.g., 4,042.23 consistently for hours while the actual market was at 4,046+). Every 90 s it would overwrite Swissquote's accurate data, causing a ~$0.27/g dip in item prices for ~1 second. Swissquote (institutional OTC XAU/USD, 1 s interval, 0.50 spread) is always more accurate than UniRateAPI.
-
-**How to apply:** Track `let lastSwissquoteTick: Date | null = null`. Set it on each successful Swissquote tick. In UniRateAPI handler: check `Date.now() - lastSwissquoteTick.getTime() > SWISSQUOTE_STALE_MS` before assigning to `liveSpot`.
+**Warning:** GC=F futures price ≠ OTC spot XAU/USD. Basis varies from < $2 (days before contract expiry) to > $50 (after roll to next delivery month). Applying a fixed correction (e.g. −$1.50) will be accurate for one day and completely wrong after the next roll. This caused HIGH=4,133 (futures) when actual OTC spot was 4,058–4,062 on 2026-08-03.
 
 ---
 
 ## Price source priority
 
-1. **Swissquote** (primary): institutional OTC XAU/USD, bid/ask, 1 s intervals. Always used for display when active.
-2. **UniRateAPI** (fallback only): used for display only when Swissquote has been silent >30 s. Also: H/L `trackDailyRange()` + DB writes.
-3. **Yahoo GC=F hourly bars** (seed): H/L initialization at startup and every 10 min. Basis-corrected for HIGH.
+1. **Swissquote** (primary): institutional OTC XAU/USD, bid/ask, 1 s intervals. Drives display + H/L tracking.
+2. **UniRateAPI** (fallback): display only when Swissquote silent >30 s. Also: `trackDailyRange()` + DB writes.
+3. No futures seeding (removed permanently).
