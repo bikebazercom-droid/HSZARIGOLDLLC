@@ -327,36 +327,50 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
           </span>
         </div>
 
-        {/* ── 2 × 2 grid: BID / ASK / LOW / HIGH ──────────────────────────── */}
+        {/* ── 2 × 2 grid: HIGH / LOW / ASK / BID ──────────────────────────── */}
         <div className="grid grid-cols-2" style={{ gap: "clamp(0.4rem,0.9vw,0.85rem)" }}>
 
-          {/* BID PRICE (oz) */}
+          {/* HIGH */}
           <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
-              <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
-              <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                BID PRICE (oz)
-              </span>
-              <span style={arrowStyle(bid.dir, GREEN)}>
-                {bid.dir === "up" ? "▲" : bid.dir === "down" ? "▼" : ""}
-              </span>
+            <div style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+              ↑ High
             </div>
             <div
-              key={bid.key}
               className="tabular-nums"
               style={{
                 color: GREEN,
                 fontFamily: "monospace",
                 fontWeight: 900,
-                fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
+                fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
                 lineHeight: 1,
                 letterSpacing: "-0.02em",
                 textAlign: "center",
-                textShadow: `0 2px 20px ${GREEN}44`,
-                ...priceAnim(bid.dir, true),
+                textShadow: `0 2px 16px ${GREEN}44`,
               }}
             >
-              {fmt(bidUsdPerOz, 2)}
+              {fmt(dailyHighUsdPerOz, 2)}
+            </div>
+          </div>
+
+          {/* LOW */}
+          <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
+            <div style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+              ↓ Low
+            </div>
+            <div
+              className="tabular-nums"
+              style={{
+                color: RED,
+                fontFamily: "monospace",
+                fontWeight: 900,
+                fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
+                lineHeight: 1,
+                letterSpacing: "-0.02em",
+                textAlign: "center",
+                textShadow: `0 2px 16px ${RED}44`,
+              }}
+            >
+              {fmt(dailyLowUsdPerOz, 2)}
             </div>
           </div>
 
@@ -390,47 +404,33 @@ function GoldSpotWidget({ askUsdPerOz, bidUsdPerOz, dailyLowUsdPerOz, dailyHighU
             </div>
           </div>
 
-          {/* LOW */}
-          <div style={{ ...BOX_BASE, border: `1px solid ${RED}44` }}>
-            <div style={{ color: RED, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
-              ↓ Low
-            </div>
-            <div
-              className="tabular-nums"
-              style={{
-                color: RED,
-                fontFamily: "monospace",
-                fontWeight: 900,
-                fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
-                lineHeight: 1,
-                letterSpacing: "-0.02em",
-                textAlign: "center",
-                textShadow: `0 2px 16px ${RED}44`,
-              }}
-            >
-              {fmt(dailyLowUsdPerOz, 2)}
-            </div>
-          </div>
-
-          {/* HIGH */}
+          {/* BID PRICE (oz) */}
           <div style={{ ...BOX_BASE, border: `1px solid ${GREEN}44` }}>
-            <div style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.46vh + 0.46vw),0.85rem)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
-              ↑ High
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3em" }}>
+              <span style={{ color: GREEN, fontWeight: 900, fontSize: "clamp(0.85rem,1.3vh,1.1rem)", lineHeight: 1 }}>$</span>
+              <span style={{ color: GREEN, fontWeight: 800, fontSize: "clamp(0.7rem,calc(0.42vh + 0.42vw),0.8rem)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                BID PRICE (oz)
+              </span>
+              <span style={arrowStyle(bid.dir, GREEN)}>
+                {bid.dir === "up" ? "▲" : bid.dir === "down" ? "▼" : ""}
+              </span>
             </div>
             <div
+              key={bid.key}
               className="tabular-nums"
               style={{
                 color: GREEN,
                 fontFamily: "monospace",
                 fontWeight: 900,
-                fontSize: "clamp(1.6rem,calc(1.5vh + 1.5vw),3rem)",
+                fontSize: "clamp(2rem,calc(2vh + 2vw),4rem)",
                 lineHeight: 1,
                 letterSpacing: "-0.02em",
                 textAlign: "center",
-                textShadow: `0 2px 16px ${GREEN}44`,
+                textShadow: `0 2px 20px ${GREEN}44`,
+                ...priceAnim(bid.dir, true),
               }}
             >
-              {fmt(dailyHighUsdPerOz, 2)}
+              {fmt(bidUsdPerOz, 2)}
             </div>
           </div>
 
