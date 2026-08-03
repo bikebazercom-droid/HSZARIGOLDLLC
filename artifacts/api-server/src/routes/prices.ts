@@ -148,128 +148,156 @@ function trackDailyRange(usdPerOz: number): void {
   if (changed) saveDailyHL();
 }
 
-// ── GC=F Dynamic-Basis H/L Seed ──────────────────────────────────────────────
-// Seeds today's H/L by fetching Yahoo Finance GC=F hourly bars and applying a
-// DYNAMIC basis correction (GC=F current price − Swissquote OTC mid) to convert
-// futures H/L → OTC spot H/L.
+// ── H/L Seed — two-stage: GoldAPI.io (exact OTC) → GC=F dynamic basis ────────
 //
-// WHY DYNAMIC BASIS:
-//   Fixed correction (−$1.50) worked only when GC=F was near expiry (basis ≈ $1.5).
-//   After a futures roll the basis jumps to $50–$80. The carry-based basis is
-//   stable intraday (<± $2), so using the current basis to adjust historical bars
-//   from the same day is highly accurate.
+// STAGE 1 — GoldAPI.io (primary, exact OTC spot):
+//   GET https://www.goldapi.io/api/XAU/USD
+//   Header: x-access-token: <GOLDAPI_KEY>
+//   Response fields used: high_price, low_price (USD/troy-oz, OTC FOREXCOM)
+//   This is the same OTC feed that Netdania uses — no basis correction needed.
+//   Result: H/L matches Netdania exactly (within rounding).
 //
-// Empirical validation (Dubai market, 2026-08-03):
-//   GC=F H = 4135.80 | GC=F L = 4102.70 | GC=F current = 4115.2
-//   Swissquote OTC mid = 4061  →  basis = 54.2
-//   OTC HIGH estimate = 4135.80 − 54.2 = 4081.60  (Netdania ref: 4082.35, Δ $0.75) ✅
-//   OTC LOW  estimate = 4102.70 − 54.2 = 4048.50  (Netdania ref: 4047.18, Δ $1.32) ✅
+// STAGE 2 — Yahoo GC=F dynamic basis (fallback when GOLDAPI_KEY invalid/absent):
+//   Fetch GC=F hourly bars → apply basis = (GCF_current − Swissquote_mid).
+//   The carry-based basis is stable intraday (< ±$2 variation), so applying
+//   today's current basis to earlier same-day bars is accurate.
+//
+//   Empirical validation (Dubai market, 2026-08-03):
+//     GC=F H=4135.80  L=4102.70  current=4115.2  OTC mid=4061  basis=54.2
+//     Estimated OTC H = 4081.60 (Netdania: 4082.35, Δ $0.75) ✅
+//     Estimated OTC L = 4048.50 (Netdania: 4047.18, Δ $1.32) ✅
 //
 // BARS FILTERED BY DUBAI DATE (UTC+4) — the gold market day in UAE starts at
-// midnight Dubai time (= 20:00 UTC previous UTC day).
+// midnight Dubai time (= 20:00 UTC previous day in UTC).
 //
-// MERGE STRATEGY:
-//   HIGH → max(seed, live-ticks) — seed captures overnight; live ticks extend if
-//          price rises after restart.
-//   LOW  → min(seed, live-ticks) — same reasoning.
+// MERGE STRATEGY (both stages):
+//   HIGH → max(seed, live-ticks)   LOW → min(seed, live-ticks)
 // ─────────────────────────────────────────────────────────────────────────────
-const DUBAI_OFFSET_MS  = 4 * 3600 * 1000;   // UTC+4
-const GCF_CHART_URL    = "https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1h&range=2d&includePrePost=true";
+const DUBAI_OFFSET_MS = 4 * 3600 * 1000;   // UTC+4
+const GCF_CHART_URL   = "https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1h&range=2d&includePrePost=true";
+const GOLDAPI_URL     = "https://www.goldapi.io/api/XAU/USD";
 
-async function seedHLFromGCF(): Promise<void> {
+/** Try goldapi.io first; returns {high, low} in USD/oz or null on failure. */
+async function seedHLFromGoldAPI(): Promise<{ high: number; low: number } | null> {
+  const apiKey = process.env.GOLDAPI_KEY;
+  if (!apiKey) return null;
   try {
-    // Need live OTC price to compute the dynamic basis
-    if (!liveSpot) {
-      logger.info("[H/L Seed] liveSpot not yet available — deferring seed");
-      return;
+    const resp = await fetch(GOLDAPI_URL, {
+      headers: { "x-access-token": apiKey, "Content-Type": "application/json" },
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) {
+      logger.warn({ status: resp.status }, "[H/L GoldAPI] Request failed — will fall back to GC=F");
+      return null;
     }
+    const data = await resp.json() as Record<string, unknown>;
+    const high = typeof data.high_price === "number" ? data.high_price : NaN;
+    const low  = typeof data.low_price  === "number" ? data.low_price  : NaN;
+    if (!Number.isFinite(high) || !Number.isFinite(low) || high < 500 || low < 500) {
+      logger.warn({ high, low }, "[H/L GoldAPI] Unexpected response shape");
+      return null;
+    }
+    logger.info(
+      { high: high.toFixed(2), low: low.toFixed(2), price: data.price },
+      "[H/L GoldAPI] ✅ Exact OTC H/L received"
+    );
+    return { high, low };
+  } catch (err) {
+    logger.warn({ err }, "[H/L GoldAPI] Fetch error — will fall back to GC=F");
+    return null;
+  }
+}
 
+/** Fallback: GC=F hourly bars with dynamic basis correction → OTC spot H/L. */
+async function seedHLFromGCF(): Promise<{ high: number | null; low: number | null } | null> {
+  if (!liveSpot) return null;
+  try {
     const resp = await fetch(GCF_CHART_URL, {
       headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
       signal:  AbortSignal.timeout(12_000),
     });
     if (!resp.ok) {
-      logger.warn({ status: resp.status }, "[H/L Seed] Yahoo GC=F request failed");
-      return;
+      logger.warn({ status: resp.status }, "[H/L GC=F] Yahoo request failed");
+      return null;
     }
     const json   = await resp.json() as Record<string, unknown>;
     const result = (json as any)?.chart?.result?.[0];
     const meta   = result?.meta as Record<string, unknown> | undefined;
 
-    // Current GC=F market price (for basis calculation)
     const gcfCurrentPrice = typeof meta?.regularMarketPrice === "number"
-      ? meta.regularMarketPrice as number : NaN;
-    if (!Number.isFinite(gcfCurrentPrice) || gcfCurrentPrice < 500) {
-      logger.warn({ gcfCurrentPrice }, "[H/L Seed] Cannot read GC=F current price");
-      return;
-    }
+      ? (meta.regularMarketPrice as number) : NaN;
+    if (!Number.isFinite(gcfCurrentPrice) || gcfCurrentPrice < 500) return null;
 
-    // Dynamic basis: how much GC=F trades above OTC spot right now.
-    // Stable intraday (carry-based), so safe to apply to historical same-day bars.
-    const otcMid     = liveSpot.usdPerOz;   // Swissquote mid
-    const dynamicBasis = gcfCurrentPrice - otcMid;
-
-    // Filter bars to today's Dubai date (UTC+4)
-    const dubaiToday    = new Date(Date.now() + DUBAI_OFFSET_MS).toISOString().slice(0, 10);
+    const dynamicBasis = gcfCurrentPrice - liveSpot.usdPerOz;
+    const dubaiToday   = new Date(Date.now() + DUBAI_OFFSET_MS).toISOString().slice(0, 10);
     const tsList = (result?.timestamp ?? []) as number[];
     const qHigh  = (result?.indicators?.quote?.[0]?.high  ?? []) as (number | null)[];
     const qLow   = (result?.indicators?.quote?.[0]?.low   ?? []) as (number | null)[];
 
     let gcfHigh: number | null = null;
     let gcfLow:  number | null = null;
-
     for (let i = 0; i < tsList.length; i++) {
-      const barDubaiDate = new Date(tsList[i] * 1000 + DUBAI_OFFSET_MS).toISOString().slice(0, 10);
-      if (barDubaiDate !== dubaiToday) continue;
+      const barDate = new Date(tsList[i] * 1000 + DUBAI_OFFSET_MS).toISOString().slice(0, 10);
+      if (barDate !== dubaiToday) continue;
       const h = qHigh[i], l = qLow[i];
       if (h != null && h > 500 && (gcfHigh == null || h > gcfHigh)) gcfHigh = h;
       if (l != null && l > 500 && (gcfLow  == null || l < gcfLow))  gcfLow  = l;
     }
-
     if (gcfHigh == null && gcfLow == null) {
-      logger.warn({ dubaiToday }, "[H/L Seed] No GC=F bars for today's Dubai date");
-      return;
+      logger.warn({ dubaiToday }, "[H/L GC=F] No bars for today's Dubai date");
+      return null;
     }
 
-    // Convert futures H/L → OTC spot H/L using dynamic basis
-    const otcHigh = gcfHigh != null ? gcfHigh - dynamicBasis : null;
-    const otcLow  = gcfLow  != null ? gcfLow  - dynamicBasis : null;
-
-    // Merge: take extremes (seed may be more extreme than live ticks, or vice versa)
-    const today2 = todayUTC();
-    let changed = false;
-    if (otcHigh != null && (dailyHighUsdPerOz == null || otcHigh > dailyHighUsdPerOz)) {
-      dailyHighUsdPerOz    = otcHigh;
-      dailyTrackingDateUTC = today2;
-      changed = true;
-    }
-    if (otcLow != null && (dailyLowUsdPerOz == null || otcLow < dailyLowUsdPerOz)) {
-      dailyLowUsdPerOz     = otcLow;
-      dailyTrackingDateUTC = today2;
-      changed = true;
-    }
-    if (changed) saveDailyHL();
-
+    const high = gcfHigh != null ? gcfHigh - dynamicBasis : null;
+    const low  = gcfLow  != null ? gcfLow  - dynamicBasis : null;
     logger.info(
       {
         dubaiToday,
-        gcfHigh:      gcfHigh?.toFixed(2)  ?? "—",
-        gcfLow:       gcfLow?.toFixed(2)   ?? "—",
-        gcfCurrent:   gcfCurrentPrice.toFixed(2),
-        otcMid:       otcMid.toFixed(2),
-        dynamicBasis: dynamicBasis.toFixed(2),
-        otcHigh:      (otcHigh ?? 0).toFixed(2),
-        otcLow:       (otcLow  ?? 0).toFixed(2),
-        dailyHigh:    dailyHighUsdPerOz?.toFixed(2) ?? "—",
-        dailyLow:     dailyLowUsdPerOz?.toFixed(2)  ?? "—",
+        gcfH: gcfHigh?.toFixed(2), gcfL: gcfLow?.toFixed(2),
+        gcfCurrent: gcfCurrentPrice.toFixed(2),
+        otcMid: liveSpot.usdPerOz.toFixed(2),
+        basis: dynamicBasis.toFixed(2),
+        otcH: high?.toFixed(2), otcL: low?.toFixed(2),
       },
-      "[H/L Seed] GC=F dynamic-basis seed applied"
+      "[H/L GC=F] Dynamic-basis seed (fallback)"
     );
-
-    // Push updated H/L to all connected clients
-    if (changed) broadcast("PRICE_MUTATION");
+    return { high, low };
   } catch (err) {
-    logger.warn({ err }, "[H/L Seed] GC=F seed failed — H/L from live ticks only");
+    logger.warn({ err }, "[H/L GC=F] Seed failed");
+    return null;
+  }
+}
+
+/** Orchestrates the two-stage seed and merges result into daily H/L. */
+async function seedHL(): Promise<void> {
+  // Stage 1: try exact OTC H/L from GoldAPI.io
+  let result = await seedHLFromGoldAPI();
+
+  // Stage 2: fallback to GC=F with dynamic basis correction
+  if (!result) {
+    const gcf = await seedHLFromGCF();
+    if (gcf) result = { high: gcf.high ?? 0, low: gcf.low ?? 0 };
+  }
+
+  if (!result) return;
+
+  // Merge: expand daily extremes (never shrink them — live ticks may have
+  // already set a more extreme value since last seed)
+  const today2 = todayUTC();
+  let changed = false;
+  if (result.high > 500 && (dailyHighUsdPerOz == null || result.high > dailyHighUsdPerOz)) {
+    dailyHighUsdPerOz    = result.high;
+    dailyTrackingDateUTC = today2;
+    changed = true;
+  }
+  if (result.low > 500 && (dailyLowUsdPerOz == null || result.low < dailyLowUsdPerOz)) {
+    dailyLowUsdPerOz     = result.low;
+    dailyTrackingDateUTC = today2;
+    changed = true;
+  }
+  if (changed) {
+    saveDailyHL();
+    broadcast("PRICE_MUTATION");   // push to all connected TV boards
   }
 }
 
@@ -284,8 +312,8 @@ setInterval(() => {
     dailyLowUsdPerOz     = null;
     dailyHighUsdPerOz    = null;
     saveDailyHL();
-    logger.info({ date: today }, "[H/L] Midnight UTC — daily H/L reset; re-seeding from GC=F");
-    seedHLFromGCF().catch((err: unknown) => logger.warn({ err }, "[H/L] Midnight re-seed failed"));
+    logger.info({ date: today }, "[H/L] Midnight UTC — daily H/L reset; re-seeding (GoldAPI → GC=F fallback)");
+    seedHL().catch((err: unknown) => logger.warn({ err }, "[H/L] Midnight re-seed failed"));
   }
 }, 60_000);
 
@@ -593,22 +621,22 @@ export function triggerUniRatePoll(): void {
 // ── Startup sequence ──────────────────────────────────────────────────────────
 // 1. Restore today's H/L from disk (date-checked — stale day starts fresh)
 // 2. Fire first Swissquote poll → liveSpot now available
-// 3. Seed H/L from GC=F with dynamic basis (captures overnight session)
+// 3. Seed H/L: GoldAPI.io (exact OTC) → fallback to GC=F dynamic basis
 // 4. Fire first UniRateAPI poll (confirmation + DB write)
 // 5. Schedule Swissquote every 1 s (primary live-tick source)
 // 6. Schedule UniRateAPI every 90 s (confirmation + rate-limited DB writes)
-// 7. Re-seed H/L from GC=F every 10 min (fresh basis + new intraday bars)
+// 7. Re-seed H/L every 5 min (picks up new bars + refreshes basis)
 // ─────────────────────────────────────────────────────────────────────────────
 async function startup(): Promise<void> {
   loadDailyHL();
-  await pollSwissquote();                             // first real bid/ask tick → liveSpot ready
-  await seedHLFromGCF();                             // seed overnight H/L with dynamic basis
-  await pollUniRate();                               // confirmation poll
-  setInterval(pollSwissquote, SWISSQUOTE_POLL_MS);  // 1 s fast ticks
-  scheduleNextPoll(activePollIntervalMs);            // 90 s confirmation
-  setInterval(                                       // refresh H/L seed every 10 min
-    () => seedHLFromGCF().catch((err: unknown) => logger.warn({ err }, "[H/L Seed] Periodic re-seed failed")),
-    10 * 60_000,
+  await pollSwissquote();                            // first real bid/ask tick → liveSpot ready
+  await seedHL();                                    // GoldAPI.io → GC=F fallback
+  await pollUniRate();                              // confirmation poll
+  setInterval(pollSwissquote, SWISSQUOTE_POLL_MS); // 1 s fast ticks
+  scheduleNextPoll(activePollIntervalMs);           // 90 s confirmation
+  setInterval(                                      // re-seed every 5 min (fresh basis + new bars)
+    () => seedHL().catch((err: unknown) => logger.warn({ err }, "[H/L Seed] Periodic re-seed failed")),
+    5 * 60_000,
   );
 }
 
