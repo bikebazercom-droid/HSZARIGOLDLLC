@@ -412,7 +412,7 @@ export default function InvoiceDetail() {
         </div>
 
         {/* Amount in Words + Payment Mode */}
-        <div style={{ margin: "2px 16px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
+        <div style={{ margin: "28px 16px 2px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #eee", gap: "8px" }}>
             <span style={{ fontSize: "14px" }}>💰</span>
             <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Amount In Words (AED):</span>
