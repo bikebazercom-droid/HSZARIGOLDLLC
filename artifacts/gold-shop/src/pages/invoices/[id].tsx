@@ -127,10 +127,14 @@ export default function InvoiceDetail() {
   const handleDownloadPdf = async () => {
     if (!invoiceRef.current) return;
     const html2pdf = (await import("html2pdf.js")).default;
+    // A4 at 96 dpi: 210mm = 794px wide, 297mm = 1123px tall.
+    // Setting both `height` and `windowHeight` to 1123 crops the html2canvas
+    // capture to exactly one A4 page — jsPDF then maps that image to 210×297mm
+    // with no pagination and no second blank page.
+    const A4_W_PX = 794;
+    const A4_H_PX = Math.round(A4_W_PX * 297 / 210); // 1123
     html2pdf()
       .set({
-        // Zero margins — the invoice div itself has 15mm padding for safe
-        // boundary, so no additional pdf-level margin is needed.
         margin: [0, 0, 0, 0],
         filename: `Invoice-${invoice.invoiceNumber}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
@@ -138,9 +142,9 @@ export default function InvoiceDetail() {
           scale: 2,
           useCORS: true,
           logging: false,
-          // Force html2canvas to render at A4 width (210mm @ 96 dpi ≈ 794px)
-          // regardless of the current browser viewport width.
-          windowWidth: 794,
+          windowWidth: A4_W_PX,
+          windowHeight: A4_H_PX,
+          height: A4_H_PX,      // crop canvas to exactly 1 A4 page height
           scrollX: 0,
           scrollY: 0,
         },
