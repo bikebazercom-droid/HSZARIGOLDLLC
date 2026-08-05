@@ -75,6 +75,7 @@ const LIVE_ASSET_DESCRIPTIONS = [
   "GOLD (0.9999)",
   "KG BAR (0.9999)",
   "KG BAR (0.995)",
+  "995",
   "Gold Jewelry 22K",
   "Gold Jewelry 21K",
   "Gold Jewelry 18K",
@@ -103,6 +104,7 @@ const DESC_TO_PURITY: Record<string, string> = {
   "TT. BAR (0.9999)": "0.9999",
   "GOLD (0.9999)":    "0.9999",
   "KG BAR (0.995)":   "0.995",
+  "995":              "0.995",
   "KG BAR (0.9999)":  "0.9999",
   "Gold Jewelry 22K": "0.916",
   "Gold Jewelry 21K": "0.875",
@@ -149,7 +151,7 @@ const GOLD_DESCS = new Set([
 ]);
 const TT_BAR_DESCS = new Set([
   "TT. BAR (0.995)", "TT. BAR (0.9999)", "TT. BAR", "TT. BAR (0.999)",
-  "TT. BAR 995", "TT. BAR 24K", "Ten Tola Bar TTB",
+  "TT. BAR 995", "TT. BAR 24K", "Ten Tola Bar TTB", "995",
 ]);
 const KG_BAR_DESCS = new Set([
   "KG BAR (0.995)", "KG BAR", "KG BAR 995", "KG. BAR", "Kilo Bar 995 1KG",
