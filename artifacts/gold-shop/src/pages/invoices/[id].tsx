@@ -151,6 +151,17 @@ export default function InvoiceDetail() {
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       })
       .from(invoiceRef.current)
+      .toPdf()
+      .get("pdf")
+      .then((pdf: any) => {
+        // Hard guarantee: delete any pages beyond page 1 so the downloaded
+        // PDF is always exactly one A4 page (kills the trailing blank page
+        // that pagination rounding sometimes produces).
+        const totalPages = pdf.internal.getNumberOfPages();
+        for (let i = totalPages; i > 1; i--) {
+          pdf.deletePage(i);
+        }
+      })
       .save();
   };
 
