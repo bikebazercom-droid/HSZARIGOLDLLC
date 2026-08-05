@@ -84,6 +84,13 @@ export default function AdminUsersPanel() {
 
   useEffect(() => { load(); }, []);
 
+  // Reload when another device/session modifies users (broadcast via socket)
+  useEffect(() => {
+    const onChanged = () => { load(); };
+    window.addEventListener("admin-users-changed", onChanged);
+    return () => window.removeEventListener("admin-users-changed", onChanged);
+  }, []);
+
   const openCreate = () => {
     setEditUser(null);
     setForm({ fullName: "", mobile: "", pin: "", role: "staff" });

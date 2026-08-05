@@ -11,6 +11,7 @@ import {
   getListPriceItemsQueryKey,
   getListProductsQueryKey,
   getGetSettingsQueryKey,
+  getListCustomersQueryKey,
 } from "@workspace/api-client-react";
 
 // Module-level singleton — one socket shared across all hook instances.
@@ -73,16 +74,34 @@ export function useAdminSocket(): void {
       queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
     }
 
+    function onCustomerMutation() {
+      // Invalidate every customers-related query (list + individual detail)
+      queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      queryClient.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/customers"),
+      });
+    }
+
+    function onUserMutation() {
+      // The User Management page uses local state (not react-query) —
+      // notify it via a window event so it can reload its list.
+      window.dispatchEvent(new CustomEvent("admin-users-changed"));
+    }
+
     sock.on("INVOICE_MUTATION",  onInvoiceMutation);
     sock.on("PRICE_MUTATION",    onPriceMutation);
     sock.on("PRODUCT_MUTATION",  onProductMutation);
     sock.on("SETTINGS_MUTATION", onSettingsMutation);
+    sock.on("CUSTOMER_MUTATION", onCustomerMutation);
+    sock.on("USER_MUTATION",     onUserMutation);
 
     return () => {
       sock.off("INVOICE_MUTATION",  onInvoiceMutation);
       sock.off("PRICE_MUTATION",    onPriceMutation);
       sock.off("PRODUCT_MUTATION",  onProductMutation);
       sock.off("SETTINGS_MUTATION", onSettingsMutation);
+      sock.off("CUSTOMER_MUTATION", onCustomerMutation);
+      sock.off("USER_MUTATION",     onUserMutation);
     };
   }, [user, queryClient]);
 }

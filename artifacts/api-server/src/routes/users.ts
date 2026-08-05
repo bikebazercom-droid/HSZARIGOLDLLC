@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth";
+import { broadcast } from "../lib/socket.js";
 
 const router: IRouter = Router();
 
@@ -66,6 +67,7 @@ router.post("/admin/users", requireAdmin, async (req, res): Promise<void> => {
       createdAt: usersTable.createdAt,
     });
 
+  broadcast("USER_MUTATION");
   res.status(201).json({ ...user, createdAt: user.createdAt.toISOString() });
 });
 
@@ -110,6 +112,7 @@ router.put("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => 
     return;
   }
 
+  broadcast("USER_MUTATION");
   res.json({ ...user, createdAt: user.createdAt.toISOString() });
 });
 
@@ -122,6 +125,7 @@ router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> 
   }
 
   await db.delete(usersTable).where(eq(usersTable.id, id));
+  broadcast("USER_MUTATION");
   res.sendStatus(204);
 });
 

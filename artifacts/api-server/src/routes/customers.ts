@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql } from "drizzle-orm";
 import { db, customersTable, invoicesTable } from "@workspace/db";
+import { broadcast } from "../lib/socket.js";
 import {
   ListCustomersQueryParams,
   CreateCustomerBody,
@@ -71,6 +72,7 @@ router.post("/customers", async (req, res): Promise<void> => {
   }
 
   const [customer] = await db.insert(customersTable).values(parsed.data).returning();
+  broadcast("CUSTOMER_MUTATION");
   res.status(201).json(CreateCustomerResponse.parse({ ...customer, createdAt: customer.createdAt.toISOString() }));
 });
 
@@ -116,6 +118,7 @@ router.put("/customers/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  broadcast("CUSTOMER_MUTATION");
   res.json(UpdateCustomerResponse.parse({ ...customer, createdAt: customer.createdAt.toISOString() }));
 });
 
@@ -128,6 +131,7 @@ router.delete("/customers/:id", async (req, res): Promise<void> => {
   }
 
   await db.delete(customersTable).where(eq(customersTable.id, params.data.id));
+  broadcast("CUSTOMER_MUTATION");
   res.sendStatus(204);
 });
 
