@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   useGetDashboardKpis, getGetDashboardKpisQueryKey,
   useGetDashboardSummaryCards, getGetDashboardSummaryCardsQueryKey,
+  useListStockLevels, getListStockLevelsQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
@@ -21,6 +22,15 @@ import {
   Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote, Package, Medal,
   Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown, FileSpreadsheet,
 } from "lucide-react";
+
+const STOCK_LEVEL_CATEGORIES: [string, string][] = [
+  ["gold", "GOLD"],
+  ["tt_bar", "TT Bar"],
+  ["kg_bar", "KG Bar"],
+  ["995", "995"],
+  ["gold_jewelry_22k", "Gold Jewelry 22K"],
+  ["silver", "Silver"],
+];
 
 const STATEMENT_CATEGORIES: [string, string][] = [
   ["all", "All Categories"],
@@ -65,6 +75,9 @@ export default function Dashboard() {
   });
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummaryCards({
     query: { queryKey: getGetDashboardSummaryCardsQueryKey() },
+  });
+  const { data: stockLevels, isLoading: levelsLoading } = useListStockLevels({
+    query: { queryKey: getListStockLevelsQueryKey() },
   });
   const todayDate = format(new Date(), "MMMM d, yyyy");
 
@@ -278,6 +291,24 @@ export default function Dashboard() {
             </div>
           </>
         )}
+      </div>
+
+      {/* Per-category live stock boxes */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        {levelsLoading || !stockLevels
+          ? [...Array(6)].map((_, i) => <Skeleton key={i} className="h-20" />)
+          : STOCK_LEVEL_CATEGORIES.map(([cat, label]) => {
+              const grams = stockLevels.find((l) => l.category === cat)?.weightGrams ?? 0;
+              return (
+                <Card key={cat}>
+                  <CardContent className="px-4 py-3">
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <p className={`text-lg font-bold mt-0.5 ${grams < 0 ? "text-destructive" : ""}`}>{fmtG(grams)} g</p>
+                    <p className="text-[11px] text-muted-foreground">{kg(grams)} kg</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
       </div>
 
       {/* Time range filter */}
