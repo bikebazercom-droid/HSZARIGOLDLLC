@@ -10,8 +10,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PurchaseDrawer, StockLedger } from "./stock";
 
 export default function Products() {
+  const [mainTab, setMainTab] = useState<string>("products");
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [category, setCategory] = useState<string>("all");
   const { data: products, isLoading } = useListProducts(
     { category: category === "all" ? undefined : category },
@@ -46,13 +49,29 @@ export default function Products() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight text-primary">Products</h1>
-        <Link href="/products/new">
-          <Button><Plus className="w-4 h-4 mr-2" /> Add Product</Button>
-        </Link>
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <h1 className="text-3xl font-bold tracking-tight text-primary">Products &amp; Inventory</h1>
+        <div className="flex gap-2">
+          <Link href="/products/new">
+            <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> New Product</Button>
+          </Link>
+          <Button onClick={() => setDrawerOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Product</Button>
+        </div>
       </div>
 
+      <PurchaseDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+
+      <Tabs value={mainTab} onValueChange={setMainTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="products">Products</TabsTrigger>
+          <TabsTrigger value="stock">Purchase History / Supplier Ledger</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="stock">
+          <StockLedger />
+        </TabsContent>
+
+        <TabsContent value="products" className="space-y-4">
       <Tabs defaultValue="all" value={category} onValueChange={setCategory}>
         <TabsList className="mb-4">
           {categories.map(c => (
@@ -115,6 +134,8 @@ export default function Products() {
             </TableBody>
           </Table>
         </div>
+      </Tabs>
+        </TabsContent>
       </Tabs>
     </div>
   );

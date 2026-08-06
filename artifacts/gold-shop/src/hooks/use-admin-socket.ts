@@ -12,6 +12,9 @@ import {
   getListProductsQueryKey,
   getGetSettingsQueryKey,
   getListCustomersQueryKey,
+  getListStockLevelsQueryKey,
+  getListStockPurchasesQueryKey,
+  getListStockSuppliersQueryKey,
 } from "@workspace/api-client-react";
 
 // Module-level singleton — one socket shared across all hook instances.
@@ -88,6 +91,13 @@ export function useAdminSocket(): void {
       window.dispatchEvent(new CustomEvent("admin-users-changed"));
     }
 
+    function onStockMutation() {
+      queryClient.invalidateQueries({ queryKey: getListStockLevelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListStockPurchasesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListStockSuppliersQueryKey() });
+    }
+
+    sock.on("STOCK_MUTATION",    onStockMutation);
     sock.on("INVOICE_MUTATION",  onInvoiceMutation);
     sock.on("PRICE_MUTATION",    onPriceMutation);
     sock.on("PRODUCT_MUTATION",  onProductMutation);
@@ -96,6 +106,7 @@ export function useAdminSocket(): void {
     sock.on("USER_MUTATION",     onUserMutation);
 
     return () => {
+      sock.off("STOCK_MUTATION",    onStockMutation);
       sock.off("INVOICE_MUTATION",  onInvoiceMutation);
       sock.off("PRICE_MUTATION",    onPriceMutation);
       sock.off("PRODUCT_MUTATION",  onProductMutation);

@@ -555,6 +555,12 @@ export default function NewInvoice() {
     }, {
       onSuccess: (data) => {
         toast({ title: "Invoice created successfully" });
+        // Stock auto-deduction warnings (sold more than available)
+        if (data.stockWarnings && data.stockWarnings.length > 0) {
+          for (const w of data.stockWarnings) {
+            toast({ title: "Stock warning", description: w, variant: "destructive" });
+          }
+        }
         setLocation(`/invoices/${data.id}`);
       },
       onError: (err: any) => {

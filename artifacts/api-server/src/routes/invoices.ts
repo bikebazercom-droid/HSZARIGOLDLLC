@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, gte, lte, and, desc, sql } from "drizzle-orm";
-import { db, invoicesTable, invoiceItemsTable } from "@workspace/db";
+import { db, invoicesTable, invoiceItemsTable, stockMovementsTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 import { broadcast } from "../lib/socket.js";
+import { applyStockDelta } from "./stock";
 import {
   ListInvoicesQueryParams,
   CreateInvoiceBody,
@@ -15,6 +16,22 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+// Map an invoice line item to its inventory stock category. "995" is its own
+// stock bucket even though the pricing engine treats it as a tt_bar; jewelry
+// karats all draw from the single gold_jewelry_22k stock pool. Unknown/custom
+// items are not stock-tracked (returns null → no deduction).
+function itemStockCategory(description: string, category: string | null | undefined): string | null {
+  if (description.trim() === "995") return "995";
+  switch (category) {
+    case "gold": return "gold";
+    case "tt_bar": return "tt_bar";
+    case "kg_bar": return "kg_bar";
+    case "silver": return "silver";
+    case "gold_jewelry": return "gold_jewelry_22k";
+    default: return null;
+  }
+}
 
 function parseInvoice(inv: typeof invoicesTable.$inferSelect) {
   return {
@@ -189,11 +206,49 @@ router.post("/invoices", async (req, res): Promise<void> => {
       .returning();
   }
 
+  // ── Auto-deduction engine ────────────────────────────────────────────────
+  // Subtract each sold item's gross weight from the live category stock and
+  // log the movement. Sales are never blocked: if stock is insufficient the
+  // invoice is still created and a warning is returned instead (stock can go
+  // negative until purchases are recorded).
+  const stockWarnings: string[] = [];
+  const deductions = new Map<string, number>();
+  for (const item of savedItems) {
+    const cat = itemStockCategory(item.description, item.category);
+    const grams = item.grossWeight != null ? Number(item.grossWeight) : 0;
+    if (!cat || !(grams > 0)) continue;
+    deductions.set(cat, (deductions.get(cat) ?? 0) + grams);
+  }
+  if (deductions.size > 0) {
+    try {
+      await db.transaction(async (tx) => {
+        for (const [cat, grams] of deductions) {
+          // applyStockDelta returns the post-deduction balance from the same
+          // atomic upsert, so the oversell warning can't race a separate read.
+          const newBalance = await applyStockDelta(
+            tx as unknown as typeof db, cat, -grams, "sale", "invoice", invoice.id, invoice.invoiceNumber,
+          );
+          if (newBalance < 0) {
+            const available = newBalance + grams;
+            stockWarnings.push(
+              `Insufficient stock for ${cat}: sold ${grams.toFixed(3)}g but only ${Math.max(available, 0).toFixed(3)}g available`,
+            );
+          }
+        }
+      });
+    } catch (err) {
+      console.error("Stock auto-deduction failed for invoice", invoice.id, err);
+      stockWarnings.push("Stock auto-deduction failed — inventory not updated for this invoice");
+    }
+  }
+
   res.status(201).json(CreateInvoiceResponse.parse({
     ...parseInvoice(invoice),
     items: savedItems.map(parseItem),
+    ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
   }));
   broadcast("INVOICE_MUTATION");
+  if (deductions.size > 0) broadcast("STOCK_MUTATION");
 });
 
 router.get("/invoices/:id", async (req, res): Promise<void> => {
@@ -223,8 +278,38 @@ router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => 
     return;
   }
 
-  await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  // Delete the invoice and reverse its stock deductions in ONE transaction.
+  // DELETE ... RETURNING guarantees only the request that actually removed the
+  // row applies the reversal (no double-reversal on concurrent deletes). Net
+  // effect per category = sum of this invoice's sale/sale_reversal movements;
+  // reversing the net keeps the ledger correct even on repeated operations.
+  const invoiceId = params.data.id;
+  const deletedInvoice = await db.transaction(async (tx) => {
+    const [row] = await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId)).returning();
+    if (!row) return null;
+    const movements = await tx
+      .select()
+      .from(stockMovementsTable)
+      .where(and(eq(stockMovementsTable.refType, "invoice"), eq(stockMovementsTable.refId, invoiceId)));
+    const netByCategory = new Map<string, number>();
+    for (const m of movements) {
+      netByCategory.set(m.category, (netByCategory.get(m.category) ?? 0) + Number(m.weightGrams));
+    }
+    for (const [cat, net] of netByCategory) {
+      if (net === 0) continue;
+      await applyStockDelta(
+        tx as unknown as typeof db, cat, -net, "sale_reversal", "invoice", invoiceId,
+        `Deleted ${row.invoiceNumber}`,
+      );
+    }
+    return row;
+  });
+  if (!deletedInvoice) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
   broadcast("INVOICE_MUTATION");
+  broadcast("STOCK_MUTATION");
   res.sendStatus(204);
 });
 

@@ -118,6 +118,7 @@ export const GetDashboardResponse = zod.object({
   "recentInvoices": zod.array(zod.object({
   "id": zod.number(),
   "invoiceNumber": zod.string(),
+  "stockWarnings": zod.array(zod.string()).optional().describe('Present on creation when sold weight exceeded available stock for a category.'),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish(),
@@ -263,58 +264,6 @@ export const UpdatePricesResponse = zod.object({
   "updatedAt": zod.string(),
   "manualInvoiceMode": zod.boolean().describe('When true, invoice creation uses admin-set manual rates.')
 })
-
-
-/**
- * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
- */
-// GetPricesSpotResponse removed (live price system removed)
-export const _GetPricesSpotResponse_REMOVED = zod.object({
-  "usdPerOz": zod.number().describe('Live international Gold Spot (XAU\/USD) price in USD per troy ounce.'),
-  "aedPerGram": zod.number().describe('Base_24K_AED in AED per gram: (usdPerOz \/ 31.1034768) \* 3.6725. Verified to match livepriceofgold.com Dubai AED\/gram display to ±1¢.'),
-  "baseAedPerGram": zod.number().nullish().describe('Same as aedPerGram — (usdPerOz \/ 31.1034768) \* 3.6725.'),
-  "bidUsdPerOz": zod.number().nullish().describe('Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.'),
-  "askUsdPerOz": zod.number().nullish().describe('Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.'),
-  "dailyLowUsdPerOz": zod.number().nullish().describe('Lowest usdPerOz tick observed since UTC midnight today.'),
-  "dailyHighUsdPerOz": zod.number().nullish().describe('Highest usdPerOz tick observed since UTC midnight today.'),
-  "spreadPercent": zod.number().nullish().describe('Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.'),
-  "laborCostPercent": zod.number().nullish().describe('Currently active admin labor markup (%) for jewelry rows.'),
-  "gold9999Offset": zod.number().nullish().describe('Fixed AED offset added to the live GOLD 9999 price on each tick.'),
-  "jewellery22kOffset": zod.number().nullish().describe('Fixed AED offset added to the live Jewellery 22K price on each tick.'),
-  "updatedAt": zod.string().describe('ISO-8601 timestamp of when this price was fetched.')
-})
-
-
-/**
- * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
- */
-export const GetPublicPricesResponse = zod.object({
-  "goldBullionRate": zod.number(),
-  "ttBarRate": zod.number(),
-  "ttBar24kRate": zod.number(),
-  "kgBarRate": zod.number(),
-  "silverPricePerGram": zod.number(),
-  "gold22kRate": zod.number(),
-  "gold21kRate": zod.number(),
-  "gold18kRate": zod.number(),
-  "gold9999Rate": zod.number(),
-  "goldKg9999Rate": zod.number(),
-  "liveModeConnected": zod.boolean(),
-  "liveSilverRate": zod.number().nullish(),
-  "liveGoldBid": zod.number().nullish(),
-  "liveGoldAsk": zod.number().nullish(),
-  "liveGoldHigh": zod.number().nullish(),
-  "liveGoldLow": zod.number().nullish(),
-  "updatedAt": zod.string(),
-  "tvShowTtBar995": zod.boolean(),
-  "tvShowTtBar999": zod.boolean(),
-  "tvShowGold9999": zod.boolean(),
-  "tvShowKgBar995": zod.boolean(),
-  "tvShowGold22k": zod.boolean(),
-  "tvShowGold21k": zod.boolean(),
-  "tvShowGold18k": zod.boolean(),
-  "tvShowGoldKg9999": zod.boolean()
-}).describe('Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.')
 
 
 /**
@@ -642,6 +591,7 @@ export const ListInvoicesQueryParams = zod.object({
 export const ListInvoicesResponseItem = zod.object({
   "id": zod.number(),
   "invoiceNumber": zod.string(),
+  "stockWarnings": zod.array(zod.string()).optional().describe('Present on creation when sold weight exceeded available stock for a category.'),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish(),
@@ -733,6 +683,7 @@ export const CreateInvoiceBody = zod.object({
 export const CreateInvoiceResponse = zod.object({
   "id": zod.number(),
   "invoiceNumber": zod.string(),
+  "stockWarnings": zod.array(zod.string()).optional().describe('Present on creation when sold weight exceeded available stock for a category.'),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish(),
@@ -786,6 +737,7 @@ export const GetInvoiceParams = zod.object({
 export const GetInvoiceResponse = zod.object({
   "id": zod.number(),
   "invoiceNumber": zod.string(),
+  "stockWarnings": zod.array(zod.string()).optional().describe('Present on creation when sold weight exceeded available stock for a category.'),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish(),
@@ -837,6 +789,107 @@ export const DeleteInvoiceParams = zod.object({
 })
 
 export const DeleteInvoiceResponse = zod.void()
+
+
+/**
+ * @summary Live aggregated stock weight per category
+ */
+export const ListStockLevelsResponseItem = zod.object({
+  "category": zod.string(),
+  "weightGrams": zod.number(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListStockLevelsResponse = zod.array(ListStockLevelsResponseItem)
+
+
+/**
+ * @summary List stock purchases (supplier ledger)
+ */
+export const ListStockPurchasesQueryParams = zod.object({
+  "supplier": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
+export const ListStockPurchasesResponseItem = zod.object({
+  "id": zod.number(),
+  "category": zod.string(),
+  "supplierName": zod.string(),
+  "purchaseDate": zod.string(),
+  "weightGrams": zod.number(),
+  "totalPriceAed": zod.number(),
+  "pricePerGram": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListStockPurchasesResponse = zod.array(ListStockPurchasesResponseItem)
+
+
+/**
+ * @summary Record a stock purchase and increase stock level
+ */
+
+export const createStockPurchaseBodyWeightGramsExclusiveMin = 0;
+
+export const createStockPurchaseBodyTotalPriceAedMin = 0;
+
+
+
+export const CreateStockPurchaseBody = zod.object({
+  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
+  "supplierName": zod.string().min(1),
+  "purchaseDate": zod.string(),
+  "weightGrams": zod.number().gt(createStockPurchaseBodyWeightGramsExclusiveMin),
+  "totalPriceAed": zod.number().min(createStockPurchaseBodyTotalPriceAedMin)
+})
+
+export const CreateStockPurchaseResponse = zod.object({
+  "id": zod.number(),
+  "category": zod.string(),
+  "supplierName": zod.string(),
+  "purchaseDate": zod.string(),
+  "weightGrams": zod.number(),
+  "totalPriceAed": zod.number(),
+  "pricePerGram": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a stock purchase and reverse its stock effect
+ */
+export const DeleteStockPurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteStockPurchaseResponse = zod.void()
+
+
+/**
+ * @summary Distinct supplier names
+ */
+export const ListStockSuppliersResponseItem = zod.string()
+export const ListStockSuppliersResponse = zod.array(ListStockSuppliersResponseItem)
+
+
+/**
+ * @summary Inventory movement log
+ */
+export const ListStockMovementsQueryParams = zod.object({
+  "category": zod.coerce.string().optional()
+})
+
+export const ListStockMovementsResponseItem = zod.object({
+  "id": zod.number(),
+  "category": zod.string(),
+  "type": zod.string(),
+  "weightGrams": zod.number(),
+  "refType": zod.string().nullish(),
+  "refId": zod.number().nullish(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListStockMovementsResponse = zod.array(ListStockMovementsResponseItem)
 
 
 /**

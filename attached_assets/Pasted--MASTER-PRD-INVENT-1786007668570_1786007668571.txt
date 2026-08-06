@@ -1,0 +1,49 @@
+================================================================================
+MASTER PRD: INVENTORY STOCK PURCHASE MODULE, SUPPLIER STATEMENTS & AUTO-DEDUCTION
+================================================================================
+
+Target Objective:
+Implement a full inventory management workflow that includes a Purchase/Stock Entry Sidebar with specific Gold Categories, Supplier Tracking (Rahim, Karim, etc.), PDF Statement Downloads, and Auto-Deduction of stock upon Invoice Creation.
+
+--------------------------------------------------------------------------------
+MODULE 1: PURCHASE / STOCK ENTRY SIDEBAR (Products Page)
+--------------------------------------------------------------------------------
+1. Drawer UI Trigger:
+   - On clicking the "+ Add Product" button in the Products page, open a slide-over Sidebar/Drawer form.
+
+2. Form Fields & Categories:
+   - Category Dropdown: [GOLD, TT Bar, KG Bar, 995, Gold Jewelry 22K, Silver].
+   - Supplier/Vendor Name (Text/Select input): Allow entering distinct names like "Rahim", "Karim", "Jabbar", etc.
+   - Purchase Date: Date picker field (Default: Current Date).
+   - Quantity/Weight: Grams field (e.g., input in Grams or KG with auto conversion).
+   - Total Purchase Price (AED) & Price Per Gram (Auto-calculated).
+
+3. Database Schema Update:
+   - Create a `stock_purchases` table to log each purchase transaction:
+     `[id, category, supplier_name, purchase_date, weight_grams, total_price_aed, price_per_gram, created_at]`.
+   - Update the `products` / `inventory` table to maintain live aggregated stock weights per category.
+
+--------------------------------------------------------------------------------
+MODULE 2: SUPPLIER STATEMENTS & PDF DOWNLOAD
+--------------------------------------------------------------------------------
+1. Supplier Ledger View:
+   - Add a "Purchase History / Supplier Ledger" tab in the Products/Inventory page.
+   - Show a searchable table of all purchases made, filterable by Supplier Name (e.g., Rahim) and Category.
+
+2. PDF Export Feature:
+   - Add a "Download PDF Statement" button.
+   - Generate an A4 formatted PDF statement showing total KG/Grams purchased from a selected supplier, dates, total AED spent, and itemized purchase breakdown.
+
+--------------------------------------------------------------------------------
+MODULE 3: INVOICE AUTO-DEDUCTION ENGINE
+--------------------------------------------------------------------------------
+1. Sales Auto-Deduction:
+   - In `InvoiceBuilder.tsx` / Invoice Creation, when an item (e.g. TT Bar, Gold 22K) and quantity/weight (in Grams or KG) are added to a customer invoice and saved:
+     a) Automatically subtract the sold weight from the main Product/Category Stock.
+     b) Record the stock deduction transaction in the inventory log.
+     c) Prevent invoice creation if requested stock exceeds current available stock (or display a warning).
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please implement this database schema, Purchase Entry Sidebar, Supplier Statement PDF export, and Invoice Stock Auto-Deduction logic now!
+================================================================================

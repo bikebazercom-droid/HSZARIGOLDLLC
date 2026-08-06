@@ -35,6 +35,8 @@ import type {
   ListCustomersParams,
   ListInvoicesParams,
   ListProductsParams,
+  ListStockMovementsParams,
+  ListStockPurchasesParams,
   MonthlySale,
   PriceItem,
   PriceItemInput,
@@ -42,9 +44,10 @@ import type {
   PricesInput,
   Product,
   ProductInput,
-  PublicPrices,
-  PublicSettings,
-  SpotPrice
+  StockLevel,
+  StockMovement,
+  StockPurchase,
+  StockPurchaseInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -220,83 +223,6 @@ export const useUpdateSettings = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
     }
-
-export const getGetPublicSettingsUrl = () => {
-
-
-
-
-  return `/api/settings/public`
-}
-
-/**
- * @summary Get public showroom display settings (unauthenticated)
- */
-export const getPublicSettings = async ( options?: RequestInit): Promise<PublicSettings> => {
-
-  return customFetch<PublicSettings>(getGetPublicSettingsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetPublicSettingsQueryKey = () => {
-    return [
-    `/api/settings/public`
-    ] as const;
-    }
-
-
-export const getGetPublicSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getPublicSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetPublicSettingsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicSettings>>> = ({ signal }) => getPublicSettings({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicSettings>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetPublicSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicSettings>>>
-export type GetPublicSettingsQueryError = ErrorType<unknown>
-
-
-/**
- * @summary Get public showroom display settings (unauthenticated)
- */
-
-export function useGetPublicSettings<TData = Awaited<ReturnType<typeof getPublicSettings>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetPublicSettingsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
 
 export const getHealthCheckUrl = () => {
 
@@ -682,160 +608,6 @@ export const useUpdatePrices = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdatePricesMutationOptions(options));
     }
-
-export const getGetPricesSpotUrl = () => {
-
-
-
-
-  return `/api/prices/spot`
-}
-
-/**
- * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
- */
-export const getPricesSpot = async ( options?: RequestInit): Promise<SpotPrice> => {
-
-  return customFetch<SpotPrice>(getGetPricesSpotUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetPricesSpotQueryKey = () => {
-    return [
-    `/api/prices/spot`
-    ] as const;
-    }
-
-
-export const getGetPricesSpotQueryOptions = <TData = Awaited<ReturnType<typeof getPricesSpot>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricesSpot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetPricesSpotQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPricesSpot>>> = ({ signal }) => getPricesSpot({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPricesSpot>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetPricesSpotQueryResult = NonNullable<Awaited<ReturnType<typeof getPricesSpot>>>
-export type GetPricesSpotQueryError = ErrorType<ErrorResponse>
-
-
-/**
- * @summary Current live gold spot price (USD/oz + AED/g). Fetched from Yahoo Finance and cached for 10 seconds. Public, no authentication required.
- */
-
-export function useGetPricesSpot<TData = Awaited<ReturnType<typeof getPricesSpot>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricesSpot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetPricesSpotQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getGetPublicPricesUrl = () => {
-
-
-
-
-  return `/api/prices/public`
-}
-
-/**
- * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
- */
-export const getPublicPrices = async ( options?: RequestInit): Promise<PublicPrices> => {
-
-  return customFetch<PublicPrices>(getGetPublicPricesUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetPublicPricesQueryKey = () => {
-    return [
-    `/api/prices/public`
-    ] as const;
-    }
-
-
-export const getGetPublicPricesQueryOptions = <TData = Awaited<ReturnType<typeof getPublicPrices>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetPublicPricesQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicPrices>>> = ({ signal }) => getPublicPrices({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicPrices>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetPublicPricesQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicPrices>>>
-export type GetPublicPricesQueryError = ErrorType<unknown>
-
-
-/**
- * @summary Get the minimal set of rates needed for the public showroom price display board (no authentication required, no sensitive fields).
- */
-
-export function useGetPublicPrices<TData = Awaited<ReturnType<typeof getPublicPrices>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetPublicPricesQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
 
 export const getGetPublicPriceItemsUrl = () => {
 
@@ -2169,6 +1941,468 @@ export const useDeleteInvoice = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteInvoiceMutationOptions(options));
     }
+
+export const getListStockLevelsUrl = () => {
+
+
+
+
+  return `/api/stock/levels`
+}
+
+/**
+ * @summary Live aggregated stock weight per category
+ */
+export const listStockLevels = async ( options?: RequestInit): Promise<StockLevel[]> => {
+
+  return customFetch<StockLevel[]>(getListStockLevelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockLevelsQueryKey = () => {
+    return [
+    `/api/stock/levels`
+    ] as const;
+    }
+
+
+export const getListStockLevelsQueryOptions = <TData = Awaited<ReturnType<typeof listStockLevels>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockLevels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockLevelsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockLevels>>> = ({ signal }) => listStockLevels({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockLevels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockLevelsQueryResult = NonNullable<Awaited<ReturnType<typeof listStockLevels>>>
+export type ListStockLevelsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Live aggregated stock weight per category
+ */
+
+export function useListStockLevels<TData = Awaited<ReturnType<typeof listStockLevels>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockLevels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockLevelsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListStockPurchasesUrl = (params?: ListStockPurchasesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/stock/purchases?${stringifiedParams}` : `/api/stock/purchases`
+}
+
+/**
+ * @summary List stock purchases (supplier ledger)
+ */
+export const listStockPurchases = async (params?: ListStockPurchasesParams, options?: RequestInit): Promise<StockPurchase[]> => {
+
+  return customFetch<StockPurchase[]>(getListStockPurchasesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockPurchasesQueryKey = (params?: ListStockPurchasesParams,) => {
+    return [
+    `/api/stock/purchases`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListStockPurchasesQueryOptions = <TData = Awaited<ReturnType<typeof listStockPurchases>>, TError = ErrorType<unknown>>(params?: ListStockPurchasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockPurchases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockPurchasesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockPurchases>>> = ({ signal }) => listStockPurchases(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockPurchases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockPurchasesQueryResult = NonNullable<Awaited<ReturnType<typeof listStockPurchases>>>
+export type ListStockPurchasesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List stock purchases (supplier ledger)
+ */
+
+export function useListStockPurchases<TData = Awaited<ReturnType<typeof listStockPurchases>>, TError = ErrorType<unknown>>(
+ params?: ListStockPurchasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockPurchases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockPurchasesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateStockPurchaseUrl = () => {
+
+
+
+
+  return `/api/stock/purchases`
+}
+
+/**
+ * @summary Record a stock purchase and increase stock level
+ */
+export const createStockPurchase = async (stockPurchaseInput: StockPurchaseInput, options?: RequestInit): Promise<StockPurchase> => {
+
+  return customFetch<StockPurchase>(getCreateStockPurchaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(stockPurchaseInput)
+  }
+);}
+
+
+
+
+export const getCreateStockPurchaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStockPurchase>>, TError,{data: BodyType<StockPurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createStockPurchase>>, TError,{data: BodyType<StockPurchaseInput>}, TContext> => {
+
+const mutationKey = ['createStockPurchase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createStockPurchase>>, {data: BodyType<StockPurchaseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createStockPurchase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateStockPurchaseMutationResult = NonNullable<Awaited<ReturnType<typeof createStockPurchase>>>
+    export type CreateStockPurchaseMutationBody = BodyType<StockPurchaseInput>
+    export type CreateStockPurchaseMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a stock purchase and increase stock level
+ */
+export const useCreateStockPurchase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStockPurchase>>, TError,{data: BodyType<StockPurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createStockPurchase>>,
+        TError,
+        {data: BodyType<StockPurchaseInput>},
+        TContext
+      > => {
+      return useMutation(getCreateStockPurchaseMutationOptions(options));
+    }
+
+export const getDeleteStockPurchaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/stock/purchases/${id}`
+}
+
+/**
+ * @summary Delete a stock purchase and reverse its stock effect
+ */
+export const deleteStockPurchase = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteStockPurchaseUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteStockPurchaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteStockPurchase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteStockPurchase>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteStockPurchase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteStockPurchase>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteStockPurchase(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteStockPurchaseMutationResult = NonNullable<Awaited<ReturnType<typeof deleteStockPurchase>>>
+
+    export type DeleteStockPurchaseMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a stock purchase and reverse its stock effect
+ */
+export const useDeleteStockPurchase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteStockPurchase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteStockPurchase>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteStockPurchaseMutationOptions(options));
+    }
+
+export const getListStockSuppliersUrl = () => {
+
+
+
+
+  return `/api/stock/suppliers`
+}
+
+/**
+ * @summary Distinct supplier names
+ */
+export const listStockSuppliers = async ( options?: RequestInit): Promise<string[]> => {
+
+  return customFetch<string[]>(getListStockSuppliersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockSuppliersQueryKey = () => {
+    return [
+    `/api/stock/suppliers`
+    ] as const;
+    }
+
+
+export const getListStockSuppliersQueryOptions = <TData = Awaited<ReturnType<typeof listStockSuppliers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockSuppliers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockSuppliersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockSuppliers>>> = ({ signal }) => listStockSuppliers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockSuppliers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockSuppliersQueryResult = NonNullable<Awaited<ReturnType<typeof listStockSuppliers>>>
+export type ListStockSuppliersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Distinct supplier names
+ */
+
+export function useListStockSuppliers<TData = Awaited<ReturnType<typeof listStockSuppliers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockSuppliers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockSuppliersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListStockMovementsUrl = (params?: ListStockMovementsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/stock/movements?${stringifiedParams}` : `/api/stock/movements`
+}
+
+/**
+ * @summary Inventory movement log
+ */
+export const listStockMovements = async (params?: ListStockMovementsParams, options?: RequestInit): Promise<StockMovement[]> => {
+
+  return customFetch<StockMovement[]>(getListStockMovementsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockMovementsQueryKey = (params?: ListStockMovementsParams,) => {
+    return [
+    `/api/stock/movements`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListStockMovementsQueryOptions = <TData = Awaited<ReturnType<typeof listStockMovements>>, TError = ErrorType<unknown>>(params?: ListStockMovementsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockMovements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockMovementsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockMovements>>> = ({ signal }) => listStockMovements(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockMovements>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockMovementsQueryResult = NonNullable<Awaited<ReturnType<typeof listStockMovements>>>
+export type ListStockMovementsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Inventory movement log
+ */
+
+export function useListStockMovements<TData = Awaited<ReturnType<typeof listStockMovements>>, TError = ErrorType<unknown>>(
+ params?: ListStockMovementsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockMovements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockMovementsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMonthlySalesUrl = () => {
 

@@ -497,6 +497,120 @@ paths:
         "204":
           description: Deleted
 
+  /stock/levels:
+    get:
+      operationId: listStockLevels
+      tags: [stock]
+      summary: Live aggregated stock weight per category
+      responses:
+        "200":
+          description: Stock levels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockLevel"
+
+  /stock/purchases:
+    get:
+      operationId: listStockPurchases
+      tags: [stock]
+      summary: List stock purchases (supplier ledger)
+      parameters:
+        - name: supplier
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stock purchases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockPurchase"
+    post:
+      operationId: createStockPurchase
+      tags: [stock]
+      summary: Record a stock purchase and increase stock level
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockPurchaseInput"
+      responses:
+        "201":
+          description: Created stock purchase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockPurchase"
+
+  /stock/purchases/{id}:
+    delete:
+      operationId: deleteStockPurchase
+      tags: [stock]
+      summary: Delete a stock purchase and reverse its stock effect
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /stock/suppliers:
+    get:
+      operationId: listStockSuppliers
+      tags: [stock]
+      summary: Distinct supplier names
+      responses:
+        "200":
+          description: Supplier names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /stock/movements:
+    get:
+      operationId: listStockMovements
+      tags: [stock]
+      summary: Inventory movement log
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stock movements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockMovement"
+
   /invoices/monthly-sales:
     get:
       operationId: getMonthlySales
@@ -975,6 +1089,11 @@ components:
           type: integer
         invoiceNumber:
           type: string
+        stockWarnings:
+          type: array
+          items:
+            type: string
+          description: Present on creation when sold weight exceeded available stock for a category.
         customerId:
           type: ["integer", "null"]
         customerName:
@@ -1204,6 +1323,81 @@ components:
           type: ["number", "null"]
         tvVisible:
           type: boolean
+
+    StockLevel:
+      type: object
+      required: [category, weightGrams, updatedAt]
+      properties:
+        category:
+          type: string
+        weightGrams:
+          type: number
+        updatedAt:
+          type: string
+          format: date-time
+
+    StockPurchase:
+      type: object
+      required: [id, category, supplierName, purchaseDate, weightGrams, totalPriceAed, pricePerGram, createdAt]
+      properties:
+        id:
+          type: integer
+        category:
+          type: string
+        supplierName:
+          type: string
+        purchaseDate:
+          type: string
+        weightGrams:
+          type: number
+        totalPriceAed:
+          type: number
+        pricePerGram:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    StockPurchaseInput:
+      type: object
+      required: [category, supplierName, purchaseDate, weightGrams, totalPriceAed]
+      properties:
+        category:
+          type: string
+          enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+        supplierName:
+          type: string
+          minLength: 1
+        purchaseDate:
+          type: string
+        weightGrams:
+          type: number
+          exclusiveMinimum: 0
+        totalPriceAed:
+          type: number
+          minimum: 0
+
+    StockMovement:
+      type: object
+      required: [id, category, type, weightGrams, createdAt]
+      properties:
+        id:
+          type: integer
+        category:
+          type: string
+        type:
+          type: string
+        weightGrams:
+          type: number
+        refType:
+          type: ["string", "null"]
+        refId:
+          type: ["integer", "null"]
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
 
     MonthlySale:
       type: object

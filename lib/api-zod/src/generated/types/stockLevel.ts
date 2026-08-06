@@ -6,5 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-// SpotPrice removed — live gold spot price system has been removed.
-export type SpotPrice = Record<string, never>;
+export interface StockLevel {
+  category: string;
+  weightGrams: number;
+  updatedAt: Date;
+}

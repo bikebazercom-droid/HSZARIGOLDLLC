@@ -5,4 +5,5 @@
 - [Gold-shop core asset parity](gold-shop-asset-parity.md) — new metal/karat rate types must get full manual-editable parity (DB column, API, OpenAPI, AssetCard, invoice lookup) like existing assets.
 - [Gold-shop public routes pattern](gold-shop-public-routes.md) — unauthenticated pages need both a public API sub-router mounted before `requireAuth` and a wouter route matched before the AuthGate.
 - [Gold-shop per-item live rate injection](gold-shop-per-item-live-rate.md) — each invoice row derives its own metal rate; never reintroduce a single shared page-level rate driving heterogeneous rows.
+- [Gold-shop inventory ledger](gold-shop-inventory-ledger.md) — stock changes only via applyStockDelta in transactions; sales never blocked (warnings instead); "995" is its own stock bucket despite tt_bar pricing.
 - [Gold-shop TV board fully removed](gold-shop-tv-removed.md) — TV board and entire ExternalSync system permanently deleted; no /tv route, no sync service, no sync DB columns, no sync settings tab.

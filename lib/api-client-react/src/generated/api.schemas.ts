@@ -52,6 +52,8 @@ export interface InvoiceItem {
 export interface Invoice {
   id: number;
   invoiceNumber: string;
+  /** Present on creation when sold weight exceeded available stock for a category. */
+  stockWarnings?: string[];
   /** @nullable */
   customerId?: number | null;
   /** @nullable */
@@ -186,101 +188,12 @@ export interface Prices {
   gold21kRate: number;
   gold18kRate: number;
   gold9999Rate: number;
-  /** GOLD KG (0.9999) per-gram rate for admin and invoices; TV board shows 1KG total. */
+  /** GOLD KG (0.9999) per-gram rate for admin and invoices. */
   goldKg9999Rate: number;
-  /** Admin-configurable spread margin (%). Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100). */
-  spreadPremiumPercent: number;
-  /** Admin-configurable labor markup (%) applied to jewelry rows (22K/21K/18K) on top of the spread-adjusted base. */
-  laborCostPercent: number;
-  /** Fixed AED offset added to the live GOLD 9999 computed price (positive = premium, negative = discount). */
-  gold9999Offset?: number;
-  /** Fixed AED offset added to the live Jewellery 22K computed price (positive = premium, negative = discount). */
-  jewellery22kOffset?: number;
   customDescriptions: CustomDescription[];
   updatedAt: string;
-  liveModeConnected: boolean;
-  /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
+  /** When true, invoice creation uses admin-set manual rates. */
   manualInvoiceMode: boolean;
-  /** @nullable */
-  liveGoldRate24k?: number | null;
-  /** @nullable */
-  liveGoldRate22k?: number | null;
-  /** @nullable */
-  liveSilverRate?: number | null;
-  /**
-     * Last persisted Bid snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldBid?: number | null;
-  /**
-     * Last persisted Ask snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldAsk?: number | null;
-  /**
-     * Last persisted daily High snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldHigh?: number | null;
-  /**
-     * Last persisted daily Low snapshot (USD/oz). Live values stream via /prices/spot, not this field.
-     * @nullable
-     */
-  liveGoldLow?: number | null;
-  /** @nullable */
-  liveLastSyncedAt?: string | null;
-  /** Whether the TT. BAR (0.995) row is visible on the showroom TV board. */
-  tvShowTtBar995: boolean;
-  /** Whether the TT. BAR (0.999) row is visible on the showroom TV board. */
-  tvShowTtBar999: boolean;
-  /** Whether the GOLD (0.9999) row is visible on the showroom TV board. */
-  tvShowGold9999: boolean;
-  /** Whether the KG BAR (0.995) row is visible on the showroom TV board. */
-  tvShowKgBar995: boolean;
-  /** Whether the Gold Jewelry 22K row is visible on the showroom TV board. */
-  tvShowGold22k: boolean;
-  /** Whether the Gold Jewelry 21K row is visible on the showroom TV board. */
-  tvShowGold21k: boolean;
-  /** Whether the Gold Jewelry 18K row is visible on the showroom TV board. */
-  tvShowGold18k: boolean;
-  /** Whether the GOLD KG (0.9999) row is visible on the showroom TV board. */
-  tvShowGoldKg9999: boolean;
-}
-
-/**
- * Minimal, non-sensitive rate snapshot exposed publicly for the showroom price display board.
- */
-export interface PublicPrices {
-  goldBullionRate: number;
-  ttBarRate: number;
-  ttBar24kRate: number;
-  kgBarRate: number;
-  silverPricePerGram: number;
-  gold22kRate: number;
-  gold21kRate: number;
-  gold18kRate: number;
-  gold9999Rate: number;
-  goldKg9999Rate: number;
-  liveModeConnected: boolean;
-  /** @nullable */
-  liveSilverRate?: number | null;
-  /** @nullable */
-  liveGoldBid?: number | null;
-  /** @nullable */
-  liveGoldAsk?: number | null;
-  /** @nullable */
-  liveGoldHigh?: number | null;
-  /** @nullable */
-  liveGoldLow?: number | null;
-  updatedAt: string;
-  tvShowTtBar995: boolean;
-  tvShowTtBar999: boolean;
-  tvShowGold9999: boolean;
-  tvShowKgBar995: boolean;
-  tvShowGold22k: boolean;
-  tvShowGold21k: boolean;
-  tvShowGold18k: boolean;
-  tvShowGoldKg9999: boolean;
 }
 
 export interface PricesInput {
@@ -296,37 +209,9 @@ export interface PricesInput {
   gold18kRate?: number;
   gold9999Rate?: number;
   goldKg9999Rate?: number;
-  /**
-     * Spread margin percentage to write. Adjusted_Base = Base_24K_AED × (1 + spreadPremiumPercent / 100).
-     * @nullable
-     */
-  spreadPremiumPercent?: number | null;
-  /**
-     * Labor markup percentage for jewelry rows (22K/21K/18K).
-     * @nullable
-     */
-  laborCostPercent?: number | null;
-  /**
-     * Fixed AED offset added to live GOLD 9999 price.
-     * @nullable
-     */
-  gold9999Offset?: number | null;
-  /**
-     * Fixed AED offset added to live Jewellery 22K price.
-     * @nullable
-     */
-  jewellery22kOffset?: number | null;
   customDescriptions?: CustomDescription[];
-  /** When true, invoice creation uses admin-set manual rates instead of the live spot feed. */
+  /** When true, invoice creation uses admin-set manual rates. */
   manualInvoiceMode?: boolean;
-  tvShowTtBar995?: boolean;
-  tvShowTtBar999?: boolean;
-  tvShowGold9999?: boolean;
-  tvShowKgBar995?: boolean;
-  tvShowGold22k?: boolean;
-  tvShowGold21k?: boolean;
-  tvShowGold18k?: boolean;
-  tvShowGoldKg9999?: boolean;
 }
 
 export interface Customer {
@@ -489,68 +374,6 @@ export interface CompanySettingsInput {
 }
 
 /**
- * Minimal, non-sensitive settings exposed publicly for the showroom price display board.
- */
-export interface PublicSettings {
-  /** @nullable */
-  showroomLogoUrl: string | null;
-}
-
-export interface SpotPrice {
-  /** Live international Gold Spot (XAU/USD) price in USD per troy ounce. */
-  usdPerOz: number;
-  /** Base_24K_AED in AED per gram: (usdPerOz / 31.1034768) * 3.6725. Verified to match livepriceofgold.com Dubai AED/gram display to ±1¢. */
-  aedPerGram: number;
-  /**
-     * Same as aedPerGram — (usdPerOz / 31.1034768) * 3.6725.
-     * @nullable
-     */
-  baseAedPerGram?: number | null;
-  /**
-     * Synthesized live Bid price (USD per troy ounce) — usdPerOz minus half the market spread.
-     * @nullable
-     */
-  bidUsdPerOz?: number | null;
-  /**
-     * Synthesized live Ask price (USD per troy ounce) — usdPerOz plus half the market spread.
-     * @nullable
-     */
-  askUsdPerOz?: number | null;
-  /**
-     * Lowest usdPerOz tick observed since UTC midnight today.
-     * @nullable
-     */
-  dailyLowUsdPerOz?: number | null;
-  /**
-     * Highest usdPerOz tick observed since UTC midnight today.
-     * @nullable
-     */
-  dailyHighUsdPerOz?: number | null;
-  /**
-     * Currently active admin spread margin (%). aedPerGram already has this baked in; expose for UI display.
-     * @nullable
-     */
-  spreadPercent?: number | null;
-  /**
-     * Currently active admin labor markup (%) for jewelry rows.
-     * @nullable
-     */
-  laborCostPercent?: number | null;
-  /**
-     * Fixed AED offset added to the live GOLD 9999 price on each tick.
-     * @nullable
-     */
-  gold9999Offset?: number | null;
-  /**
-     * Fixed AED offset added to the live Jewellery 22K price on each tick.
-     * @nullable
-     */
-  jewellery22kOffset?: number | null;
-  /** ISO-8601 timestamp of when this price was fetched. */
-  updatedAt: string;
-}
-
-/**
  * spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.
  */
 export type PriceItemFormulaType = typeof PriceItemFormulaType[keyof typeof PriceItemFormulaType];
@@ -615,6 +438,60 @@ export interface PriceItemInput {
   tvVisible?: boolean;
 }
 
+export interface StockLevel {
+  category: string;
+  weightGrams: number;
+  updatedAt: string;
+}
+
+export interface StockPurchase {
+  id: number;
+  category: string;
+  supplierName: string;
+  purchaseDate: string;
+  weightGrams: number;
+  totalPriceAed: number;
+  pricePerGram: number;
+  createdAt: string;
+}
+
+export type StockPurchaseInputCategory = typeof StockPurchaseInputCategory[keyof typeof StockPurchaseInputCategory];
+
+
+export const StockPurchaseInputCategory = {
+  gold: 'gold',
+  tt_bar: 'tt_bar',
+  kg_bar: 'kg_bar',
+  NUMBER_995: '995',
+  gold_jewelry_22k: 'gold_jewelry_22k',
+  silver: 'silver',
+} as const;
+
+export interface StockPurchaseInput {
+  category: StockPurchaseInputCategory;
+  /** @minLength 1 */
+  supplierName: string;
+  purchaseDate: string;
+  /** @exclusiveMinimum 0 */
+  weightGrams: number;
+  /** @minimum 0 */
+  totalPriceAed: number;
+}
+
+export interface StockMovement {
+  id: number;
+  category: string;
+  type: string;
+  weightGrams: number;
+  /** @nullable */
+  refType?: string | null;
+  /** @nullable */
+  refId?: number | null;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+}
+
 export interface MonthlySale {
   month: string;
   total: number;
@@ -644,5 +521,16 @@ search?: string;
 paymentMethod?: string;
 startDate?: string;
 endDate?: string;
+};
+
+export type ListStockPurchasesParams = {
+supplier?: string;
+category?: string;
+startDate?: string;
+endDate?: string;
+};
+
+export type ListStockMovementsParams = {
+category?: string;
 };
 

@@ -6,5 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-// PublicPrices removed — TV/showroom board system has been removed.
-export type PublicPrices = Record<string, never>;
+export type ListStockPurchasesParams = {
+supplier?: string;
+category?: string;
+startDate?: string;
+endDate?: string;
+};

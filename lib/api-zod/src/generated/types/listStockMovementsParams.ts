@@ -6,5 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-// PublicSettings removed — TV/showroom board system has been removed.
-export type PublicSettings = Record<string, never>;
+export type ListStockMovementsParams = {
+category?: string;
+};

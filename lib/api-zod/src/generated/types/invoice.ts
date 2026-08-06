@@ -11,6 +11,8 @@ import type { InvoicePaymentMethod } from './invoicePaymentMethod';
 export interface Invoice {
   id: number;
   invoiceNumber: string;
+  /** Present on creation when sold weight exceeded available stock for a category. */
+  stockWarnings?: string[];
   /** @nullable */
   customerId?: number | null;
   /** @nullable */
