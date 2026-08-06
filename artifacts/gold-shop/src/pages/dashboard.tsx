@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboardKpis, getGetDashboardKpisQueryKey,
+  useGetDashboardSummaryCards, getGetDashboardSummaryCardsQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format, startOfWeek, startOfMonth } from "date-fns";
 import {
-  Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote,
+  Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote, Package,
   Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown, FileSpreadsheet,
 } from "lucide-react";
 
@@ -61,6 +62,9 @@ export default function Dashboard() {
   const kpiParams = { startDate, endDate };
   const { data: kpis, isLoading: kpisLoading } = useGetDashboardKpis(kpiParams, {
     query: { queryKey: getGetDashboardKpisQueryKey(kpiParams) },
+  });
+  const { data: summary, isLoading: summaryLoading } = useGetDashboardSummaryCards({
+    query: { queryKey: getGetDashboardSummaryCardsQueryKey() },
   });
   const todayDate = format(new Date(), "MMMM d, yyyy");
 
@@ -183,6 +187,69 @@ export default function Dashboard() {
             <Button size="sm"><Plus className="w-4 h-4 mr-1.5" /> New Invoice</Button>
           </Link>
         </div>
+      </div>
+
+      {/* Live summary hero cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {summaryLoading || !summary ? (
+          <>
+            <Skeleton className="h-44" />
+            <Skeleton className="h-44" />
+          </>
+        ) : (
+          <>
+            {/* Card 1 — dark: live available stock + purchase cost value */}
+            <div className="rounded-xl bg-[#1e293b] text-white p-5 shadow-md">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[#c8a43a]" /> Current Available Stock
+                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 text-emerald-300 rounded-full px-2.5 py-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Inventory
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">Stock IN (Purchased Balance)</p>
+                <p className={`text-2xl font-bold mt-0.5 ${summary.availableStockGrams < 0 ? "text-red-400" : ""}`}>
+                  {fmtG(summary.availableStockGrams)} g
+                  <span className="text-sm font-medium text-slate-400"> / {kg(summary.availableStockGrams)} KG</span>
+                </p>
+              </div>
+              <div className="border-t border-dashed border-slate-600 my-4" />
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">Total Purchase Cost Value</p>
+                <p className={`text-xl font-bold mt-0.5 text-[#c8a43a] ${summary.availableStockCostAed < 0 ? "text-red-400" : ""}`}>
+                  AED {fmtAED(summary.availableStockCostAed)}
+                </p>
+                <p className="text-[10px] text-slate-500 mt-1">Deducts automatically on every sale</p>
+              </div>
+            </div>
+
+            {/* Card 2 — emerald: sales revenue + net profit */}
+            <div className="rounded-xl bg-emerald-900 text-white p-5 shadow-md">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-emerald-300" /> Sales &amp; Profit Summary
+                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 text-emerald-200 rounded-full px-2.5 py-1 flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" /> Performance
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Total Sales Revenue (Invoiced)</p>
+                <p className="text-2xl font-bold mt-0.5">AED {fmtAED(summary.totalRevenueAed)}</p>
+              </div>
+              <div className="border-t border-dashed border-emerald-700 my-4" />
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Net Profit Earned</p>
+                <p className={`text-xl font-bold mt-0.5 ${summary.netProfitAed < 0 ? "text-red-400" : "text-[#4ade80]"}`}>
+                  AED {fmtAED(summary.netProfitAed)}
+                </p>
+                <p className="text-[10px] text-emerald-200/50 mt-1">Revenue − purchase cost of sold items</p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Time range filter */}

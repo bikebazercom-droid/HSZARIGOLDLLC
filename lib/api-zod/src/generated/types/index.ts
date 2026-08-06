@@ -16,6 +16,7 @@ export * from './customerInput';
 export * from './customerListItem';
 export * from './dashboardKpis';
 export * from './dashboardStats';
+export * from './dashboardSummaryCards';
 export * from './errorResponse';
 export * from './getCategorySummaryParams';
 export * from './getDashboardKpisParams';

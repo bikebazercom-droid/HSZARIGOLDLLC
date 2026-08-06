@@ -1,0 +1,33 @@
+================================================================================
+FEATURE PRD: DUAL DASHBOARD CARDS FOR LIVE STOCK VALUATION AND SALES/PROFIT
+================================================================================
+
+Target Objective:
+Render two side-by-side (or responsive grid) status cards at the top of the Dashboard:
+1. Card 1 (Dark Theme): Live Purchased Stock (Grams & KG) + Total Purchase Cost Value (Deducts automatically upon sale).
+2. Card 2 (Emerald Theme): Total Sales Revenue (Invoiced) + Total Net Profit (Calculated live).
+
+--------------------------------------------------------------------------------
+MODULE 1: CARD 1 - LIVE AVAILABLE STOCK & PURCHASE COST VALUE
+--------------------------------------------------------------------------------
+1. UI Layout:
+   - Header: "📦 Current Available Stock" with a "● LIVE INVENTORY" badge.
+   - Top Metric: Stock IN (Purchased Balance) in Grams & KG (e.g. "206,650.000 g / 206.650 KG").
+   - Separator: Dashed line.
+   - Bottom Metric: "Total Purchase Cost Value" in AED (e.g. "AED 200,532,408.00").
+2. Logic:
+   - When an invoice is issued, automatically subtract the sold weight and corresponding purchase cost from Card 1.
+
+--------------------------------------------------------------------------------
+MODULE 2: CARD 2 - TOTAL SALES REVENUE & NET PROFIT
+--------------------------------------------------------------------------------
+1. UI Layout:
+   - Header: "💰 Sales & Profit Summary" with an "📈 PERFORMANCE" badge.
+   - Top Metric: "Total Sales Revenue (Invoiced)" displaying cumulative AED from generated invoices.
+   - Separator: Dashed line.
+   - Bottom Metric: "Net Profit Earned" displaying calculated net profit (`Total Sales Price - Purchase Cost + Making Charges`) in high-visibility bright green (`#4ade80`).
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please render these two dynamic cards in `Dashboard.tsx` with live database calculations now!
+================================================================================

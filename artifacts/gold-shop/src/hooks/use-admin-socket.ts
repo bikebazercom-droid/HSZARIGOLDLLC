@@ -57,11 +57,21 @@ export function useAdminSocket(): void {
 
     const sock = getSocket();
 
+    // Every dashboard aggregate (KPIs, summary hero cards, legacy dashboard)
+    // depends on invoices and/or stock purchases — invalidate them all by
+    // path prefix so parameterized keys (e.g. KPIs with date filters) are hit.
+    function invalidateDashboardAggregates() {
+      queryClient.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/dashboard"),
+      });
+    }
+
     function onInvoiceMutation() {
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetMonthlySalesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetCategorySummaryQueryKey() });
+      invalidateDashboardAggregates();
     }
 
     function onPriceMutation() {
@@ -95,6 +105,7 @@ export function useAdminSocket(): void {
       queryClient.invalidateQueries({ queryKey: getListStockLevelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getListStockPurchasesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getListStockSuppliersQueryKey() });
+      invalidateDashboardAggregates();
     }
 
     sock.on("STOCK_MUTATION",    onStockMutation);

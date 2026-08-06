@@ -639,6 +639,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardKpis"
 
+  /dashboard/summary-cards:
+    get:
+      operationId: getDashboardSummaryCards
+      tags: [dashboard]
+      summary: All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+      responses:
+        "200":
+          description: Live all-time summary card metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummaryCards"
+
   /invoices/sales-report:
     get:
       operationId: getSalesReport
@@ -737,6 +750,23 @@ components:
         netProfitAed:
           type: number
           description: totalRevenueAed - cogsAed
+
+    DashboardSummaryCards:
+      type: object
+      required: [availableStockGrams, availableStockCostAed, totalRevenueAed, netProfitAed]
+      properties:
+        availableStockGrams:
+          type: number
+          description: All-time purchased grams minus sold grams (live remaining stock)
+        availableStockCostAed:
+          type: number
+          description: All-time purchase cost minus COGS of sold items (remaining stock at cost)
+        totalRevenueAed:
+          type: number
+          description: Cumulative invoiced revenue (all-time)
+        netProfitAed:
+          type: number
+          description: totalRevenueAed - all-time COGS
 
     SalesReportRow:
       type: object

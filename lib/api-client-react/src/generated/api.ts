@@ -28,6 +28,7 @@ import type {
   CustomerListItem,
   DashboardKpis,
   DashboardStats,
+  DashboardSummaryCards,
   ErrorResponse,
   GetCategorySummaryParams,
   GetDashboardKpisParams,
@@ -2480,6 +2481,83 @@ export function useGetDashboardKpis<TData = Awaited<ReturnType<typeof getDashboa
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardKpisQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDashboardSummaryCardsUrl = () => {
+
+
+
+
+  return `/api/dashboard/summary-cards`
+}
+
+/**
+ * @summary All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+ */
+export const getDashboardSummaryCards = async ( options?: RequestInit): Promise<DashboardSummaryCards> => {
+
+  return customFetch<DashboardSummaryCards>(getGetDashboardSummaryCardsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardSummaryCardsQueryKey = () => {
+    return [
+    `/api/dashboard/summary-cards`
+    ] as const;
+    }
+
+
+export const getGetDashboardSummaryCardsQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardSummaryCards>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummaryCards>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardSummaryCardsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardSummaryCards>>> = ({ signal }) => getDashboardSummaryCards({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummaryCards>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardSummaryCardsQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardSummaryCards>>>
+export type GetDashboardSummaryCardsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+ */
+
+export function useGetDashboardSummaryCards<TData = Awaited<ReturnType<typeof getDashboardSummaryCards>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummaryCards>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardSummaryCardsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

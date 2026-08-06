@@ -36,6 +36,17 @@ export interface DashboardKpis {
   netProfitAed: number;
 }
 
+export interface DashboardSummaryCards {
+  /** All-time purchased grams minus sold grams (live remaining stock) */
+  availableStockGrams: number;
+  /** All-time purchase cost minus COGS of sold items (remaining stock at cost) */
+  availableStockCostAed: number;
+  /** Cumulative invoiced revenue (all-time) */
+  totalRevenueAed: number;
+  /** totalRevenueAed - all-time COGS */
+  netProfitAed: number;
+}
+
 export interface SalesReportRow {
   invoiceId: number;
   invoiceNumber: string;

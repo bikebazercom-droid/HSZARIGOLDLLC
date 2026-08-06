@@ -138,6 +138,56 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   });
 });
 
+// All-time live totals for the two dashboard hero cards. Not date-filtered:
+// Card 1 shows remaining stock (purchased − sold) and its value at purchase
+// cost (total purchase spend − COGS of everything sold so far); Card 2 shows
+// cumulative invoiced revenue and net profit (revenue − COGS; making charges
+// are already inside invoice totals, so they are not added again).
+router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
+  const bucketExpr = sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
+        WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+        ELSE ii.category END)`;
+
+  const [purchaseAgg, salesAgg, cogsAgg] = await Promise.all([
+    db.execute<{ purchased_grams: string; purchase_cost: string }>(sql`
+      SELECT COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams,
+             COALESCE(SUM(total_price_aed::numeric), 0)::text AS purchase_cost
+      FROM stock_purchases
+    `).then((r) => r.rows[0]),
+    db.execute<{ total_revenue: string; sold_grams: string }>(sql`
+      SELECT COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
+             COALESCE((SELECT SUM(COALESCE(ii.gross_weight::numeric, 0)) FROM invoice_items ii), 0)::text AS sold_grams
+      FROM invoices i
+    `).then((r) => r.rows[0]),
+    db.execute<{ cogs: string }>(sql`
+      WITH avg_cost AS (
+        SELECT category,
+               CASE WHEN SUM(weight_grams::numeric) > 0
+                    THEN SUM(total_price_aed::numeric) / SUM(weight_grams::numeric)
+                    ELSE 0 END AS cost_per_gram
+        FROM stock_purchases
+        GROUP BY category
+      )
+      SELECT COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0)), 0)::text AS cogs
+      FROM invoice_items ii
+      LEFT JOIN avg_cost ac ON ac.category = ${bucketExpr}
+    `).then((r) => r.rows[0]),
+  ]);
+
+  const purchasedGrams = Number(purchaseAgg.purchased_grams);
+  const soldGrams = Number(salesAgg.sold_grams);
+  const purchaseCost = Number(purchaseAgg.purchase_cost);
+  const cogs = Number(cogsAgg.cogs);
+  const revenue = Number(salesAgg.total_revenue);
+
+  res.json({
+    availableStockGrams: Math.round((purchasedGrams - soldGrams) * 1000) / 1000,
+    availableStockCostAed: Math.round((purchaseCost - cogs) * 100) / 100,
+    totalRevenueAed: Math.round(revenue * 100) / 100,
+    netProfitAed: Math.round((revenue - cogs) * 100) / 100,
+  });
+});
+
 router.get("/dashboard", async (_req, res): Promise<void> => {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
