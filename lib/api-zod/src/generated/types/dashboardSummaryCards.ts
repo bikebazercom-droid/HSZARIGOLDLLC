@@ -7,10 +7,14 @@
  */
 
 export interface DashboardSummaryCards {
-  /** All-time purchased grams minus sold grams (live remaining stock) */
+  /** Non-silver purchased grams minus sold grams (live remaining main stock) */
   availableStockGrams: number;
-  /** All-time purchase cost minus COGS of sold items (remaining stock at cost) */
+  /** Non-silver purchase cost minus COGS of sold non-silver items (remaining stock at cost) */
   availableStockCostAed: number;
+  /** Silver purchased grams minus silver sold grams */
+  silverStockGrams: number;
+  /** Silver purchase cost minus COGS of sold silver items */
+  silverStockCostAed: number;
   /** Cumulative invoiced revenue (all-time) */
   totalRevenueAed: number;
   /** totalRevenueAed - all-time COGS */

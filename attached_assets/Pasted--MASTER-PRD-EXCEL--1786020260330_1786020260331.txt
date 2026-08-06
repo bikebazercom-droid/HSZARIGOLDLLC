@@ -1,0 +1,47 @@
+================================================================================
+MASTER PRD: EXCEL-STYLE PDF EXPORT, AUTO-DEDUCTING STOCK CARDS & SEPARATE SILVER WIDGET
+================================================================================
+
+Target Objective:
+1. Format all downloadable Statements into a clean Excel Worksheet Grid Style (PDF & .XLSX).
+2. Create dynamic, auto-deducting Inventory & Profit cards on the Dashboard.
+3. Build a SEPARATE dedicated Stock & Purchase Cost card specifically for SILVER.
+
+--------------------------------------------------------------------------------
+MODULE 1: EXCEL-STYLED PDF & STATEMENT GENERATOR
+--------------------------------------------------------------------------------
+- Render the downloaded PDF Statements with clear Excel gridlines (`border: 1px solid #cbd5e1`), navy column headers (`#1e293b`), alternating row striping, and explicit totals at the bottom for Grams, KG, and AED.
+- Ensure custom item names entered by the user are strictly reflected in the exported PDF.
+
+--------------------------------------------------------------------------------
+MODULE 2: GOLD & MAIN INVENTORY DYNAMIC CARD (Card 1)
+--------------------------------------------------------------------------------
+- UI Structure (Single Box):
+  - Top: "Stock IN (Purchased Balance)" -> Shows available Grams & KG (e.g. 206,650.000 g / 206.650 KG).
+  - Dashed Separator Line.
+  - Bottom: "Total Purchase Cost" -> Shows current valuation in AED (e.g. AED 200,532,408.00).
+- Auto-Deduction Logic:
+  - When an invoice is created for GOLD/TT Bar/KG Bar/995/22K, automatically subtract the sold weight and corresponding purchase cost from this box.
+
+--------------------------------------------------------------------------------
+MODULE 3: DEDICATED SILVER INVENTORY CARD (Card 2)
+--------------------------------------------------------------------------------
+- UI Structure (Separate Dedicated Box for Silver):
+  - Title: "🥈 Silver Inventory & Valuation"
+  - Top: "Silver Available Weight" -> Displays current Silver stock in Grams and KG (e.g. "50,000.000 g / 50.00 KG").
+  - Dashed Separator Line.
+  - Bottom: "Silver Total Purchase Cost" -> Displays total purchase valuation of Silver in AED.
+- Auto-Deduction Logic:
+  - When an invoice item under the "Silver" category is sold, automatically subtract the sold weight and cost exclusively from this Silver Box.
+
+--------------------------------------------------------------------------------
+MODULE 4: SALES REVENUE & NET PROFIT CARD (Card 3)
+--------------------------------------------------------------------------------
+- UI Structure (Emerald Green Box):
+  - Top: "Total Sales Revenue (Invoiced)" in AED.
+  - Bottom: "Net Profit Earned" in AED (`Sales Revenue - Cost Price + Making Charges`).
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please update backend inventory queries, PDF styling engine, and Dashboard UI components to implement these exact cards and Silver separation now!
+================================================================================

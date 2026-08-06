@@ -921,8 +921,10 @@ export const GetDashboardKpisResponse = zod.object({
  * @summary All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
  */
 export const GetDashboardSummaryCardsResponse = zod.object({
-  "availableStockGrams": zod.number().describe('All-time purchased grams minus sold grams (live remaining stock)'),
-  "availableStockCostAed": zod.number().describe('All-time purchase cost minus COGS of sold items (remaining stock at cost)'),
+  "availableStockGrams": zod.number().describe('Non-silver purchased grams minus sold grams (live remaining main stock)'),
+  "availableStockCostAed": zod.number().describe('Non-silver purchase cost minus COGS of sold non-silver items (remaining stock at cost)'),
+  "silverStockGrams": zod.number().describe('Silver purchased grams minus silver sold grams'),
+  "silverStockCostAed": zod.number().describe('Silver purchase cost minus COGS of sold silver items'),
   "totalRevenueAed": zod.number().describe('Cumulative invoiced revenue (all-time)'),
   "netProfitAed": zod.number().describe('totalRevenueAed - all-time COGS')
 })

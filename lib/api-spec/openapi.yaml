@@ -753,14 +753,20 @@ components:
 
     DashboardSummaryCards:
       type: object
-      required: [availableStockGrams, availableStockCostAed, totalRevenueAed, netProfitAed]
+      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, netProfitAed]
       properties:
         availableStockGrams:
           type: number
-          description: All-time purchased grams minus sold grams (live remaining stock)
+          description: Non-silver purchased grams minus sold grams (live remaining main stock)
         availableStockCostAed:
           type: number
-          description: All-time purchase cost minus COGS of sold items (remaining stock at cost)
+          description: Non-silver purchase cost minus COGS of sold non-silver items (remaining stock at cost)
+        silverStockGrams:
+          type: number
+          description: Silver purchased grams minus silver sold grams
+        silverStockCostAed:
+          type: number
+          description: Silver purchase cost minus COGS of sold silver items
         totalRevenueAed:
           type: number
           description: Cumulative invoiced revenue (all-time)

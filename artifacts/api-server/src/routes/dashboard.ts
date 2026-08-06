@@ -148,18 +148,23 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
         WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
         ELSE ii.category END)`;
 
+  // Silver is tracked in its own dedicated card; everything else (gold,
+  // tt_bar, kg_bar, 995, gold_jewelry_22k, custom) rolls up into the main box.
   const [purchaseAgg, salesAgg, cogsAgg] = await Promise.all([
-    db.execute<{ purchased_grams: string; purchase_cost: string }>(sql`
-      SELECT COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams,
-             COALESCE(SUM(total_price_aed::numeric), 0)::text AS purchase_cost
+    db.execute<{ main_grams: string; main_cost: string; silver_grams: string; silver_cost: string }>(sql`
+      SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN weight_grams::numeric ELSE 0 END), 0)::text AS main_grams,
+             COALESCE(SUM(CASE WHEN category <> 'silver' THEN total_price_aed::numeric ELSE 0 END), 0)::text AS main_cost,
+             COALESCE(SUM(CASE WHEN category = 'silver' THEN weight_grams::numeric ELSE 0 END), 0)::text AS silver_grams,
+             COALESCE(SUM(CASE WHEN category = 'silver' THEN total_price_aed::numeric ELSE 0 END), 0)::text AS silver_cost
       FROM stock_purchases
     `).then((r) => r.rows[0]),
-    db.execute<{ total_revenue: string; sold_grams: string }>(sql`
+    db.execute<{ total_revenue: string; main_sold: string; silver_sold: string }>(sql`
       SELECT COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
-             COALESCE((SELECT SUM(COALESCE(ii.gross_weight::numeric, 0)) FROM invoice_items ii), 0)::text AS sold_grams
+             COALESCE((SELECT SUM(CASE WHEN ii.category <> 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) ELSE 0 END) FROM invoice_items ii), 0)::text AS main_sold,
+             COALESCE((SELECT SUM(CASE WHEN ii.category = 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) ELSE 0 END) FROM invoice_items ii), 0)::text AS silver_sold
       FROM invoices i
     `).then((r) => r.rows[0]),
-    db.execute<{ cogs: string }>(sql`
+    db.execute<{ main_cogs: string; silver_cogs: string }>(sql`
       WITH avg_cost AS (
         SELECT category,
                CASE WHEN SUM(weight_grams::numeric) > 0
@@ -168,23 +173,26 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
         FROM stock_purchases
         GROUP BY category
       )
-      SELECT COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0)), 0)::text AS cogs
+      SELECT COALESCE(SUM(CASE WHEN ii.category <> 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0) ELSE 0 END), 0)::text AS main_cogs,
+             COALESCE(SUM(CASE WHEN ii.category = 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0) ELSE 0 END), 0)::text AS silver_cogs
       FROM invoice_items ii
       LEFT JOIN avg_cost ac ON ac.category = ${bucketExpr}
     `).then((r) => r.rows[0]),
   ]);
 
-  const purchasedGrams = Number(purchaseAgg.purchased_grams);
-  const soldGrams = Number(salesAgg.sold_grams);
-  const purchaseCost = Number(purchaseAgg.purchase_cost);
-  const cogs = Number(cogsAgg.cogs);
+  const mainCogs = Number(cogsAgg.main_cogs);
+  const silverCogs = Number(cogsAgg.silver_cogs);
   const revenue = Number(salesAgg.total_revenue);
+  const round3 = (n: number) => Math.round(n * 1000) / 1000;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
 
   res.json({
-    availableStockGrams: Math.round((purchasedGrams - soldGrams) * 1000) / 1000,
-    availableStockCostAed: Math.round((purchaseCost - cogs) * 100) / 100,
-    totalRevenueAed: Math.round(revenue * 100) / 100,
-    netProfitAed: Math.round((revenue - cogs) * 100) / 100,
+    availableStockGrams: round3(Number(purchaseAgg.main_grams) - Number(salesAgg.main_sold)),
+    availableStockCostAed: round2(Number(purchaseAgg.main_cost) - mainCogs),
+    silverStockGrams: round3(Number(purchaseAgg.silver_grams) - Number(salesAgg.silver_sold)),
+    silverStockCostAed: round2(Number(purchaseAgg.silver_cost) - silverCogs),
+    totalRevenueAed: round2(revenue),
+    netProfitAed: round2(revenue - mainCogs - silverCogs),
   });
 });
 

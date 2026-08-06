@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format, startOfWeek, startOfMonth } from "date-fns";
 import {
-  Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote, Package,
+  Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote, Package, Medal,
   Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown, FileSpreadsheet,
 } from "lucide-react";
 
@@ -190,9 +190,10 @@ export default function Dashboard() {
       </div>
 
       {/* Live summary hero cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {summaryLoading || !summary ? (
           <>
+            <Skeleton className="h-44" />
             <Skeleton className="h-44" />
             <Skeleton className="h-44" />
           </>
@@ -225,7 +226,34 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Card 2 — emerald: sales revenue + net profit */}
+            {/* Card 2 — silver: dedicated silver inventory & valuation */}
+            <div className="rounded-xl bg-slate-100 border border-slate-300 text-slate-800 p-5 shadow-md">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
+                  <Medal className="w-4 h-4 text-slate-500" /> Silver Inventory &amp; Valuation
+                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-600 rounded-full px-2.5 py-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-pulse" /> Silver Only
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Silver Available Weight</p>
+                <p className={`text-2xl font-bold mt-0.5 ${summary.silverStockGrams < 0 ? "text-red-600" : ""}`}>
+                  {fmtG(summary.silverStockGrams)} g
+                  <span className="text-sm font-medium text-slate-500"> / {kg(summary.silverStockGrams)} KG</span>
+                </p>
+              </div>
+              <div className="border-t border-dashed border-slate-300 my-4" />
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Silver Total Purchase Cost</p>
+                <p className={`text-xl font-bold mt-0.5 ${summary.silverStockCostAed < 0 ? "text-red-600" : "text-slate-700"}`}>
+                  AED {fmtAED(summary.silverStockCostAed)}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">Deducts automatically on every silver sale</p>
+              </div>
+            </div>
+
+            {/* Card 3 — emerald: sales revenue + net profit */}
             <div className="rounded-xl bg-emerald-900 text-white p-5 shadow-md">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
