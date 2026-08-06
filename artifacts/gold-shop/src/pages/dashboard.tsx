@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
-  useGetDashboard, getGetDashboardQueryKey,
   useGetDashboardKpis, getGetDashboardKpisQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,8 +45,6 @@ export default function Dashboard() {
   const { data: kpis, isLoading: kpisLoading } = useGetDashboardKpis(kpiParams, {
     query: { queryKey: getGetDashboardKpisQueryKey(kpiParams) },
   });
-  const { data, isLoading } = useGetDashboard({ query: { queryKey: getGetDashboardQueryKey() } });
-
   const todayDate = format(new Date(), "MMMM d, yyyy");
 
   const kpiCards = kpis ? [
@@ -149,47 +146,6 @@ export default function Dashboard() {
             ))}
       </div>
 
-      {/* Live rates & totals */}
-      {isLoading || !data ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20" />)}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground">Gold/g</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-lg font-bold">AED {data.goldPricePerGram}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground">Silver/g</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-lg font-bold">AED {data.silverPricePerGram}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground">Total Customers</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-lg font-bold">{data.totalCustomers}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground">Pending Payments</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-lg font-bold text-destructive">{data.pendingPaymentsCount}</div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }
