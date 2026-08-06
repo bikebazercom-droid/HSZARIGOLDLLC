@@ -910,7 +910,31 @@ export const GetDashboardKpisResponse = zod.object({
   "outstandingDueAed": zod.number().describe('Pending invoice totals'),
   "makingChargesAed": zod.number(),
   "invoiceCount": zod.number(),
-  "avgInvoiceAed": zod.number()
+  "avgInvoiceAed": zod.number(),
+  "purchaseCostAed": zod.number().describe('AED spent purchasing stock from suppliers in the range'),
+  "cogsAed": zod.number().describe('Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams)'),
+  "netProfitAed": zod.number().describe('totalRevenueAed - cogsAed')
+})
+
+
+/**
+ * @summary Live per-category stock balances (IN, sold, net, value at current rate)
+ */
+export const GetStockMatrixResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "category": zod.string(),
+  "label": zod.string(),
+  "stockInGrams": zod.number(),
+  "soldGrams": zod.number(),
+  "netGrams": zod.number(),
+  "valueAed": zod.number().describe('netGrams x current per-category rate')
+})),
+  "totals": zod.object({
+  "stockInGrams": zod.number(),
+  "soldGrams": zod.number(),
+  "netGrams": zod.number(),
+  "valueAed": zod.number()
+})
 })
 
 

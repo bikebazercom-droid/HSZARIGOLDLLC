@@ -28,6 +28,34 @@ export interface DashboardKpis {
   makingChargesAed: number;
   invoiceCount: number;
   avgInvoiceAed: number;
+  /** AED spent purchasing stock from suppliers in the range */
+  purchaseCostAed: number;
+  /** Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams) */
+  cogsAed: number;
+  /** totalRevenueAed - cogsAed */
+  netProfitAed: number;
+}
+
+export interface StockMatrixRow {
+  category: string;
+  label: string;
+  stockInGrams: number;
+  soldGrams: number;
+  netGrams: number;
+  /** netGrams x current per-category rate */
+  valueAed: number;
+}
+
+export type StockMatrixTotals = {
+  stockInGrams: number;
+  soldGrams: number;
+  netGrams: number;
+  valueAed: number;
+};
+
+export interface StockMatrix {
+  rows: StockMatrixRow[];
+  totals: StockMatrixTotals;
 }
 
 export interface SalesReportRow {

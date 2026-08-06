@@ -21,4 +21,10 @@ export interface DashboardKpis {
   makingChargesAed: number;
   invoiceCount: number;
   avgInvoiceAed: number;
+  /** AED spent purchasing stock from suppliers in the range */
+  purchaseCostAed: number;
+  /** Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams) */
+  cogsAed: number;
+  /** totalRevenueAed - cogsAed */
+  netProfitAed: number;
 }

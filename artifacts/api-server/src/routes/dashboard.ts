@@ -69,7 +69,15 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     sql` AND `,
   );
 
-  const [invAgg, itemAgg, purchaseAgg] = await Promise.all([
+  // COGS: weighted-average all-time purchase cost per gram per category,
+  // multiplied by sold grams per stock bucket in the range. Same bucket rule
+  // as elsewhere: trimmed description '995' is its own bucket; jewelry karats
+  // share gold_jewelry_22k.
+  const bucketExpr = sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
+        WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+        ELSE ii.category END)`;
+
+  const [invAgg, itemAgg, purchaseAgg, cogsAgg] = await Promise.all([
     db.execute<{ invoice_count: string; total_revenue: string; cash_received: string; outstanding_due: string }>(sql`
       SELECT COUNT(*)::text AS invoice_count,
              COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
@@ -85,10 +93,26 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
       JOIN invoices i ON i.id = ii.invoice_id
       WHERE ${invWhere}
     `).then((r) => r.rows[0]),
-    db.execute<{ purchased_grams: string }>(sql`
-      SELECT COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams
+    db.execute<{ purchased_grams: string; purchase_cost: string }>(sql`
+      SELECT COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams,
+             COALESCE(SUM(total_price_aed::numeric), 0)::text AS purchase_cost
       FROM stock_purchases
       WHERE ${purchaseWhere}
+    `).then((r) => r.rows[0]),
+    db.execute<{ cogs: string }>(sql`
+      WITH avg_cost AS (
+        SELECT category,
+               CASE WHEN SUM(weight_grams::numeric) > 0
+                    THEN SUM(total_price_aed::numeric) / SUM(weight_grams::numeric)
+                    ELSE 0 END AS cost_per_gram
+        FROM stock_purchases
+        GROUP BY category
+      )
+      SELECT COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0)), 0)::text AS cogs
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      LEFT JOIN avg_cost ac ON ac.category = ${bucketExpr}
+      WHERE ${invWhere}
     `).then((r) => r.rows[0]),
   ]);
 
@@ -107,7 +131,74 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     makingChargesAed: Number(itemAgg.making_charges),
     invoiceCount,
     avgInvoiceAed: invoiceCount > 0 ? totalRevenueAed / invoiceCount : 0,
+    purchaseCostAed: Number(purchaseAgg.purchase_cost),
+    cogsAed: Number(cogsAgg.cogs),
+    netProfitAed: totalRevenueAed - Number(cogsAgg.cogs),
   });
+});
+
+// Live per-category stock matrix: Stock IN, Sold, Net Remaining, and value at
+// the current per-category rate. Not date-filtered — this is the live ledger.
+const STOCK_MATRIX_CATEGORIES = ["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"] as const;
+const STOCK_MATRIX_LABEL: Record<string, string> = {
+  gold: "GOLD",
+  tt_bar: "TT Bar",
+  kg_bar: "KG Bar",
+  "995": "995",
+  gold_jewelry_22k: "Gold Jewelry 22K",
+  silver: "Silver",
+};
+
+router.get("/dashboard/stock-matrix", async (_req, res): Promise<void> => {
+  const [movements, prices] = await Promise.all([
+    db.execute<{ category: string; in_grams: string; out_grams: string }>(sql`
+      SELECT category,
+             COALESCE(SUM(CASE WHEN type IN ('purchase', 'purchase_reversal') THEN weight_grams::numeric ELSE 0 END), 0)::text AS in_grams,
+             COALESCE(SUM(CASE WHEN type IN ('sale', 'sale_reversal') THEN weight_grams::numeric ELSE 0 END), 0)::text AS out_grams
+      FROM stock_movements
+      GROUP BY category
+    `).then((r) => r.rows),
+    db.select().from(pricesTable).limit(1).then((r) => r[0]),
+  ]);
+
+  // Current AED/g rate per bucket. "995" is its own stock bucket but is priced
+  // as a TT bar (see inventory ledger conventions).
+  const rateFor: Record<string, number> = {
+    gold: prices ? Number(prices.gold9999Rate) : 0,
+    tt_bar: prices ? Number(prices.ttBarRate) : 0,
+    kg_bar: prices ? Number(prices.kgBarRate) : 0,
+    "995": prices ? Number(prices.ttBarRate) : 0,
+    gold_jewelry_22k: prices ? Number(prices.gold22kRate) : 0,
+    silver: prices ? Number(prices.silverPricePerGram) : 0,
+  };
+
+  const rows = STOCK_MATRIX_CATEGORIES.map((category) => {
+    const m = movements.find((r) => r.category === category);
+    // purchase deltas are positive, purchase_reversals negative; sale deltas
+    // are negative, sale_reversals positive — so IN sums directly and OUT is
+    // the negated sale-side sum.
+    const stockInGrams = m ? Number(m.in_grams) : 0;
+    const soldGrams = m ? -Number(m.out_grams) : 0;
+    const netGrams = stockInGrams - soldGrams;
+    const round3 = (n: number) => Math.round(n * 1000) / 1000;
+    return {
+      category,
+      label: STOCK_MATRIX_LABEL[category],
+      stockInGrams: round3(stockInGrams),
+      soldGrams: round3(soldGrams),
+      netGrams: round3(netGrams),
+      valueAed: Math.round(netGrams * (rateFor[category] ?? 0) * 100) / 100,
+    };
+  });
+
+  const totals = {
+    stockInGrams: Math.round(rows.reduce((s, r) => s + r.stockInGrams, 0) * 1000) / 1000,
+    soldGrams: Math.round(rows.reduce((s, r) => s + r.soldGrams, 0) * 1000) / 1000,
+    netGrams: Math.round(rows.reduce((s, r) => s + r.netGrams, 0) * 1000) / 1000,
+    valueAed: Math.round(rows.reduce((s, r) => s + r.valueAed, 0) * 100) / 100,
+  };
+
+  res.json({ rows, totals });
 });
 
 router.get("/dashboard", async (_req, res): Promise<void> => {
@@ -552,6 +643,254 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
       `Total Weight: ${totalGrams.toFixed(2)} g   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
       40, y + 14, { align: "right", width: doc.page.width - 80 }
     );
+
+  doc.end();
+});
+
+// Raw PDF download (outside the OpenAPI spec, like other download routes):
+// /api/dashboard/statement-pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
+// A4 statement with itemized purchases, itemized sales, remaining stock and profit.
+router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
+  const q = req.query as Record<string, string | undefined>;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const rawStart = q.startDate?.trim() || null;
+  const rawEnd = q.endDate?.trim() || null;
+  if ((rawStart && !DATE_RE.test(rawStart)) || (rawEnd && !DATE_RE.test(rawEnd))) {
+    res.status(400).json({ error: "startDate/endDate must be YYYY-MM-DD" });
+    return;
+  }
+  const startDate = rawStart;
+  const endDate = rawEnd;
+  const rawCategory = q.category?.trim() || null;
+  const VALID_CATEGORIES = new Set(["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"]);
+  if (rawCategory && rawCategory !== "all" && !VALID_CATEGORIES.has(rawCategory)) {
+    res.status(400).json({ error: "Invalid category" });
+    return;
+  }
+  const category = rawCategory && rawCategory !== "all" ? rawCategory : null;
+
+  const bucketExpr = sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
+        WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+        ELSE ii.category END)`;
+
+  const purchaseWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(startDate ? [sql`purchase_date >= ${startDate}`] : []),
+      ...(endDate ? [sql`purchase_date <= ${endDate}`] : []),
+      ...(category ? [sql`category = ${category}`] : []),
+    ],
+    sql` AND `,
+  );
+  let endExclusive: string | null = null;
+  if (endDate) {
+    const d = new Date(`${endDate}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1);
+      endExclusive = d.toISOString();
+    }
+  }
+  const salesWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(startDate ? [sql`i.created_at >= ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz`] : []),
+      ...(endExclusive ? [sql`i.created_at < ${endExclusive}::timestamptz`] : []),
+      ...(category ? [sql`${bucketExpr} = ${category}`] : []),
+    ],
+    sql` AND `,
+  );
+
+  const [purchases, sales, levels] = await Promise.all([
+    db.execute<{ purchase_date: string; supplier_name: string; category: string; weight_grams: string; total_price_aed: string }>(sql`
+      SELECT purchase_date, supplier_name, category, weight_grams::text, total_price_aed::text
+      FROM stock_purchases
+      WHERE ${purchaseWhere}
+      ORDER BY purchase_date, id
+    `).then((r) => r.rows),
+    // Revenue basis matches the KPI and sales report: each item's amount is its
+    // proportional share of the invoice's FINAL billed total (VAT/discount/
+    // round-off included), so statement totals reconcile with the dashboard.
+    db.execute<{ created_at: string; invoice_number: string; customer_name: string | null; description: string; bucket: string | null; grams: string; amount: string }>(sql`
+      SELECT i.created_at::text, i.invoice_number, i.customer_name, ii.description,
+             ${bucketExpr} AS bucket,
+             COALESCE(ii.gross_weight::numeric, 0)::text AS grams,
+             (CASE WHEN s.sum_items > 0
+                   THEN ii.total_price::numeric * i.total::numeric / s.sum_items
+                   ELSE ii.total_price::numeric END)::text AS amount
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      JOIN LATERAL (
+        SELECT COALESCE(SUM(total_price::numeric), 0) AS sum_items
+        FROM invoice_items WHERE invoice_id = i.id
+      ) s ON TRUE
+      WHERE ${salesWhere}
+      ORDER BY i.created_at, i.id
+    `).then((r) => r.rows),
+    db.execute<{ category: string; weight_grams: string }>(sql`
+      SELECT category, weight_grams::text FROM stock_levels ORDER BY category
+    `).then((r) => r.rows),
+  ]);
+
+  const totalPurchaseAed = purchases.reduce((s, p) => s + Number(p.total_price_aed), 0);
+  const totalPurchaseG = purchases.reduce((s, p) => s + Number(p.weight_grams), 0);
+  const totalSalesAed = sales.reduce((s, r) => s + Number(r.amount), 0);
+  const totalSalesG = sales.reduce((s, r) => s + Number(r.grams), 0);
+  // Profit basis matches the KPI: revenue minus weighted-average purchase cost
+  // of the sold grams, computed per category across all purchases.
+  const avgCost = new Map<string, number>();
+  const allPurch = await db.execute<{ category: string; g: string; aed: string }>(sql`
+    SELECT category, SUM(weight_grams::numeric)::text AS g, SUM(total_price_aed::numeric)::text AS aed
+    FROM stock_purchases GROUP BY category
+  `).then((r) => r.rows);
+  for (const p of allPurch) {
+    const g = Number(p.g);
+    avgCost.set(p.category, g > 0 ? Number(p.aed) / g : 0);
+  }
+  const cogs = sales.reduce((s, r) => s + Number(r.grams) * (avgCost.get(r.bucket ?? "") ?? 0), 0);
+  const profit = totalSalesAed - cogs;
+
+  const catLabel: Record<string, string> = {
+    gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
+    gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
+  };
+  const displayCat = (r: { bucket: string | null; description: string }) =>
+    r.bucket && catLabel[r.bucket] ? catLabel[r.bucket] : r.description.trim();
+
+  const now = new Date();
+  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-statement.pdf"`);
+  doc.pipe(res);
+
+  const NAVY = "#1e3a5f";
+  const GOLD = "#c8a43a";
+  const LIGHT = "#f5f3ee";
+  const W = doc.page.width - 80;
+
+  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
+  doc.fillColor(GOLD).fontSize(22).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
+  doc.fillColor("#aac4e8").fontSize(10).font("Helvetica").text("Stock & Profit Statement", 40, 50);
+  doc.fillColor("white").fontSize(9).text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 66);
+
+  const criteria = [
+    startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
+    `Category: ${category ? (catLabel[category] ?? category) : "All"}`,
+  ].join("   ·   ");
+  doc.rect(40, 100, W, 30).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, 110);
+
+  // Summary boxes
+  const boxes = [
+    ["Purchases (AED)", totalPurchaseAed],
+    ["Sales (AED)", totalSalesAed],
+    ["Est. COGS (AED)", cogs],
+    ["Net Profit (AED)", profit],
+  ] as const;
+  let bx = 40;
+  const bw = (W - 3 * 8) / 4;
+  for (const [label, val] of boxes) {
+    doc.rect(bx, 140, bw, 40).fill(label.startsWith("Net Profit") ? "#e7f5ec" : LIGHT);
+    doc.fillColor("#666").font("Helvetica").fontSize(7.5).text(label, bx + 8, 147, { width: bw - 16 });
+    doc.fillColor(label.startsWith("Net Profit") ? "#1c7a3d" : NAVY).font("Helvetica-Bold").fontSize(11)
+      .text(val.toLocaleString("en-AE", { minimumFractionDigits: 2 }), bx + 8, 159, { width: bw - 16 });
+    bx += bw + 8;
+  }
+
+  let y = 195;
+  const ensureSpace = (h: number) => {
+    if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
+  };
+  const sectionHeader = (title: string) => {
+    ensureSpace(40);
+    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(12).text(title, 40, y);
+    y += 18;
+  };
+  const tableHeader = (cells: [string, number, boolean?][]) => {
+    ensureSpace(24);
+    doc.rect(40, y, W, 16).fill(NAVY);
+    let x = 44;
+    doc.fillColor("white").font("Helvetica-Bold").fontSize(7.5);
+    for (const [label, width, right] of cells) {
+      doc.text(label, x, y + 4.5, { width, align: right ? "right" : "left" });
+      x += width;
+    }
+    y += 16;
+  };
+  let rowIdx = 0;
+  const tableRow = (cells: [string, number, boolean?][], bold = false) => {
+    ensureSpace(15);
+    doc.rect(40, y, W, 14).fill(rowIdx++ % 2 === 0 ? "white" : LIGHT);
+    let x = 44;
+    doc.fillColor("#1a1a1a").font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(7.5);
+    for (const [text, width, right] of cells) {
+      doc.text(text, x, y + 3.5, { width: width - 6, align: right ? "right" : "left" });
+      x += width;
+    }
+    y += 14;
+  };
+
+  // Purchases section
+  sectionHeader("Itemized Purchases");
+  if (purchases.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No purchases in this period.", 40, y); y += 20;
+  } else {
+    tableHeader([["Date", 80], ["Supplier", 150], ["Category", 120], ["Weight (g)", 80, true], ["Cost AED", 85, true]]);
+    for (const p of purchases) {
+      tableRow([
+        [p.purchase_date, 80],
+        [p.supplier_name, 150],
+        [catLabel[p.category] ?? p.category, 120],
+        [Number(p.weight_grams).toLocaleString("en-AE", { minimumFractionDigits: 3 }), 80, true],
+        [Number(p.total_price_aed).toLocaleString("en-AE", { minimumFractionDigits: 2 }), 85, true],
+      ]);
+    }
+    tableRow([["TOTAL", 350], [totalPurchaseG.toLocaleString("en-AE", { minimumFractionDigits: 3 }), 80, true], [totalPurchaseAed.toLocaleString("en-AE", { minimumFractionDigits: 2 }), 85, true]], true);
+    y += 12;
+  }
+
+  // Sales section
+  sectionHeader("Itemized Sales");
+  if (sales.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No sales in this period.", 40, y); y += 20;
+  } else {
+    tableHeader([["Date", 60], ["Invoice #", 75], ["Customer", 110], ["Item", 120], ["Weight (g)", 70, true], ["Total AED", 80, true]]);
+    for (const s of sales) {
+      tableRow([
+        [new Date(s.created_at).toLocaleDateString("en-AE"), 60],
+        [s.invoice_number, 75],
+        [(s.customer_name ?? "Walk-in").substring(0, 20), 110],
+        [displayCat(s).substring(0, 24), 120],
+        [Number(s.grams).toLocaleString("en-AE", { minimumFractionDigits: 3 }), 70, true],
+        [Number(s.amount).toLocaleString("en-AE", { minimumFractionDigits: 2 }), 80, true],
+      ]);
+    }
+    tableRow([["TOTAL", 365], [totalSalesG.toLocaleString("en-AE", { minimumFractionDigits: 3 }), 70, true], [totalSalesAed.toLocaleString("en-AE", { minimumFractionDigits: 2 }), 80, true]], true);
+    y += 12;
+  }
+
+  // Remaining stock (live, all-time)
+  sectionHeader("Remaining Stock (Live)");
+  const levelRows = category ? levels.filter((l) => l.category === category) : levels;
+  if (levelRows.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No stock records.", 40, y); y += 20;
+  } else {
+    tableHeader([["Category", 200], ["Net Remaining (g)", 150, true], ["KG", 165, true]]);
+    for (const l of levelRows) {
+      const g = Number(l.weight_grams);
+      tableRow([
+        [catLabel[l.category] ?? l.category, 200],
+        [g.toLocaleString("en-AE", { minimumFractionDigits: 3 }), 150, true],
+        [(g / 1000).toFixed(3), 165, true],
+      ]);
+    }
+  }
+
+  ensureSpace(60);
+  doc.rect(40, y + 8, W, 1).fill(GOLD);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
+    .text(`Net Profit: AED ${profit.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`, 40, y + 16, { align: "right", width: W });
+  doc.fillColor("#666").font("Helvetica").fontSize(7)
+    .text("Profit = Sales revenue − estimated cost of sold items (weighted-average purchase cost per gram per category).", 40, y + 32, { width: W });
 
   doc.end();
 });

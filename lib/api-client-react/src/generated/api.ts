@@ -49,6 +49,7 @@ import type {
   ProductInput,
   SalesReport,
   StockLevel,
+  StockMatrix,
   StockMovement,
   StockPurchase,
   StockPurchaseInput
@@ -2480,6 +2481,83 @@ export function useGetDashboardKpis<TData = Awaited<ReturnType<typeof getDashboa
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardKpisQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStockMatrixUrl = () => {
+
+
+
+
+  return `/api/dashboard/stock-matrix`
+}
+
+/**
+ * @summary Live per-category stock balances (IN, sold, net, value at current rate)
+ */
+export const getStockMatrix = async ( options?: RequestInit): Promise<StockMatrix> => {
+
+  return customFetch<StockMatrix>(getGetStockMatrixUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockMatrixQueryKey = () => {
+    return [
+    `/api/dashboard/stock-matrix`
+    ] as const;
+    }
+
+
+export const getGetStockMatrixQueryOptions = <TData = Awaited<ReturnType<typeof getStockMatrix>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockMatrix>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockMatrixQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockMatrix>>> = ({ signal }) => getStockMatrix({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockMatrix>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockMatrixQueryResult = NonNullable<Awaited<ReturnType<typeof getStockMatrix>>>
+export type GetStockMatrixQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Live per-category stock balances (IN, sold, net, value at current rate)
+ */
+
+export function useGetStockMatrix<TData = Awaited<ReturnType<typeof getStockMatrix>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockMatrix>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockMatrixQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

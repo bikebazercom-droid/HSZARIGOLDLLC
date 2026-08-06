@@ -1,0 +1,40 @@
+================================================================================
+MASTER FEATURE PRD: CATEGORY-SPECIFIC LIVE STOCK MATRIX & PROFIT DASHBOARD
+================================================================================
+
+Target Objective:
+Redesign the main Dashboard to display live per-category stock balances in Grams & KG for [GOLD, TT Bar, KG Bar, 995, Gold Jewelry 22K, Silver], automatically deduct sold weights upon invoicing, showcase clear Cost vs Revenue vs Net Profit financial metrics, and offer 1-click PDF Statement downloads.
+
+--------------------------------------------------------------------------------
+MODULE 1: CATEGORY-SPECIFIC LIVE STOCK MATRIX (`Dashboard.tsx`)
+--------------------------------------------------------------------------------
+1. Per-Category Inventory Tracking:
+   - Render a high-visibility widget/table tracking the exact stock for:
+     `[GOLD, TT Bar, KG Bar, 995, Gold Jewelry 22K, Silver]`
+   - Display each item in both **Grams** and **Kilograms (KG)** dynamically (e.g. "2,500 Grams / 2.50 KG").
+   - Table Columns: `[Product Category | Total Stock IN | Total Sold | Net Remaining Stock | Total Value (AED)]`.
+
+2. Auto-Deduction Engine:
+   - When an invoice is saved, identify the exact category of the item sold and deduct the sold grams/KG from the active `Net Remaining Stock`.
+
+--------------------------------------------------------------------------------
+MODULE 2: FINANCIAL SUMMARY CARDS (Cost, Sales & Net Profit)
+--------------------------------------------------------------------------------
+1. Top Metrics Cards:
+   - Card 1 [Total Purchase Cost]: Aggregate AED spent purchasing stock from suppliers (Rahim, Karim, etc.).
+   - Card 2 [Total Sales Revenue]: Aggregate AED earned from generated invoices.
+   - Card 3 [Net Profit (AED)]: Calculated as `Total Sales Revenue - Total Cost of Sold Items + Total Making Charges`. Display in a dedicated green accent box.
+   - Card 4 [Making Charge Revenue]: Total profit strictly earned from making/handling charges.
+
+--------------------------------------------------------------------------------
+MODULE 3: STATEMENT EXPORTER
+--------------------------------------------------------------------------------
+1. One-Click PDF Statement Modal:
+   - Add a prominent "📄 Download PDF Statement" button.
+   - Open a modal with Date Range (Start Date to End Date) and Category filters.
+   - Generate a clean A4 PDF displaying itemized purchases, sales, remaining stock, total profit, and custom item names.
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please update database stock aggregation queries, backend profit math, and render this category-specific dashboard layout now!
+================================================================================
