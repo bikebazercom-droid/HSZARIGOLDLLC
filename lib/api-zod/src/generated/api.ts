@@ -585,7 +585,8 @@ export const ListInvoicesQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "paymentMethod": zod.coerce.string().optional(),
   "startDate": zod.coerce.string().optional(),
-  "endDate": zod.coerce.string().optional()
+  "endDate": zod.coerce.string().optional(),
+  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']).optional().describe('Stock category bucket (\"995\" is its own bucket; gold_jewelry_22k covers all jewelry karats)')
 })
 
 export const ListInvoicesResponseItem = zod.object({
@@ -890,6 +891,36 @@ export const ListStockMovementsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListStockMovementsResponse = zod.array(ListStockMovementsResponseItem)
+
+
+/**
+ * @summary Item-level sales report with aggregate summary for the invoices page filters and PDF statement
+ */
+export const GetSalesReportQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
+  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']).optional()
+})
+
+export const GetSalesReportResponse = zod.object({
+  "summary": zod.object({
+  "totalGrams": zod.number(),
+  "totalAed": zod.number(),
+  "invoiceCount": zod.number()
+}),
+  "rows": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNumber": zod.string(),
+  "date": zod.string(),
+  "customerName": zod.string().nullable(),
+  "category": zod.string().describe('Stock category bucket for the item'),
+  "description": zod.string(),
+  "weightGrams": zod.number(),
+  "ratePerGram": zod.number(),
+  "totalAed": zod.number()
+}))
+})
 
 
 /**

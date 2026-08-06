@@ -5,10 +5,15 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListInvoicesCategory } from './listInvoicesCategory';
 
 export type ListInvoicesParams = {
 search?: string;
 paymentMethod?: string;
 startDate?: string;
 endDate?: string;
+/**
+ * Stock category bucket ("995" is its own bucket; gold_jewelry_22k covers all jewelry karats)
+ */
+category?: ListInvoicesCategory;
 };

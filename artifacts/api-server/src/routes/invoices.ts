@@ -66,6 +66,91 @@ function parseItem(item: typeof invoiceItemsTable.$inferSelect) {
   };
 }
 
+// Item-level sales report powering the invoices page summary cards and the
+// PDF Sales Statement. Summary is computed from matching items (distinct
+// invoice count, sum of gross weight and item totals).
+router.get("/invoices/sales-report", async (req, res): Promise<void> => {
+  const q = req.query as Record<string, string | undefined>;
+  const search = q.search?.trim() || undefined;
+  const category = q.category?.trim() || undefined;
+  const startDate = q.startDate?.trim() || undefined;
+  const endDate = q.endDate?.trim() || undefined;
+
+  const conds = [sql`TRUE`];
+  if (search) {
+    const like = `%${search}%`;
+    conds.push(sql`(i.customer_name ILIKE ${like} OR i.invoice_number ILIKE ${like} OR i.customer_mobile ILIKE ${like})`);
+  }
+  if (startDate) {
+    const d = new Date(startDate);
+    if (!Number.isNaN(d.getTime())) conds.push(sql`i.created_at >= ${d.toISOString()}::timestamptz`);
+  }
+  if (endDate) {
+    const d = new Date(endDate);
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1);
+      conds.push(sql`i.created_at < ${d.toISOString()}::timestamptz`);
+    }
+  }
+  if (category) {
+    conds.push(sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
+                         WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+                         ELSE ii.category END) = ${category}`);
+  }
+  const where = sql.join(conds, sql` AND `);
+
+  const result = await db.execute<{
+    invoice_id: number;
+    invoice_number: string;
+    created_at: Date;
+    customer_name: string | null;
+    bucket: string | null;
+    description: string;
+    gross_weight: string | null;
+    unit_price: string;
+    total_price: string;
+  }>(sql`
+    SELECT i.id AS invoice_id, i.invoice_number, i.created_at, i.customer_name,
+           (CASE WHEN TRIM(ii.description) = '995' THEN '995'
+                 WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+                 ELSE ii.category END) AS bucket,
+           ii.description, ii.gross_weight, ii.unit_price,
+           -- Revenue basis: the invoice's final billed total (after VAT and
+           -- round-off discount), allocated across line items proportionally
+           -- to their pre-VAT line totals. Rows then sum exactly to billed
+           -- revenue, and category filters get their fair share.
+           COALESCE(ii.total_price::numeric * (i.total::numeric / NULLIF(inv_sum.items_total, 0)), ii.total_price::numeric) AS total_price
+    FROM invoice_items ii
+    JOIN invoices i ON i.id = ii.invoice_id
+    JOIN LATERAL (
+      SELECT SUM(x.total_price::numeric) AS items_total
+      FROM invoice_items x WHERE x.invoice_id = i.id
+    ) inv_sum ON TRUE
+    WHERE ${where}
+    ORDER BY i.created_at DESC, i.id DESC, ii.id ASC
+  `);
+
+  const rows = (result.rows || []).map((r) => ({
+    invoiceId: r.invoice_id,
+    invoiceNumber: r.invoice_number,
+    date: new Date(r.created_at).toISOString(),
+    customerName: r.customer_name,
+    category: r.bucket ?? "other",
+    description: r.description,
+    weightGrams: r.gross_weight != null ? Number(r.gross_weight) : 0,
+    ratePerGram: Number(r.unit_price),
+    totalAed: Number(r.total_price),
+  }));
+
+  const summary = {
+    totalGrams: rows.reduce((s, r) => s + r.weightGrams, 0),
+    totalAed: rows.reduce((s, r) => s + r.totalAed, 0),
+    invoiceCount: new Set(rows.map((r) => r.invoiceId)).size,
+  };
+
+  res.json({ summary, rows });
+});
+
 router.get("/invoices/monthly-sales", async (_req, res): Promise<void> => {
   const rows = await db.execute<{
     month: string;
@@ -103,10 +188,23 @@ router.get("/invoices", async (req, res): Promise<void> => {
   const paymentMethod = query.success ? query.data.paymentMethod : undefined;
   const startDate = query.success ? query.data.startDate : undefined;
   const endDate = query.success ? query.data.endDate : undefined;
+  const category = query.success ? (query.data as { category?: string }).category : undefined;
 
   const conditions = [];
   if (search) {
-    conditions.push(ilike(invoicesTable.customerName, `%${search}%`));
+    conditions.push(
+      sql`(${ilike(invoicesTable.customerName, `%${search}%`)} OR ${ilike(invoicesTable.invoiceNumber, `%${search}%`)} OR ${ilike(invoicesTable.customerMobile, `%${search}%`)})`,
+    );
+  }
+  if (category) {
+    // Same bucket rule as itemStockCategory: "995" descriptions are their own
+    // bucket; all jewelry karats share gold_jewelry_22k.
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM invoice_items ii WHERE ii.invoice_id = ${invoicesTable.id}
+      AND (CASE WHEN TRIM(ii.description) = '995' THEN '995'
+                WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+                ELSE ii.category END) = ${category}
+    )`);
   }
   if (paymentMethod) {
     conditions.push(eq(invoicesTable.paymentMethod, paymentMethod));

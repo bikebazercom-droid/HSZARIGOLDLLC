@@ -432,6 +432,12 @@ paths:
           in: query
           schema:
             type: string
+        - name: category
+          in: query
+          description: Stock category bucket ("995" is its own bucket; gold_jewelry_22k covers all jewelry karats)
+          schema:
+            type: string
+            enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
       responses:
         "200":
           description: List of invoices
@@ -611,6 +617,37 @@ paths:
                 items:
                   $ref: "#/components/schemas/StockMovement"
 
+  /invoices/sales-report:
+    get:
+      operationId: getSalesReport
+      tags: [invoices]
+      summary: Item-level sales report with aggregate summary for the invoices page filters and PDF statement
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+      responses:
+        "200":
+          description: Sales report rows and summary matching the active filters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesReport"
+
   /invoices/monthly-sales:
     get:
       operationId: getMonthlySales
@@ -641,6 +678,50 @@ components:
       properties:
         error:
           type: string
+
+    SalesReportRow:
+      type: object
+      required: [invoiceId, invoiceNumber, date, customerName, category, description, weightGrams, ratePerGram, totalAed]
+      properties:
+        invoiceId:
+          type: integer
+        invoiceNumber:
+          type: string
+        date:
+          type: string
+        customerName:
+          type: string
+          nullable: true
+        category:
+          type: string
+          description: Stock category bucket for the item
+        description:
+          type: string
+        weightGrams:
+          type: number
+        ratePerGram:
+          type: number
+        totalAed:
+          type: number
+
+    SalesReport:
+      type: object
+      required: [summary, rows]
+      properties:
+        summary:
+          type: object
+          required: [totalGrams, totalAed, invoiceCount]
+          properties:
+            totalGrams:
+              type: number
+            totalAed:
+              type: number
+            invoiceCount:
+              type: integer
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesReportRow"
 
     DashboardStats:
       type: object

@@ -13,6 +13,30 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface SalesReportRow {
+  invoiceId: number;
+  invoiceNumber: string;
+  date: string;
+  customerName: string | null;
+  /** Stock category bucket for the item */
+  category: string;
+  description: string;
+  weightGrams: number;
+  ratePerGram: number;
+  totalAed: number;
+}
+
+export type SalesReportSummary = {
+  totalGrams: number;
+  totalAed: number;
+  invoiceCount: number;
+};
+
+export interface SalesReport {
+  summary: SalesReportSummary;
+  rows: SalesReportRow[];
+}
+
 export type InvoicePaymentMethod = typeof InvoicePaymentMethod[keyof typeof InvoicePaymentMethod];
 
 
@@ -521,7 +545,23 @@ search?: string;
 paymentMethod?: string;
 startDate?: string;
 endDate?: string;
+/**
+ * Stock category bucket ("995" is its own bucket; gold_jewelry_22k covers all jewelry karats)
+ */
+category?: ListInvoicesCategory;
 };
+
+export type ListInvoicesCategory = typeof ListInvoicesCategory[keyof typeof ListInvoicesCategory];
+
+
+export const ListInvoicesCategory = {
+  gold: 'gold',
+  tt_bar: 'tt_bar',
+  kg_bar: 'kg_bar',
+  NUMBER_995: '995',
+  gold_jewelry_22k: 'gold_jewelry_22k',
+  silver: 'silver',
+} as const;
 
 export type ListStockPurchasesParams = {
 supplier?: string;
@@ -533,4 +573,23 @@ endDate?: string;
 export type ListStockMovementsParams = {
 category?: string;
 };
+
+export type GetSalesReportParams = {
+search?: string;
+startDate?: string;
+endDate?: string;
+category?: GetSalesReportCategory;
+};
+
+export type GetSalesReportCategory = typeof GetSalesReportCategory[keyof typeof GetSalesReportCategory];
+
+
+export const GetSalesReportCategory = {
+  gold: 'gold',
+  tt_bar: 'tt_bar',
+  kg_bar: 'kg_bar',
+  NUMBER_995: '995',
+  gold_jewelry_22k: 'gold_jewelry_22k',
+  silver: 'silver',
+} as const;
 

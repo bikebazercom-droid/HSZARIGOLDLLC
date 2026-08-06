@@ -1,0 +1,38 @@
+================================================================================
+MASTER FEATURE PRD: INVOICE SALES REPORT FILTER & PDF STATEMENT GENERATOR
+================================================================================
+
+Target Objective:
+Add advanced date-range, category, and supplier filters to the Invoices page, along with a summary of total grams/KG sold, and an automated PDF Sales Statement generator.
+
+--------------------------------------------------------------------------------
+MODULE 1: ADVANCED INVOICE FILTERS & SUMMARY HEADER (Invoices Page)
+--------------------------------------------------------------------------------
+1. Filter Controls Bar:
+   - Add Start Date & End Date pickers (`startDate`, `endDate`).
+   - Add Category Dropdown: `[All Categories, GOLD, TT Bar, KG Bar, 995, Gold Jewelry 22K, Silver]`.
+   - Add Supplier Dropdown: `[All Suppliers, + Dynamic Supplier Names]`.
+   - Add Search Bar: Search by Invoice #, Customer Name, or Phone.
+   - Add "Download PDF Statement" Button.
+
+2. Live Summary Stats Cards:
+   - Calculate and display dynamically based on active filters:
+     a) Total Grams/KG Sold (e.g., "Total Sold: 2,450.50 Grams / 2.45 KG")
+     b) Total Revenue Generated (AED)
+     c) Total Invoices Count
+
+--------------------------------------------------------------------------------
+MODULE 2: PDF SALES STATEMENT GENERATOR
+--------------------------------------------------------------------------------
+1. Action Trigger:
+   - On clicking "Download PDF Statement", generate an A4 PDF document containing:
+     - Company Header (Hazari Gold L.L.C. logo & info).
+     - Statement Criteria Header (e.g. "Sales Statement for Category: TT Bar | Date: 01/08/2026 to 06/08/2026").
+     - Summary Box: Total Weight Sold (Grams & KG) and Total AED Amount.
+     - Itemized Table: [Invoice #, Date, Customer Name, Category, Weight (Grams), Rate/Gram (AED), Total Amount (AED)].
+     - Authorised Signature and Footer.
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please refactor the Invoices page (`Invoices.tsx` and invoice API routes) to include these filters, aggregate math calculations, and the PDF Statement download module now!
+================================================================================

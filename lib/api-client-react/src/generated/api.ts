@@ -29,6 +29,7 @@ import type {
   DashboardStats,
   ErrorResponse,
   GetCategorySummaryParams,
+  GetSalesReportParams,
   HealthStatus,
   Invoice,
   InvoiceInput,
@@ -44,6 +45,7 @@ import type {
   PricesInput,
   Product,
   ProductInput,
+  SalesReport,
   StockLevel,
   StockMovement,
   StockPurchase,
@@ -2392,6 +2394,90 @@ export function useListStockMovements<TData = Awaited<ReturnType<typeof listStoc
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListStockMovementsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSalesReportUrl = (params?: GetSalesReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoices/sales-report?${stringifiedParams}` : `/api/invoices/sales-report`
+}
+
+/**
+ * @summary Item-level sales report with aggregate summary for the invoices page filters and PDF statement
+ */
+export const getSalesReport = async (params?: GetSalesReportParams, options?: RequestInit): Promise<SalesReport> => {
+
+  return customFetch<SalesReport>(getGetSalesReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSalesReportQueryKey = (params?: GetSalesReportParams,) => {
+    return [
+    `/api/invoices/sales-report`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSalesReportQueryOptions = <TData = Awaited<ReturnType<typeof getSalesReport>>, TError = ErrorType<unknown>>(params?: GetSalesReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSalesReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSalesReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSalesReport>>> = ({ signal }) => getSalesReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSalesReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSalesReportQueryResult = NonNullable<Awaited<ReturnType<typeof getSalesReport>>>
+export type GetSalesReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Item-level sales report with aggregate summary for the invoices page filters and PDF statement
+ */
+
+export function useGetSalesReport<TData = Awaited<ReturnType<typeof getSalesReport>>, TError = ErrorType<unknown>>(
+ params?: GetSalesReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSalesReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSalesReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
