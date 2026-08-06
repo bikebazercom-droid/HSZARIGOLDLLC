@@ -153,6 +153,8 @@ export default function InvoiceDetail() {
       .from(invoiceRef.current)
       .toPdf()
       .get("pdf")
+      // html2pdf's Worker is a thenable whose chain keeps worker methods
+      // (.save) after .then — but its TS types say plain Promise, so cast.
       .then((pdf: any) => {
         // Hard guarantee: delete any pages beyond page 1 so the downloaded
         // PDF is always exactly one A4 page (kills the trailing blank page
@@ -161,8 +163,9 @@ export default function InvoiceDetail() {
         for (let i = totalPages; i > 1; i--) {
           pdf.deletePage(i);
         }
+        return pdf;
       })
-      .save();
+      .then((pdf: any) => pdf.save());
   };
 
   return (
