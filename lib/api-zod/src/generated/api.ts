@@ -918,27 +918,6 @@ export const GetDashboardKpisResponse = zod.object({
 
 
 /**
- * @summary Live per-category stock balances (IN, sold, net, value at current rate)
- */
-export const GetStockMatrixResponse = zod.object({
-  "rows": zod.array(zod.object({
-  "category": zod.string(),
-  "label": zod.string(),
-  "stockInGrams": zod.number(),
-  "soldGrams": zod.number(),
-  "netGrams": zod.number(),
-  "valueAed": zod.number().describe('netGrams x current per-category rate')
-})),
-  "totals": zod.object({
-  "stockInGrams": zod.number(),
-  "soldGrams": zod.number(),
-  "netGrams": zod.number(),
-  "valueAed": zod.number()
-})
-})
-
-
-/**
  * @summary Item-level sales report with aggregate summary for the invoices page filters and PDF statement
  */
 export const GetSalesReportQueryParams = zod.object({

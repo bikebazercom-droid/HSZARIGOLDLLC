@@ -36,28 +36,6 @@ export interface DashboardKpis {
   netProfitAed: number;
 }
 
-export interface StockMatrixRow {
-  category: string;
-  label: string;
-  stockInGrams: number;
-  soldGrams: number;
-  netGrams: number;
-  /** netGrams x current per-category rate */
-  valueAed: number;
-}
-
-export type StockMatrixTotals = {
-  stockInGrams: number;
-  soldGrams: number;
-  netGrams: number;
-  valueAed: number;
-};
-
-export interface StockMatrix {
-  rows: StockMatrixRow[];
-  totals: StockMatrixTotals;
-}
-
 export interface SalesReportRow {
   invoiceId: number;
   invoiceNumber: string;

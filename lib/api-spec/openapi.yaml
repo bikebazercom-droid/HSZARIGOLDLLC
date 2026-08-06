@@ -639,19 +639,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardKpis"
 
-  /dashboard/stock-matrix:
-    get:
-      operationId: getStockMatrix
-      tags: [dashboard]
-      summary: Live per-category stock balances (IN, sold, net, value at current rate)
-      responses:
-        "200":
-          description: Per-category live stock matrix
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StockMatrix"
-
   /invoices/sales-report:
     get:
       operationId: getSalesReport
@@ -750,45 +737,6 @@ components:
         netProfitAed:
           type: number
           description: totalRevenueAed - cogsAed
-
-    StockMatrixRow:
-      type: object
-      required: [category, label, stockInGrams, soldGrams, netGrams, valueAed]
-      properties:
-        category:
-          type: string
-        label:
-          type: string
-        stockInGrams:
-          type: number
-        soldGrams:
-          type: number
-        netGrams:
-          type: number
-        valueAed:
-          type: number
-          description: netGrams x current per-category rate
-
-    StockMatrix:
-      type: object
-      required: [rows, totals]
-      properties:
-        rows:
-          type: array
-          items:
-            $ref: "#/components/schemas/StockMatrixRow"
-        totals:
-          type: object
-          required: [stockInGrams, soldGrams, netGrams, valueAed]
-          properties:
-            stockInGrams:
-              type: number
-            soldGrams:
-              type: number
-            netGrams:
-              type: number
-            valueAed:
-              type: number
 
     SalesReportRow:
       type: object

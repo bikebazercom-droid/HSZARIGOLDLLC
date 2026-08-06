@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboardKpis, getGetDashboardKpisQueryKey,
-  useGetStockMatrix, getGetStockMatrixQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
@@ -62,9 +61,6 @@ export default function Dashboard() {
   const kpiParams = { startDate, endDate };
   const { data: kpis, isLoading: kpisLoading } = useGetDashboardKpis(kpiParams, {
     query: { queryKey: getGetDashboardKpisQueryKey(kpiParams) },
-  });
-  const { data: matrix, isLoading: matrixLoading } = useGetStockMatrix({
-    query: { queryKey: getGetStockMatrixQueryKey() },
   });
   const todayDate = format(new Date(), "MMMM d, yyyy");
 
@@ -237,53 +233,6 @@ export default function Dashboard() {
               </Card>
             ))}
       </div>
-
-      {/* Live per-category stock matrix */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Live Stock by Category</CardTitle>
-          <p className="text-xs text-muted-foreground">All-time ledger — auto-updated on every purchase and invoice</p>
-        </CardHeader>
-        <CardContent className="px-2 sm:px-4">
-          {matrixLoading || !matrix ? (
-            <Skeleton className="h-48" />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product Category</TableHead>
-                    <TableHead className="text-right">Total Stock IN</TableHead>
-                    <TableHead className="text-right">Total Sold</TableHead>
-                    <TableHead className="text-right">Net Remaining Stock</TableHead>
-                    <TableHead className="text-right">Total Value (AED)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {matrix.rows.map((r) => (
-                    <TableRow key={r.category}>
-                      <TableCell className="font-medium">{r.label}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmtG(r.stockInGrams)} g <span className="text-muted-foreground text-xs">/ {kg(r.stockInGrams)} KG</span></TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmtG(r.soldGrams)} g <span className="text-muted-foreground text-xs">/ {kg(r.soldGrams)} KG</span></TableCell>
-                      <TableCell className={`text-right whitespace-nowrap font-semibold ${r.netGrams < 0 ? "text-destructive" : ""}`}>
-                        {fmtG(r.netGrams)} g <span className="text-muted-foreground text-xs font-normal">/ {kg(r.netGrams)} KG</span>
-                      </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmtAED(r.valueAed)}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="border-t-2 font-bold">
-                    <TableCell>TOTAL</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmtG(matrix.totals.stockInGrams)} g</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmtG(matrix.totals.soldGrams)} g</TableCell>
-                    <TableCell className={`text-right whitespace-nowrap ${matrix.totals.netGrams < 0 ? "text-destructive" : ""}`}>{fmtG(matrix.totals.netGrams)} g</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmtAED(matrix.totals.valueAed)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
     </div>
   );
