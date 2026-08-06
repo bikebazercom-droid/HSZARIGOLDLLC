@@ -135,7 +135,9 @@ router.get("/invoices/sales-report", async (req, res): Promise<void> => {
     invoiceNumber: r.invoice_number,
     date: new Date(r.created_at).toISOString(),
     customerName: r.customer_name,
-    category: r.bucket ?? "other",
+    // Custom items have no stock bucket — surface the exact user-entered
+    // description as the category so reports never show a generic "Custom".
+    category: r.bucket ?? r.description.trim(),
     description: r.description,
     weightGrams: r.gross_weight != null ? Number(r.gross_weight) : 0,
     ratePerGram: Number(r.unit_price),

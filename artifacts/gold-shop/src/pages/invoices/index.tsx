@@ -22,6 +22,14 @@ import { STOCK_CATEGORIES, stockCategoryLabel } from "../products/stock";
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
 
+// For known stock buckets show the friendly label; for custom items show the
+// exact user-entered item name (never a generic "Custom" fallback).
+function rowCategoryDisplay(r: { category: string; description: string }): string {
+  return STOCK_CATEGORIES.some((c) => c.id === r.category)
+    ? stockCategoryLabel(r.category)
+    : (r.description.trim() || r.category);
+}
+
 function fmtG(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
@@ -311,7 +319,7 @@ export default function Invoices() {
                   <td style={{ padding: "6px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{r.invoiceNumber}</td>
                   <td style={{ padding: "6px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{format(new Date(r.date), "dd/MM/yyyy")}</td>
                   <td style={{ padding: "6px", border: "1px solid #ddd" }}>{r.customerName || "Walk-in Customer"}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd" }}>{stockCategoryLabel(r.category)}</td>
+                  <td style={{ padding: "6px", border: "1px solid #ddd" }}>{rowCategoryDisplay(r)}</td>
                   <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtG(r.weightGrams)}</td>
                   <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtAED(r.ratePerGram)}</td>
                   <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(r.totalAed)}</td>
