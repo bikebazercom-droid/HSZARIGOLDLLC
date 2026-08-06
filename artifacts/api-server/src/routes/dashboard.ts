@@ -3,6 +3,7 @@ import { eq, gte, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
 import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummaryResponse } from "@workspace/api-zod";
 import PDFDocument from "pdfkit";
+import ExcelJS from "exceljs";
 
 const router: IRouter = Router();
 
@@ -647,28 +648,55 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   doc.end();
 });
 
-// Raw PDF download (outside the OpenAPI spec, like other download routes):
-// /api/dashboard/statement-pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
-// A4 statement with itemized purchases, itemized sales, remaining stock and profit.
-router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
+// ---------------------------------------------------------------------------
+// Statement export engine (PDF with Excel-sheet styling + true .xlsx export).
+// Raw download routes, intentionally outside the OpenAPI spec.
+// ---------------------------------------------------------------------------
+
+const STMT_CAT_LABEL: Record<string, string> = {
+  gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
+  gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
+};
+
+interface StatementLedgerRow {
+  sl: number;
+  date: string;          // display date
+  type: "Purchase" | "Sale";
+  party: string;
+  category: string;      // bucket label
+  itemName: string;      // exact custom item name (sales) / category (purchases)
+  grams: number;
+  kg: number;
+  ratePerG: number;
+  totalAed: number;
+  profitAed: number | null; // sales only
+}
+
+function parseStatementQuery(req: { query: unknown }): { startDate: string | null; endDate: string | null; category: string | null } | { error: string } {
   const q = req.query as Record<string, string | undefined>;
-  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   const rawStart = q.startDate?.trim() || null;
   const rawEnd = q.endDate?.trim() || null;
-  if ((rawStart && !DATE_RE.test(rawStart)) || (rawEnd && !DATE_RE.test(rawEnd))) {
-    res.status(400).json({ error: "startDate/endDate must be YYYY-MM-DD" });
-    return;
+  // Strict calendar validation: YYYY-MM-DD shape AND a real calendar date
+  // (rejects e.g. 2026-02-31, which round-trips to a different date).
+  const isValidDate = (s: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  };
+  if ((rawStart && !isValidDate(rawStart)) || (rawEnd && !isValidDate(rawEnd))) {
+    return { error: "startDate/endDate must be a valid YYYY-MM-DD date" };
   }
-  const startDate = rawStart;
-  const endDate = rawEnd;
+  if (rawStart && rawEnd && rawStart > rawEnd) {
+    return { error: "startDate must not be after endDate" };
+  }
   const rawCategory = q.category?.trim() || null;
-  const VALID_CATEGORIES = new Set(["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"]);
-  if (rawCategory && rawCategory !== "all" && !VALID_CATEGORIES.has(rawCategory)) {
-    res.status(400).json({ error: "Invalid category" });
-    return;
+  if (rawCategory && rawCategory !== "all" && !(rawCategory in STMT_CAT_LABEL)) {
+    return { error: "Invalid category" };
   }
-  const category = rawCategory && rawCategory !== "all" ? rawCategory : null;
+  return { startDate: rawStart, endDate: rawEnd, category: rawCategory && rawCategory !== "all" ? rawCategory : null };
+}
 
+async function loadStatementData(startDate: string | null, endDate: string | null, category: string | null) {
   const bucketExpr = sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
         WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
         ELSE ii.category END)`;
@@ -732,9 +760,7 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
   ]);
 
   const totalPurchaseAed = purchases.reduce((s, p) => s + Number(p.total_price_aed), 0);
-  const totalPurchaseG = purchases.reduce((s, p) => s + Number(p.weight_grams), 0);
   const totalSalesAed = sales.reduce((s, r) => s + Number(r.amount), 0);
-  const totalSalesG = sales.reduce((s, r) => s + Number(r.grams), 0);
   // Profit basis matches the KPI: revenue minus weighted-average purchase cost
   // of the sold grams, computed per category across all purchases.
   const avgCost = new Map<string, number>();
@@ -749,20 +775,78 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
   const cogs = sales.reduce((s, r) => s + Number(r.grams) * (avgCost.get(r.bucket ?? "") ?? 0), 0);
   const profit = totalSalesAed - cogs;
 
-  const catLabel: Record<string, string> = {
-    gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
-    gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
+  // Unified excel-style ledger: purchases + sales in one table, chronological.
+  const ledger: StatementLedgerRow[] = [];
+  for (const p of purchases) {
+    const grams = Number(p.weight_grams);
+    const total = Number(p.total_price_aed);
+    ledger.push({
+      sl: 0,
+      date: p.purchase_date,
+      type: "Purchase",
+      party: p.supplier_name,
+      category: STMT_CAT_LABEL[p.category] ?? p.category,
+      itemName: STMT_CAT_LABEL[p.category] ?? p.category,
+      grams,
+      kg: grams / 1000,
+      ratePerG: grams > 0 ? total / grams : 0,
+      totalAed: total,
+      profitAed: null,
+    });
+  }
+  for (const s of sales) {
+    const grams = Number(s.grams);
+    const total = Number(s.amount);
+    ledger.push({
+      sl: 0,
+      date: s.created_at.slice(0, 10),
+      type: "Sale",
+      party: s.customer_name ?? "Walk-in",
+      category: s.bucket && STMT_CAT_LABEL[s.bucket] ? STMT_CAT_LABEL[s.bucket] : "Custom",
+      itemName: s.description.trim(),
+      grams,
+      kg: grams / 1000,
+      ratePerG: grams > 0 ? total / grams : 0,
+      totalAed: total,
+      profitAed: total - grams * (avgCost.get(s.bucket ?? "") ?? 0),
+    });
+  }
+  ledger.sort((a, b) => a.date.localeCompare(b.date));
+  ledger.forEach((r, i) => { r.sl = i + 1; });
+
+  const totals = {
+    grams: ledger.reduce((s, r) => s + r.grams, 0),
+    kg: ledger.reduce((s, r) => s + r.kg, 0),
+    revenueAed: totalSalesAed,
+    profitAed: profit,
   };
-  const displayCat = (r: { bucket: string | null; description: string }) =>
-    r.bucket && catLabel[r.bucket] ? catLabel[r.bucket] : r.description.trim();
+
+  return { purchases, sales, levels, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit };
+}
+
+// /api/dashboard/statement-pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
+// A4 statement styled like an Excel worksheet (gridlines, zebra rows, summary row).
+router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
+  const parsed = parseStatementQuery(req);
+  if ("error" in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const { startDate, endDate, category } = parsed;
+  const { levels, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+    await loadStatementData(startDate, endDate, category);
+  const catLabel = STMT_CAT_LABEL;
 
   const now = new Date();
-  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  const doc = new PDFDocument({ margin: 40, size: "A4", layout: "landscape" });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-statement.pdf"`);
   doc.pipe(res);
 
   const NAVY = "#1e3a5f";
+  const HEADER_BG = "#1e293b"; // excel header row
+  const GRID = "#d1d5db";      // excel gridlines
+  const ZEBRA = "#f8fafc";     // alternating rows
   const GOLD = "#c8a43a";
   const LIGHT = "#f5f3ee";
   const W = doc.page.width - 80;
@@ -805,66 +889,90 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
     doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(12).text(title, 40, y);
     y += 18;
   };
-  const tableHeader = (cells: [string, number, boolean?][]) => {
-    ensureSpace(24);
-    doc.rect(40, y, W, 16).fill(NAVY);
-    let x = 44;
-    doc.fillColor("white").font("Helvetica-Bold").fontSize(7.5);
-    for (const [label, width, right] of cells) {
-      doc.text(label, x, y + 4.5, { width, align: right ? "right" : "left" });
-      x += width;
+
+  // Excel-worksheet cell renderers: light gray gridlines on every cell,
+  // dark navy header row, zebra striping.
+  const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  // When a page break happens mid-table, redraw the table's header row on the
+  // new page so every page of the ledger stays readable.
+  let activeTableHeader: [string, number, boolean?][] | null = null;
+  const drawCells = (
+    cells: [string, number, boolean?][],
+    opts: { bg: string; color: string; bold: boolean; h: number },
+  ) => {
+    if (y + opts.h + 1 > doc.page.height - 60) {
+      doc.addPage();
+      y = 40;
+      if (activeTableHeader && cells !== activeTableHeader) {
+        drawCells(activeTableHeader, { bg: HEADER_BG, color: "white", bold: true, h: 18 });
+      }
     }
-    y += 16;
-  };
-  let rowIdx = 0;
-  const tableRow = (cells: [string, number, boolean?][], bold = false) => {
-    ensureSpace(15);
-    doc.rect(40, y, W, 14).fill(rowIdx++ % 2 === 0 ? "white" : LIGHT);
-    let x = 44;
-    doc.fillColor("#1a1a1a").font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(7.5);
+    let x = 40;
+    doc.lineWidth(0.5);
     for (const [text, width, right] of cells) {
-      doc.text(text, x, y + 3.5, { width: width - 6, align: right ? "right" : "left" });
+      doc.rect(x, y, width, opts.h).fillAndStroke(opts.bg, GRID);
+      doc.fillColor(opts.color).font(opts.bold ? "Helvetica-Bold" : "Helvetica").fontSize(7.5);
+      doc.text(text, x + 4, y + (opts.h - 8) / 2, { width: width - 8, align: right ? "right" : "left", lineBreak: false });
       x += width;
     }
-    y += 14;
+    y += opts.h;
   };
+  const gridHeader = (cells: [string, number, boolean?][]) => {
+    // Keep the header attached to at least one data row.
+    if (y + 18 + 17 > doc.page.height - 60) { doc.addPage(); y = 40; }
+    activeTableHeader = cells;
+    drawCells(cells, { bg: HEADER_BG, color: "white", bold: true, h: 18 });
+  };
+  let zebraIdx = 0;
+  const gridRow = (cells: [string, number, boolean?][], opts?: { bold?: boolean; bg?: string }) =>
+    drawCells(cells, {
+      bg: opts?.bg ?? (zebraIdx++ % 2 === 0 ? "white" : ZEBRA),
+      color: "#1a1a1a",
+      bold: opts?.bold ?? false,
+      h: 16,
+    });
 
-  // Purchases section
-  sectionHeader("Itemized Purchases");
-  if (purchases.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No purchases in this period.", 40, y); y += 20;
+  // Unified ledger table: [SL | Date | Type | Party | Category | Item | Wt g | Wt kg | Rate/g | Total]
+  const COLS: [string, number, boolean?][] = [
+    ["SL", 30], ["Date", 62], ["Type", 55], ["Party Name", 110], ["Category", 90],
+    ["Item Name", 130], ["Weight (g)", 70, true], ["Weight (kg)", 55, true],
+    ["Rate/g (AED)", 65, true], ["Total Value (AED)", 95, true],
+  ];
+  sectionHeader("Transactions (Purchases & Sales)");
+  if (ledger.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No transactions in this period.", 40, y); y += 20;
   } else {
-    tableHeader([["Date", 80], ["Supplier", 150], ["Category", 120], ["Weight (g)", 80, true], ["Cost AED", 85, true]]);
-    for (const p of purchases) {
-      tableRow([
-        [p.purchase_date, 80],
-        [p.supplier_name, 150],
-        [catLabel[p.category] ?? p.category, 120],
-        [Number(p.weight_grams).toLocaleString("en-AE", { minimumFractionDigits: 3 }), 80, true],
-        [Number(p.total_price_aed).toLocaleString("en-AE", { minimumFractionDigits: 2 }), 85, true],
+    gridHeader(COLS);
+    for (const r of ledger) {
+      gridRow([
+        [String(r.sl), 30],
+        [r.date, 62],
+        [r.type, 55],
+        [r.party.substring(0, 22), 110],
+        [r.category.substring(0, 18), 90],
+        [r.itemName.substring(0, 26), 130],
+        [num3(r.grams), 70, true],
+        [r.kg.toFixed(3), 55, true],
+        [num2(r.ratePerG), 65, true],
+        [num2(r.totalAed), 95, true],
       ]);
     }
-    tableRow([["TOTAL", 350], [totalPurchaseG.toLocaleString("en-AE", { minimumFractionDigits: 3 }), 80, true], [totalPurchaseAed.toLocaleString("en-AE", { minimumFractionDigits: 2 }), 85, true]], true);
-    y += 12;
-  }
-
-  // Sales section
-  sectionHeader("Itemized Sales");
-  if (sales.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No sales in this period.", 40, y); y += 20;
-  } else {
-    tableHeader([["Date", 60], ["Invoice #", 75], ["Customer", 110], ["Item", 120], ["Weight (g)", 70, true], ["Total AED", 80, true]]);
-    for (const s of sales) {
-      tableRow([
-        [new Date(s.created_at).toLocaleDateString("en-AE"), 60],
-        [s.invoice_number, 75],
-        [(s.customer_name ?? "Walk-in").substring(0, 20), 110],
-        [displayCat(s).substring(0, 24), 120],
-        [Number(s.grams).toLocaleString("en-AE", { minimumFractionDigits: 3 }), 70, true],
-        [Number(s.amount).toLocaleString("en-AE", { minimumFractionDigits: 2 }), 80, true],
-      ]);
-    }
-    tableRow([["TOTAL", 365], [totalSalesG.toLocaleString("en-AE", { minimumFractionDigits: 3 }), 70, true], [totalSalesAed.toLocaleString("en-AE", { minimumFractionDigits: 2 }), 80, true]], true);
+    // Excel bottom summary rows
+    gridRow([
+      ["TOTAL", 347],
+      [`${num3(totals.grams)} g`, 100, true],
+      [`${totals.kg.toFixed(3)} kg`, 75, true],
+      ["Revenue:", 95, true],
+      [num2(totals.revenueAed), 145, true],
+    ], { bold: true, bg: "#e2e8f0" });
+    gridRow([
+      ["", 347],
+      ["", 100, true],
+      ["", 75, true],
+      ["Net Profit:", 95, true],
+      [num2(totals.profitAed), 145, true],
+    ], { bold: true, bg: totals.profitAed >= 0 ? "#e7f5ec" : "#fdecec" });
     y += 12;
   }
 
@@ -874,13 +982,13 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
   if (levelRows.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No stock records.", 40, y); y += 20;
   } else {
-    tableHeader([["Category", 200], ["Net Remaining (g)", 150, true], ["KG", 165, true]]);
+    gridHeader([["Category", 250], ["Net Remaining (g)", 180, true], ["Net Remaining (kg)", 180, true]]);
     for (const l of levelRows) {
       const g = Number(l.weight_grams);
-      tableRow([
-        [catLabel[l.category] ?? l.category, 200],
-        [g.toLocaleString("en-AE", { minimumFractionDigits: 3 }), 150, true],
-        [(g / 1000).toFixed(3), 165, true],
+      gridRow([
+        [catLabel[l.category] ?? l.category, 250],
+        [num3(g), 180, true],
+        [(g / 1000).toFixed(3), 180, true],
       ]);
     }
   }
@@ -888,11 +996,118 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
   ensureSpace(60);
   doc.rect(40, y + 8, W, 1).fill(GOLD);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
-    .text(`Net Profit: AED ${profit.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`, 40, y + 16, { align: "right", width: W });
+    .text(`Net Profit: AED ${num2(profit)}`, 40, y + 16, { align: "right", width: W });
   doc.fillColor("#666").font("Helvetica").fontSize(7)
     .text("Profit = Sales revenue − estimated cost of sold items (weighted-average purchase cost per gram per category).", 40, y + 32, { width: W });
 
   doc.end();
+});
+
+// /api/dashboard/statement-xlsx?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
+// True .xlsx export of the same statement data (exceljs).
+router.get("/dashboard/statement-xlsx", async (req, res): Promise<void> => {
+  const parsed = parseStatementQuery(req);
+  if ("error" in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const { startDate, endDate, category } = parsed;
+  const { levels, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+    await loadStatementData(startDate, endDate, category);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Hazari Gold L.L.C";
+  const ws = wb.addWorksheet("Statement");
+
+  const thin = { style: "thin" as const, color: { argb: "FFD1D5DB" } };
+  const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
+
+  // Title / criteria
+  ws.mergeCells("A1:J1");
+  ws.getCell("A1").value = "Hazari Gold L.L.C — Stock & Profit Statement";
+  ws.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
+  ws.mergeCells("A2:J2");
+  ws.getCell("A2").value = [
+    startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
+    `Category: ${category ? (STMT_CAT_LABEL[category] ?? category) : "All"}`,
+    `Generated: ${new Date().toLocaleString("en-AE")}`,
+  ].join("   ·   ");
+  ws.getCell("A2").font = { size: 9, color: { argb: "FF64748B" } };
+
+  // Header row
+  const HEADERS = ["SL", "Date", "Type", "Party Name", "Category", "Item Name", "Weight (g)", "Weight (kg)", "Rate/g (AED)", "Total Value (AED)"];
+  const headerRow = ws.addRow(HEADERS);
+  headerRow.eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.border = allBorders;
+    cell.alignment = { vertical: "middle" };
+  });
+  ws.columns = [
+    { width: 5 }, { width: 12 }, { width: 10 }, { width: 22 }, { width: 18 },
+    { width: 26 }, { width: 13 }, { width: 12 }, { width: 14 }, { width: 17 },
+  ];
+
+  for (const r of ledger) {
+    const row = ws.addRow([r.sl, r.date, r.type, r.party, r.category, r.itemName, r.grams, r.kg, r.ratePerG, r.totalAed]);
+    row.eachCell((cell, col) => {
+      cell.border = allBorders;
+      if (row.number % 2 === 0) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+      }
+      if (col === 7) cell.numFmt = "#,##0.000";
+      if (col === 8) cell.numFmt = "0.000";
+      if (col === 9 || col === 10) cell.numFmt = "#,##0.00";
+    });
+  }
+
+  // Bold summary row
+  const totalRow = ws.addRow(["", "", "", "", "", "TOTAL", totals.grams, totals.kg, "Revenue →", totals.revenueAed]);
+  const profitRow = ws.addRow(["", "", "", "", "", "", "", "", "Net Profit →", totals.profitAed]);
+  for (const row of [totalRow, profitRow]) {
+    row.eachCell((cell, col) => {
+      cell.border = allBorders;
+      cell.font = { bold: true };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: row === profitRow ? "FFE7F5EC" : "FFE2E8F0" } };
+      if (col === 7) cell.numFmt = "#,##0.000";
+      if (col === 8) cell.numFmt = "0.000";
+      if (col === 10) cell.numFmt = "#,##0.00";
+    });
+  }
+
+  // Summary sheet
+  const sum = wb.addWorksheet("Summary");
+  sum.columns = [{ width: 28 }, { width: 20 }];
+  const sumRows: [string, number][] = [
+    ["Total Purchases (AED)", totalPurchaseAed],
+    ["Total Sales Revenue (AED)", totalSalesAed],
+    ["Est. COGS (AED)", cogs],
+    ["Net Profit (AED)", profit],
+  ];
+  for (const [label, val] of sumRows) {
+    const row = sum.addRow([label, val]);
+    row.getCell(1).font = { bold: true };
+    row.getCell(2).numFmt = "#,##0.00";
+    row.eachCell((cell) => { cell.border = allBorders; });
+  }
+  sum.addRow([]);
+  const lvlHeader = sum.addRow(["Remaining Stock (Live)", "Grams"]);
+  lvlHeader.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+    cell.border = allBorders;
+  });
+  const levelRows = category ? levels.filter((l) => l.category === category) : levels;
+  for (const l of levelRows) {
+    const row = sum.addRow([STMT_CAT_LABEL[l.category] ?? l.category, Number(l.weight_grams)]);
+    row.getCell(2).numFmt = "#,##0.000";
+    row.eachCell((cell) => { cell.border = allBorders; });
+  }
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-statement.xlsx"`);
+  await wb.xlsx.write(res);
+  res.end();
 });
 
 export default router;

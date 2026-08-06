@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { format, startOfWeek, startOfMonth } from "date-fns";
 import {
   Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote,
-  Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown,
+  Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown, FileSpreadsheet,
 } from "lucide-react";
 
 const STATEMENT_CATEGORIES: [string, string][] = [
@@ -74,12 +74,12 @@ export default function Dashboard() {
   const [stmtEnd, setStmtEnd] = useState("");
   const [stmtCategory, setStmtCategory] = useState("all");
 
-  const downloadStatement = () => {
+  const downloadStatement = (kind: "pdf" | "xlsx") => {
     const params = new URLSearchParams();
     if (stmtStart) params.set("startDate", stmtStart);
     if (stmtEnd) params.set("endDate", stmtEnd);
     if (stmtCategory !== "all") params.set("category", stmtCategory);
-    window.open(`/api/dashboard/statement-pdf?${params.toString()}`, "_blank");
+    window.open(`/api/dashboard/statement-${kind}?${params.toString()}`, "_blank");
     setStmtOpen(false);
   };
 
@@ -173,8 +173,13 @@ export default function Dashboard() {
                   Leave dates empty for an all-time statement. Includes itemized purchases, sales, remaining stock and net profit.
                 </p>
               </div>
-              <DialogFooter>
-                <Button onClick={downloadStatement}><FileDown className="w-4 h-4 mr-1.5" /> Download</Button>
+              <DialogFooter className="flex-col sm:flex-col gap-2">
+                <Button className="w-full" onClick={() => downloadStatement("pdf")}>
+                  <FileDown className="w-4 h-4 mr-1.5" /> Download PDF Statement (Excel Layout)
+                </Button>
+                <Button className="w-full" variant="outline" onClick={() => downloadStatement("xlsx")}>
+                  <FileSpreadsheet className="w-4 h-4 mr-1.5" /> Download Excel Sheet (.xlsx)
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

@@ -1,0 +1,41 @@
+================================================================================
+FEATURE PRD: EXCEL-STYLED PDF STATEMENT & EXCEL (.XLSX) EXPORT ENGINE
+================================================================================
+
+Target Objective:
+Format the downloadable Sales & Stock Statements so that the exported PDF looks like a clean, structured Excel Spreadsheet (with gridlines, alternating row backgrounds, column headers, and total summary rows). Additionally, enable raw Excel (.xlsx) file downloads.
+
+--------------------------------------------------------------------------------
+MODULE 1: EXCEL-STYLED PDF TEMPLATE DESIGN
+--------------------------------------------------------------------------------
+1. Table Formatting (Excel Sheet Aesthetics):
+   - Design the PDF statement table to mirror an Excel worksheet.
+   - Visible light gray border gridlines (`border: 1px solid #d1d5db`) on all cells.
+   - Header Row: Dark Navy background (`#1e293b`), bold white text.
+   - Alternating Row Styles: Zebra striping with `#f8fafc` for clean readability.
+
+2. Column Structure:
+   - `[SL | Date | Type (Purchase/Sale) | Party Name | Category | Exact Custom Item Name | Weight (g) | Weight (kg) | Rate/g (AED) | Total Value (AED)]`
+
+3. Excel Bottom Summary Row:
+   - Add a bold summary row at the bottom of the table calculating:
+     - Total Grams (`SUM(Weight_g)`)
+     - Total KG (`SUM(Weight_kg)`)
+     - Total Revenue (`SUM(Total_AED)`)
+     - Total Profit (`SUM(Profit_AED)`)
+
+--------------------------------------------------------------------------------
+MODULE 2: EXCEL (.XLSX) FILE EXPORT SUPPORT
+--------------------------------------------------------------------------------
+1. Export Options:
+   - In the Statement Download modal, provide two choices:
+     a) "📄 Download PDF Statement (Excel Layout)"
+     b) "📊 Download Excel Sheet (.xlsx)"
+
+2. Sheet Generator:
+   - Integrate `xlsx` / `exceljs` library on the backend/frontend to instantly generate a true `.xlsx` spreadsheet with formatted currency and weight totals.
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please apply the Excel spreadsheet layout styles to the PDF generator and enable both PDF and .XLSX export functions now!
+================================================================================
