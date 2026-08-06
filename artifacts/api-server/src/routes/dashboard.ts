@@ -33,6 +33,83 @@ function getCatStats(rows: CatRow[], category: string) {
   };
 }
 
+// Aggregated KPI metrics for the dashboard 8-card grid. Optional
+// startDate/endDate (yyyy-MM-dd) filter every metric to that range.
+router.get("/dashboard/kpis", async (req, res): Promise<void> => {
+  const q = req.query as Record<string, string | undefined>;
+  let start: Date | null = null;
+  let endExclusive: Date | null = null;
+  if (q.startDate?.trim()) {
+    const d = new Date(`${q.startDate.trim()}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) start = d;
+  }
+  if (q.endDate?.trim()) {
+    const d = new Date(`${q.endDate.trim()}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1);
+      endExclusive = d;
+    }
+  }
+
+  const invWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(start ? [sql`i.created_at >= ${start.toISOString()}::timestamptz`] : []),
+      ...(endExclusive ? [sql`i.created_at < ${endExclusive.toISOString()}::timestamptz`] : []),
+    ],
+    sql` AND `,
+  );
+  // stock_purchases.purchase_date is a yyyy-MM-dd text column
+  const purchaseWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(q.startDate?.trim() ? [sql`purchase_date >= ${q.startDate.trim()}`] : []),
+      ...(q.endDate?.trim() ? [sql`purchase_date <= ${q.endDate.trim()}`] : []),
+    ],
+    sql` AND `,
+  );
+
+  const [invAgg, itemAgg, purchaseAgg] = await Promise.all([
+    db.execute<{ invoice_count: string; total_revenue: string; cash_received: string; outstanding_due: string }>(sql`
+      SELECT COUNT(*)::text AS invoice_count,
+             COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
+             COALESCE(SUM(CASE WHEN NOT i.is_pending THEN i.total::numeric ELSE 0 END), 0)::text AS cash_received,
+             COALESCE(SUM(CASE WHEN i.is_pending THEN i.total::numeric ELSE 0 END), 0)::text AS outstanding_due
+      FROM invoices i
+      WHERE ${invWhere}
+    `).then((r) => r.rows[0]),
+    db.execute<{ sold_grams: string; making_charges: string }>(sql`
+      SELECT COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0)), 0)::text AS sold_grams,
+             COALESCE(SUM(COALESCE(ii.making_amt::numeric, 0)), 0)::text AS making_charges
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE ${invWhere}
+    `).then((r) => r.rows[0]),
+    db.execute<{ purchased_grams: string }>(sql`
+      SELECT COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams
+      FROM stock_purchases
+      WHERE ${purchaseWhere}
+    `).then((r) => r.rows[0]),
+  ]);
+
+  const stockInGrams = Number(purchaseAgg.purchased_grams);
+  const stockOutGrams = Number(itemAgg.sold_grams);
+  const invoiceCount = Number(invAgg.invoice_count);
+  const totalRevenueAed = Number(invAgg.total_revenue);
+
+  res.json({
+    stockInGrams,
+    stockOutGrams,
+    netStockGrams: stockInGrams - stockOutGrams,
+    totalRevenueAed,
+    cashReceivedAed: Number(invAgg.cash_received),
+    outstandingDueAed: Number(invAgg.outstanding_due),
+    makingChargesAed: Number(itemAgg.making_charges),
+    invoiceCount,
+    avgInvoiceAed: invoiceCount > 0 ? totalRevenueAed / invoiceCount : 0,
+  });
+});
+
 router.get("/dashboard", async (_req, res): Promise<void> => {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

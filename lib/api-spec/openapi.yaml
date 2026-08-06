@@ -617,6 +617,28 @@ paths:
                 items:
                   $ref: "#/components/schemas/StockMovement"
 
+  /dashboard/kpis:
+    get:
+      operationId: getDashboardKpis
+      tags: [dashboard]
+      summary: Aggregated KPI metrics for the dashboard 8-card grid, filterable by date range
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: KPI metrics for the requested date range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardKpis"
+
   /invoices/sales-report:
     get:
       operationId: getSalesReport
@@ -678,6 +700,34 @@ components:
       properties:
         error:
           type: string
+
+    DashboardKpis:
+      type: object
+      required: [stockInGrams, stockOutGrams, netStockGrams, totalRevenueAed, cashReceivedAed, outstandingDueAed, makingChargesAed, invoiceCount, avgInvoiceAed]
+      properties:
+        stockInGrams:
+          type: number
+          description: Total purchased weight from suppliers in the range
+        stockOutGrams:
+          type: number
+          description: Total sold weight (invoice item gross weight) in the range
+        netStockGrams:
+          type: number
+          description: stockInGrams - stockOutGrams
+        totalRevenueAed:
+          type: number
+        cashReceivedAed:
+          type: number
+          description: Collected amount (non-pending invoices)
+        outstandingDueAed:
+          type: number
+          description: Pending invoice totals
+        makingChargesAed:
+          type: number
+        invoiceCount:
+          type: integer
+        avgInvoiceAed:
+          type: number
 
     SalesReportRow:
       type: object

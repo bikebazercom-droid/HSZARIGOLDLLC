@@ -894,6 +894,27 @@ export const ListStockMovementsResponse = zod.array(ListStockMovementsResponseIt
 
 
 /**
+ * @summary Aggregated KPI metrics for the dashboard 8-card grid, filterable by date range
+ */
+export const GetDashboardKpisQueryParams = zod.object({
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
+export const GetDashboardKpisResponse = zod.object({
+  "stockInGrams": zod.number().describe('Total purchased weight from suppliers in the range'),
+  "stockOutGrams": zod.number().describe('Total sold weight (invoice item gross weight) in the range'),
+  "netStockGrams": zod.number().describe('stockInGrams - stockOutGrams'),
+  "totalRevenueAed": zod.number(),
+  "cashReceivedAed": zod.number().describe('Collected amount (non-pending invoices)'),
+  "outstandingDueAed": zod.number().describe('Pending invoice totals'),
+  "makingChargesAed": zod.number(),
+  "invoiceCount": zod.number(),
+  "avgInvoiceAed": zod.number()
+})
+
+
+/**
  * @summary Item-level sales report with aggregate summary for the invoices page filters and PDF statement
  */
 export const GetSalesReportQueryParams = zod.object({

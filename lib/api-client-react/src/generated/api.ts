@@ -26,9 +26,11 @@ import type {
   Customer,
   CustomerInput,
   CustomerListItem,
+  DashboardKpis,
   DashboardStats,
   ErrorResponse,
   GetCategorySummaryParams,
+  GetDashboardKpisParams,
   GetSalesReportParams,
   HealthStatus,
   Invoice,
@@ -2394,6 +2396,90 @@ export function useListStockMovements<TData = Awaited<ReturnType<typeof listStoc
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListStockMovementsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDashboardKpisUrl = (params?: GetDashboardKpisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/kpis?${stringifiedParams}` : `/api/dashboard/kpis`
+}
+
+/**
+ * @summary Aggregated KPI metrics for the dashboard 8-card grid, filterable by date range
+ */
+export const getDashboardKpis = async (params?: GetDashboardKpisParams, options?: RequestInit): Promise<DashboardKpis> => {
+
+  return customFetch<DashboardKpis>(getGetDashboardKpisUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardKpisQueryKey = (params?: GetDashboardKpisParams,) => {
+    return [
+    `/api/dashboard/kpis`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDashboardKpisQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardKpis>>, TError = ErrorType<unknown>>(params?: GetDashboardKpisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardKpisQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardKpis>>> = ({ signal }) => getDashboardKpis(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardKpis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardKpisQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardKpis>>>
+export type GetDashboardKpisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Aggregated KPI metrics for the dashboard 8-card grid, filterable by date range
+ */
+
+export function useGetDashboardKpis<TData = Awaited<ReturnType<typeof getDashboardKpis>>, TError = ErrorType<unknown>>(
+ params?: GetDashboardKpisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardKpisQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

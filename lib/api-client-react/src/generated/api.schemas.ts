@@ -13,6 +13,23 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface DashboardKpis {
+  /** Total purchased weight from suppliers in the range */
+  stockInGrams: number;
+  /** Total sold weight (invoice item gross weight) in the range */
+  stockOutGrams: number;
+  /** stockInGrams - stockOutGrams */
+  netStockGrams: number;
+  totalRevenueAed: number;
+  /** Collected amount (non-pending invoices) */
+  cashReceivedAed: number;
+  /** Pending invoice totals */
+  outstandingDueAed: number;
+  makingChargesAed: number;
+  invoiceCount: number;
+  avgInvoiceAed: number;
+}
+
 export interface SalesReportRow {
   invoiceId: number;
   invoiceNumber: string;
@@ -572,6 +589,11 @@ endDate?: string;
 
 export type ListStockMovementsParams = {
 category?: string;
+};
+
+export type GetDashboardKpisParams = {
+startDate?: string;
+endDate?: string;
 };
 
 export type GetSalesReportParams = {
