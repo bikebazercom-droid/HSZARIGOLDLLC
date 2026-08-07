@@ -3,6 +3,7 @@ import { eq, gte, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
 import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummaryResponse } from "@workspace/api-zod";
 import PDFDocument from "pdfkit";
+import { requireAdmin } from "../middlewares/auth";
 import ExcelJS from "exceljs";
 
 const router: IRouter = Router();
@@ -647,6 +648,7 @@ interface StatementLedgerRow {
   ratePerG: number;
   totalAed: number;
   profitAed: number | null; // sales only
+  batchRefs: string | null; // sales only: consumed FIFO purchase lots, e.g. "#BATCH-19 (1000g @ 600.00)"
 }
 
 function parseStatementQuery(req: { query: unknown }): { startDate: string | null; endDate: string | null; category: string | null } | { error: string } {
@@ -715,14 +717,15 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     // Revenue basis matches the KPI and sales report: each item's amount is its
     // proportional share of the invoice's FINAL billed total (VAT/discount/
     // round-off included), so statement totals reconcile with the dashboard.
-    db.execute<{ created_at: string; invoice_number: string; customer_name: string | null; description: string; bucket: string | null; grams: string; amount: string; exact_cogs: string | null }>(sql`
+    db.execute<{ created_at: string; invoice_number: string; customer_name: string | null; description: string; bucket: string | null; grams: string; amount: string; exact_cogs: string | null; batch_refs: string | null }>(sql`
       SELECT i.created_at::text, i.invoice_number, i.customer_name, ii.description,
              ${bucketExpr} AS bucket,
              COALESCE(ii.gross_weight::numeric, 0)::text AS grams,
              (CASE WHEN s.sum_items > 0
                    THEN ii.total_price::numeric * i.total::numeric / s.sum_items
                    ELSE ii.total_price::numeric END)::text AS amount,
-             c.exact_cogs::text AS exact_cogs
+             c.exact_cogs::text AS exact_cogs,
+             c.batch_refs
       FROM invoice_items ii
       JOIN invoices i ON i.id = ii.invoice_id
       JOIN LATERAL (
@@ -730,8 +733,15 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
         FROM invoice_items WHERE invoice_id = i.id
       ) s ON TRUE
       LEFT JOIN LATERAL (
-        SELECT SUM(cost_aed::numeric) AS exact_cogs
-        FROM inventory_consumptions WHERE invoice_item_id = ii.id
+        SELECT SUM(cost_aed::numeric) AS exact_cogs,
+               STRING_AGG(
+                 CASE WHEN ic.purchase_id IS NOT NULL
+                      THEN '#BATCH-' || ic.purchase_id || ' (' || TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM ic.weight_grams::text)) || 'g @ ' ||
+                           TO_CHAR(CASE WHEN ic.weight_grams::numeric > 0 THEN ic.cost_aed::numeric / ic.weight_grams::numeric ELSE 0 END, 'FM999999990.00') || ')'
+                      ELSE 'avg-rate (' || TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM ic.weight_grams::text)) || 'g)'
+                 END, ', ' ORDER BY ic.id) AS batch_refs
+        FROM inventory_consumptions ic
+        WHERE ic.invoice_item_id = ii.id
       ) c ON TRUE
       WHERE ${salesWhere}
       ORDER BY i.created_at, i.id
@@ -777,6 +787,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
       profitAed: null,
+      batchRefs: null,
     });
   }
   for (const s of sales) {
@@ -794,6 +805,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
       profitAed: total - itemCogs(s),
+      batchRefs: s.batch_refs,
     });
   }
   ledger.sort((a, b) => a.date.localeCompare(b.date));
@@ -811,7 +823,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
 
 // /api/dashboard/statement-pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
 // A4 statement styled like an Excel worksheet (gridlines, zebra rows, summary row).
-router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
+router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<void> => {
   const parsed = parseStatementQuery(req);
   if ("error" in parsed) {
     res.status(400).json({ error: parsed.error });
@@ -929,7 +941,33 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No transactions in this period.", 40, y); y += 20;
   } else {
     gridHeader(COLS);
+    // Split a long batch-ref string into <=maxLen lines on ", " boundaries so
+    // every consumed lot stays visible (no truncation).
+    const chunkRefs = (refs: string, maxLen: number): string[] => {
+      const parts = refs.split(", ");
+      const lines: string[] = [];
+      let cur = "";
+      for (const p of parts) {
+        const candidate = cur ? `${cur}, ${p}` : p;
+        if (candidate.length > maxLen && cur) { lines.push(cur); cur = p; }
+        else cur = candidate;
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
     for (const r of ledger) {
+      const refLines = r.batchRefs ? chunkRefs(r.batchRefs, 150) : [];
+      // Atomic pagination unit: the sale row and its batch sub-rows must stay
+      // together. If the whole unit doesn't fit, break the page here (with the
+      // repeated table header) before drawing any of it.
+      const unitH = 16 + refLines.length * 12;
+      if (y + unitH + 1 > doc.page.height - 60) {
+        doc.addPage();
+        y = 40;
+        if (activeTableHeader) {
+          drawCells(activeTableHeader, { bg: HEADER_BG, color: "white", bold: true, h: 18 });
+        }
+      }
       gridRow([
         [String(r.sl), 30],
         [r.date, 62],
@@ -942,6 +980,13 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
         [num2(r.ratePerG), 65, true],
         [num2(r.totalAed), 95, true],
       ]);
+      // Batch traceability: which FIFO purchase lots supplied this sale row.
+      refLines.forEach((line, i) => {
+        drawCells([
+          ["", 30],
+          [i === 0 ? `Consumed from: ${line}` : line, 732],
+        ], { bg: "#fbf8ef", color: "#6b5d1e", bold: false, h: 12 });
+      });
     }
     // Excel bottom summary rows
     gridRow([
@@ -990,7 +1035,7 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
 
 // /api/dashboard/statement-xlsx?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
 // True .xlsx export of the same statement data (exceljs).
-router.get("/dashboard/statement-xlsx", async (req, res): Promise<void> => {
+router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<void> => {
   const parsed = parseStatementQuery(req);
   if ("error" in parsed) {
     res.status(400).json({ error: parsed.error });

@@ -212,6 +212,16 @@ export default function InvoiceDetail() {
   const { data: settings } = useGetSettings({
     query: { queryKey: getGetSettingsQueryKey(), staleTime: 60_000 }
   });
+  // Admin-only: exact FIFO consumption per item, used for the "Consumed from"
+  // batch badges under each line item (screen only — stripped from print/PDF).
+  const isAdmin = user?.role === "admin";
+  const { data: profitData } = useGetInvoiceProfit(id, {
+    query: { queryKey: getGetInvoiceProfitQueryKey(id), enabled: !!id && isAdmin },
+  });
+  const lotsByItemId = new Map<number, NonNullable<typeof profitData>["items"][number]["lots"]>();
+  for (const pi of profitData?.items ?? []) {
+    if (pi.lots.length > 0) lotsByItemId.set(pi.invoiceItemId, pi.lots);
+  }
 
   if (isLoading) {
     return <div className="p-8 space-y-6"><Skeleton className="h-8 w-64" /><Skeleton className="h-96" /></div>;
@@ -277,6 +287,11 @@ export default function InvoiceDetail() {
           scale: 2,
           useCORS: true,
           logging: false,
+          // Strip screen-only elements (e.g. admin batch badges) from the
+          // downloaded PDF, matching the browser-print behavior of .no-print.
+          onclone: (clonedDoc: Document) => {
+            clonedDoc.querySelectorAll(".no-print").forEach((el) => el.remove());
+          },
           windowWidth: A4_W_PX,
           windowHeight: A4_H_PX,
           height: A4_H_PX,      // crop canvas to exactly 1 A4 page height
@@ -503,8 +518,11 @@ export default function InvoiceDetail() {
               </tr>
             </thead>
             <tbody>
-              {invoice.items?.map((item, index) => (
-                <tr key={item.id} style={{ borderBottom: `1px solid #ddd`, background: index % 2 === 1 ? "#f9f9f9" : "white" }}>
+              {invoice.items?.map((item, index) => {
+                const lots = isAdmin ? lotsByItemId.get(item.id) : undefined;
+                return (
+                <React.Fragment key={item.id}>
+                <tr style={{ borderBottom: `1px solid #ddd`, background: index % 2 === 1 ? "#f9f9f9" : "white" }}>
                   <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{index + 1}</td>
                   <td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: "500" }}>{item.description}</td>
                   <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.grossWeight)}</td>
@@ -514,7 +532,28 @@ export default function InvoiceDetail() {
                   <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{item.makingAmt ? fmt(item.makingAmt) : "-"}</td>
                   <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd", fontWeight: "bold" }}>{fmt(item.totalPrice)}</td>
                 </tr>
-              ))}
+                {lots && lots.length > 0 && (
+                  <tr className="no-print" data-testid={`row-batches-${item.id}`}>
+                    <td style={{ border: "1px solid #ddd" }}></td>
+                    <td colSpan={7} style={{ padding: "2px 6px 4px", border: "1px solid #ddd", background: "#fbf8ef" }}>
+                      <span style={{ fontSize: "9px", color: "#8a7627", fontWeight: 600 }}>Consumed from: </span>
+                      {lots.map((lot, li) => (
+                        <span key={li} style={{
+                          display: "inline-block", margin: "1px 4px 1px 0", padding: "0px 6px",
+                          fontSize: "9px", color: NAVY, background: "#eef2f7",
+                          border: "1px solid #d3ddea", borderRadius: "8px",
+                        }}>
+                          {lot.purchaseId != null ? `#BATCH-${lot.purchaseId}` : "avg-rate (no batch)"}
+                          {` (${(lot.weightGrams).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}g`}
+                          {lot.pricePerGram != null ? ` @ AED ${fmt(lot.pricePerGram)}/g)` : ")"}
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+                );
+              })}
               {/* Placeholder rows — pad table to minimum 7 rows for a structured layout */}
               {Array.from({ length: Math.max(0, 7 - (invoice.items?.length ?? 0)) }).map((_, i) => {
                 const rowIdx = (invoice.items?.length ?? 0) + i;
