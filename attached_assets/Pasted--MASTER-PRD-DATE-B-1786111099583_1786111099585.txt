@@ -1,0 +1,32 @@
+================================================================================
+MASTER PRD: DATE-BASED AUTO-DEDUCTION & ITEMIZED COST/STOCK STATEMENT EXPORTER
+================================================================================
+
+Target Objective:
+Ensure that products added with specific purchase rates (e.g., 22K Jewelry @ 470/g) are automatically deducted based on purchase date order upon sale, and build a downloadable statement that explicitly details remaining stock, sold weight, purchase cost, sales value, and net profit per item.
+
+--------------------------------------------------------------------------------
+REQUIREMENTS & SPECIFICATIONS:
+--------------------------------------------------------------------------------
+1. Date-Ordered Auto-Deduction Engine (`services/inventoryEngine.ts`):
+   - When issuing an invoice for any item (e.g., 22K Jewelry), auto-deduct sold grams strictly from the oldest stock batch first (`ORDER BY purchase_date ASC, id ASC`).
+   - Calculate exact COGS for that item based on its purchase rate (e.g., 50g * 470 AED = 23,500 AED).
+
+2. Downloadable Statement Layout (`statementExporter.ts`):
+   - In PDF and Excel statement exports, render explicit grid columns for each transaction:
+     * `Date & Invoice Ref`
+     * `Product / Item Name & Category`
+     * `Sold Weight (g)` (Exact weight sold in invoice)
+     * `Total Purchase Cost (AED)` (Calculated exact purchase cost)
+     * `Total Sale Value (AED)` (Selling price charged to customer)
+     * `Net Profit / Margin (AED)` (Sale Value minus Purchase Cost)
+     * `Current Stock Remaining (g)` (Updated stock weight left after this sale)
+     * `Consumed Batch Ref` (Batch ID tracking reference)
+
+3. Grand Summary Row:
+   - Include a bold grand total row at the bottom displaying sum of Sold Weight, Total Purchase Cost, Total Sales Revenue, Total Net Profit, and Current Live Balance.
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please implement this date-ordered auto-deduction logic and update the downloadable PDF/Excel statement exporter now!
+================================================================================
