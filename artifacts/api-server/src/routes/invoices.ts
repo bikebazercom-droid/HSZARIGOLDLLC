@@ -4,6 +4,7 @@ import { db, invoicesTable, invoiceItemsTable, stockMovementsTable } from "@work
 import { requireAdmin } from "../middlewares/auth";
 import { broadcast } from "../lib/socket.js";
 import { applyStockDelta } from "./stock";
+import { consumeFifo, reverseInvoiceConsumption } from "../services/inventoryEngine";
 import {
   ListInvoicesQueryParams,
   CreateInvoiceBody,
@@ -260,7 +261,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
   const nextNum = (maxRow?.max_num != null ? parseInt(maxRow.max_num, 10) : 0) + 1;
   const invoiceNumber = `INV-${String(nextNum).padStart(5, "0")}`;
 
-  const [invoice] = await db
+  // Invoice row, items, stock deltas, and FIFO batch consumption are all
+  // committed in ONE transaction: an invoice can never exist without its
+  // stock movements and exact-COGS consumption rows (and vice versa).
+  const stockWarnings: string[] = [];
+  const { invoice, savedItems, hadDeductions } = await db.transaction(async (tx) => {
+  const [invoice] = await tx
     .insert(invoicesTable)
     .values({
       ...invoiceData,
@@ -283,7 +289,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
 
   let savedItems: (typeof invoiceItemsTable.$inferSelect)[] = [];
   if (items && items.length > 0) {
-    savedItems = await db
+    savedItems = await tx
       .insert(invoiceItemsTable)
       .values(
         items.map((item) => ({
@@ -311,36 +317,43 @@ router.post("/invoices", async (req, res): Promise<void> => {
   // log the movement. Sales are never blocked: if stock is insufficient the
   // invoice is still created and a warning is returned instead (stock can go
   // negative until purchases are recorded).
-  const stockWarnings: string[] = [];
   const deductions = new Map<string, number>();
+  const itemConsumptions: { itemId: number; category: string; grams: number }[] = [];
   for (const item of savedItems) {
     const cat = itemStockCategory(item.description, item.category);
     const grams = item.grossWeight != null ? Number(item.grossWeight) : 0;
     if (!cat || !(grams > 0)) continue;
     deductions.set(cat, (deductions.get(cat) ?? 0) + grams);
+    itemConsumptions.push({ itemId: item.id, category: cat, grams });
   }
-  if (deductions.size > 0) {
-    try {
-      await db.transaction(async (tx) => {
-        for (const [cat, grams] of deductions) {
-          // applyStockDelta returns the post-deduction balance from the same
-          // atomic upsert, so the oversell warning can't race a separate read.
-          const newBalance = await applyStockDelta(
-            tx as unknown as typeof db, cat, -grams, "sale", "invoice", invoice.id, invoice.invoiceNumber,
-          );
-          if (newBalance < 0) {
-            const available = newBalance + grams;
-            stockWarnings.push(
-              `Insufficient stock for ${cat}: sold ${grams.toFixed(3)}g but only ${Math.max(available, 0).toFixed(3)}g available`,
-            );
-          }
-        }
-      });
-    } catch (err) {
-      console.error("Stock auto-deduction failed for invoice", invoice.id, err);
-      stockWarnings.push("Stock auto-deduction failed — inventory not updated for this invoice");
+  for (const [cat, grams] of deductions) {
+    // applyStockDelta returns the post-deduction balance from the same
+    // atomic upsert, so the oversell warning can't race a separate read.
+    const newBalance = await applyStockDelta(
+      tx as unknown as typeof db, cat, -grams, "sale", "invoice", invoice.id, invoice.invoiceNumber,
+    );
+    if (newBalance < 0) {
+      const available = newBalance + grams;
+      stockWarnings.push(
+        `Insufficient stock for ${cat}: sold ${grams.toFixed(3)}g but only ${Math.max(available, 0).toFixed(3)}g available`,
+      );
     }
   }
+  // FIFO multi-batch consumption: split each sold item across the oldest
+  // open purchase lots and record the exact per-slice COGS.
+  for (const ic of itemConsumptions) {
+    const { shortfallGrams } = await consumeFifo(tx as unknown as typeof db, {
+      invoiceId: invoice.id, invoiceItemId: ic.itemId, category: ic.category, grams: ic.grams,
+    });
+    if (shortfallGrams > 0) {
+      stockWarnings.push(
+        `FIFO batches exhausted for ${ic.category}: ${shortfallGrams.toFixed(3)}g costed at average purchase rate`,
+      );
+    }
+  }
+
+  return { invoice, savedItems, hadDeductions: deductions.size > 0 };
+  });
 
   res.status(201).json(CreateInvoiceResponse.parse({
     ...parseInvoice(invoice),
@@ -348,7 +361,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
   }));
   broadcast("INVOICE_MUTATION");
-  if (deductions.size > 0) broadcast("STOCK_MUTATION");
+  if (hadDeductions) broadcast("STOCK_MUTATION");
 });
 
 router.get("/invoices/:id", async (req, res): Promise<void> => {
@@ -385,6 +398,16 @@ router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => 
   // reversing the net keeps the ledger correct even on repeated operations.
   const invoiceId = params.data.id;
   const deletedInvoice = await db.transaction(async (tx) => {
+    // Lock the invoice row first (instead of deleting immediately): the FIFO
+    // reversal must read inventory_consumptions BEFORE the invoice delete
+    // cascades them away, and the lock keeps concurrent deletes serialized so
+    // the reversal still runs exactly once.
+    const [locked] = await tx.execute<{ id: number }>(
+      sql`SELECT id FROM invoices WHERE id = ${invoiceId} FOR UPDATE`,
+    ).then((r) => r.rows);
+    if (!locked) return null;
+    // Restore FIFO batch balances and drop this invoice's COGS ledger rows.
+    await reverseInvoiceConsumption(tx as unknown as typeof db, invoiceId);
     const [row] = await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId)).returning();
     if (!row) return null;
     const movements = await tx

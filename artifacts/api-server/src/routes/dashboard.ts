@@ -100,19 +100,12 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
       FROM stock_purchases
       WHERE ${purchaseWhere}
     `).then((r) => r.rows[0]),
+    // Exact FIFO COGS: sum the inventory engine's per-batch consumption costs
+    // for invoices in the range.
     db.execute<{ cogs: string }>(sql`
-      WITH avg_cost AS (
-        SELECT category,
-               CASE WHEN SUM(weight_grams::numeric) > 0
-                    THEN SUM(total_price_aed::numeric) / SUM(weight_grams::numeric)
-                    ELSE 0 END AS cost_per_gram
-        FROM stock_purchases
-        GROUP BY category
-      )
-      SELECT COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0)), 0)::text AS cogs
-      FROM invoice_items ii
-      JOIN invoices i ON i.id = ii.invoice_id
-      LEFT JOIN avg_cost ac ON ac.category = ${bucketExpr}
+      SELECT COALESCE(SUM(c.cost_aed::numeric), 0)::text AS cogs
+      FROM inventory_consumptions c
+      JOIN invoices i ON i.id = c.invoice_id
       WHERE ${invWhere}
     `).then((r) => r.rows[0]),
   ]);
@@ -144,18 +137,17 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
 // cumulative invoiced revenue and net profit (revenue − COGS; making charges
 // are already inside invoice totals, so they are not added again).
 router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
-  const bucketExpr = sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
-        WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
-        ELSE ii.category END)`;
-
   // Silver is tracked in its own dedicated card; everything else (gold,
   // tt_bar, kg_bar, 995, gold_jewelry_22k, custom) rolls up into the main box.
+  // Cost values come straight from the FIFO batch ledger: remaining stock is
+  // valued at each surviving lot's own purchase rate, and COGS is the exact
+  // sum of consumed batch slices — no averaging.
   const [purchaseAgg, salesAgg, cogsAgg] = await Promise.all([
     db.execute<{ main_grams: string; main_cost: string; silver_grams: string; silver_cost: string }>(sql`
       SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN weight_grams::numeric ELSE 0 END), 0)::text AS main_grams,
-             COALESCE(SUM(CASE WHEN category <> 'silver' THEN total_price_aed::numeric ELSE 0 END), 0)::text AS main_cost,
+             COALESCE(SUM(CASE WHEN category <> 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS main_cost,
              COALESCE(SUM(CASE WHEN category = 'silver' THEN weight_grams::numeric ELSE 0 END), 0)::text AS silver_grams,
-             COALESCE(SUM(CASE WHEN category = 'silver' THEN total_price_aed::numeric ELSE 0 END), 0)::text AS silver_cost
+             COALESCE(SUM(CASE WHEN category = 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS silver_cost
       FROM stock_purchases
     `).then((r) => r.rows[0]),
     db.execute<{ total_revenue: string; main_sold: string; silver_sold: string }>(sql`
@@ -165,18 +157,9 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
       FROM invoices i
     `).then((r) => r.rows[0]),
     db.execute<{ main_cogs: string; silver_cogs: string }>(sql`
-      WITH avg_cost AS (
-        SELECT category,
-               CASE WHEN SUM(weight_grams::numeric) > 0
-                    THEN SUM(total_price_aed::numeric) / SUM(weight_grams::numeric)
-                    ELSE 0 END AS cost_per_gram
-        FROM stock_purchases
-        GROUP BY category
-      )
-      SELECT COALESCE(SUM(CASE WHEN ii.category <> 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0) ELSE 0 END), 0)::text AS main_cogs,
-             COALESCE(SUM(CASE WHEN ii.category = 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) * COALESCE(ac.cost_per_gram, 0) ELSE 0 END), 0)::text AS silver_cogs
-      FROM invoice_items ii
-      LEFT JOIN avg_cost ac ON ac.category = ${bucketExpr}
+      SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN cost_aed::numeric ELSE 0 END), 0)::text AS main_cogs,
+             COALESCE(SUM(CASE WHEN category = 'silver' THEN cost_aed::numeric ELSE 0 END), 0)::text AS silver_cogs
+      FROM inventory_consumptions
     `).then((r) => r.rows[0]),
   ]);
 
@@ -188,9 +171,9 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
 
   res.json({
     availableStockGrams: round3(Number(purchaseAgg.main_grams) - Number(salesAgg.main_sold)),
-    availableStockCostAed: round2(Number(purchaseAgg.main_cost) - mainCogs),
+    availableStockCostAed: round2(Number(purchaseAgg.main_cost)),
     silverStockGrams: round3(Number(purchaseAgg.silver_grams) - Number(salesAgg.silver_sold)),
-    silverStockCostAed: round2(Number(purchaseAgg.silver_cost) - silverCogs),
+    silverStockCostAed: round2(Number(purchaseAgg.silver_cost)),
     totalRevenueAed: round2(revenue),
     netProfitAed: round2(revenue - mainCogs - silverCogs),
   });
@@ -732,19 +715,24 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     // Revenue basis matches the KPI and sales report: each item's amount is its
     // proportional share of the invoice's FINAL billed total (VAT/discount/
     // round-off included), so statement totals reconcile with the dashboard.
-    db.execute<{ created_at: string; invoice_number: string; customer_name: string | null; description: string; bucket: string | null; grams: string; amount: string }>(sql`
+    db.execute<{ created_at: string; invoice_number: string; customer_name: string | null; description: string; bucket: string | null; grams: string; amount: string; exact_cogs: string | null }>(sql`
       SELECT i.created_at::text, i.invoice_number, i.customer_name, ii.description,
              ${bucketExpr} AS bucket,
              COALESCE(ii.gross_weight::numeric, 0)::text AS grams,
              (CASE WHEN s.sum_items > 0
                    THEN ii.total_price::numeric * i.total::numeric / s.sum_items
-                   ELSE ii.total_price::numeric END)::text AS amount
+                   ELSE ii.total_price::numeric END)::text AS amount,
+             c.exact_cogs::text AS exact_cogs
       FROM invoice_items ii
       JOIN invoices i ON i.id = ii.invoice_id
       JOIN LATERAL (
         SELECT COALESCE(SUM(total_price::numeric), 0) AS sum_items
         FROM invoice_items WHERE invoice_id = i.id
       ) s ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT SUM(cost_aed::numeric) AS exact_cogs
+        FROM inventory_consumptions WHERE invoice_item_id = ii.id
+      ) c ON TRUE
       WHERE ${salesWhere}
       ORDER BY i.created_at, i.id
     `).then((r) => r.rows),
@@ -755,8 +743,9 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
 
   const totalPurchaseAed = purchases.reduce((s, p) => s + Number(p.total_price_aed), 0);
   const totalSalesAed = sales.reduce((s, r) => s + Number(r.amount), 0);
-  // Profit basis matches the KPI: revenue minus weighted-average purchase cost
-  // of the sold grams, computed per category across all purchases.
+  // Profit basis: exact FIFO batch COGS recorded by the inventory engine at
+  // sale time. Items with no consumption rows (custom/non-stock items) fall
+  // back to the category weighted-average cost, matching prior behavior.
   const avgCost = new Map<string, number>();
   const allPurch = await db.execute<{ category: string; g: string; aed: string }>(sql`
     SELECT category, SUM(weight_grams::numeric)::text AS g, SUM(total_price_aed::numeric)::text AS aed
@@ -766,7 +755,9 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     const g = Number(p.g);
     avgCost.set(p.category, g > 0 ? Number(p.aed) / g : 0);
   }
-  const cogs = sales.reduce((s, r) => s + Number(r.grams) * (avgCost.get(r.bucket ?? "") ?? 0), 0);
+  const itemCogs = (r: { exact_cogs: string | null; grams: string; bucket: string | null }) =>
+    r.exact_cogs != null ? Number(r.exact_cogs) : Number(r.grams) * (avgCost.get(r.bucket ?? "") ?? 0);
+  const cogs = sales.reduce((s, r) => s + itemCogs(r), 0);
   const profit = totalSalesAed - cogs;
 
   // Unified excel-style ledger: purchases + sales in one table, chronological.
@@ -802,7 +793,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       kg: grams / 1000,
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
-      profitAed: total - grams * (avgCost.get(s.bucket ?? "") ?? 0),
+      profitAed: total - itemCogs(s),
     });
   }
   ledger.sort((a, b) => a.date.localeCompare(b.date));
@@ -992,7 +983,7 @@ router.get("/dashboard/statement-pdf", async (req, res): Promise<void> => {
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
     .text(`Net Profit: AED ${num2(profit)}`, 40, y + 16, { align: "right", width: W });
   doc.fillColor("#666").font("Helvetica").fontSize(7)
-    .text("Profit = Sales revenue − estimated cost of sold items (weighted-average purchase cost per gram per category).", 40, y + 32, { width: W });
+    .text("Profit = Sales revenue − exact FIFO cost of sold items (consumed purchase batches, oldest first).", 40, y + 32, { width: W });
 
   doc.end();
 });

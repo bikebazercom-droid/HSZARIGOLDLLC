@@ -1,0 +1,33 @@
+================================================================================
+CORE ENGINE PRD: DEEP FIFO MULTI-BATCH CONSUMPTION & AUTO-SPLIT COGS
+================================================================================
+
+Target Objective:
+Build a deep-level FIFO multi-batch consumption algorithm that handles batch weight auto-splitting across multiple active purchase lots, exact Cost of Goods Sold (COGS) tracking, and real-time dashboard stock valuation updates.
+
+--------------------------------------------------------------------------------
+DEEP ALGORITHM SPECIFICATION (`services/inventoryEngine.ts`):
+--------------------------------------------------------------------------------
+1. Invoice Sale Execution:
+   - Accept: `category`, `sold_weight_g`, `sale_price_per_g`.
+   - Query: `SELECT * FROM inventory_batches WHERE category = :cat AND remaining_weight_g > 0 ORDER BY created_at ASC`.
+
+2. Multi-Batch Loop Execution:
+   - Loop through active batches:
+     - If `batch.remaining_weight_g <= remaining_to_deduct`:
+       - Consume full `batch.remaining_weight_g`.
+       - Set `batch.remaining_weight_g = 0`, status = 'FULLY_CONSUMED'.
+     - Else:
+       - Deduct partial weight: `batch.remaining_weight_g -= remaining_to_deduct`.
+       - Mark `remaining_to_deduct = 0`.
+     - Calculate COGS for consumed portion: `consumed_weight * batch.purchase_rate_per_g`.
+
+3. Financial & UI Payload Generation:
+   - Total COGS = Sum of all consumed batch costs.
+   - Net Profit = `(sold_weight_g * sale_price_per_g) - Total COGS + Making_Charges`.
+   - Update Dashboard Cards: Subtract exact COGS from "Current Purchase Cost Value", and add Net Profit to "Net Profit Earned".
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Implement this deep multi-batch FIFO auto-split deduction engine and link it with invoice processing immediately!
+================================================================================

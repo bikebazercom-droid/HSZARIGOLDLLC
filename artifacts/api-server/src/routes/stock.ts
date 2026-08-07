@@ -109,6 +109,8 @@ router.post("/stock/purchases", async (req, res): Promise<void> => {
         weightGrams: String(weightGrams),
         totalPriceAed: String(totalPriceAed),
         pricePerGram: String(Math.round(pricePerGram * 10000) / 10000),
+        // New batch starts fully available for FIFO consumption
+        remainingWeightGrams: String(weightGrams),
       })
       .returning();
     await applyStockDelta(tx as unknown as typeof db, category, weightGrams, "purchase", "stock_purchase", row.id);
