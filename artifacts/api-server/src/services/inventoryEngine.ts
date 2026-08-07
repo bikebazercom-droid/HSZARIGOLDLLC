@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 
 // ─── Deep FIFO multi-batch consumption engine ───────────────────────────────
 // Each stock purchase is a batch (lot) with a remaining_weight_grams balance.
-// A sale consumes batches oldest-first (created_at ASC), auto-splitting across
+// A sale consumes batches oldest-first (purchase_date ASC), auto-splitting across
 // as many lots as needed. Every consumed slice is written to
 // inventory_consumptions with its exact cost (slice grams × that batch's
 // price_per_gram), giving exact per-item COGS instead of a weighted average.
@@ -32,7 +32,7 @@ export async function consumeFifo(
     SELECT id, remaining_weight_grams::text AS remaining, price_per_gram::text AS rate
     FROM stock_purchases
     WHERE category = ${category} AND remaining_weight_grams::numeric > 0
-    ORDER BY created_at ASC, id ASC
+    ORDER BY purchase_date ASC, created_at ASC, id ASC
     FOR UPDATE
   `).then((r) => r.rows);
 
