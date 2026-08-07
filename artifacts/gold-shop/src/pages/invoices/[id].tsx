@@ -1,16 +1,14 @@
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import { Link, useParams } from "wouter";
 import {
   useGetInvoice,
   getGetInvoiceQueryKey,
   useGetSettings,
   getGetSettingsQueryKey,
-  useGetInvoiceProfit,
-  getGetInvoiceProfitQueryKey,
 } from "@workspace/api-client-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer, Download, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowLeft, Printer, Download } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/context/auth";
@@ -67,137 +65,6 @@ function numberToWords(n: number): string {
   let result = convert(intPart) + " Dirhams";
   if (decPart > 0) result += " and " + convert(decPart) + " Fils";
   return result + " Only";
-}
-
-// ─── Admin-only batch-level profit analysis (screen only, never printed) ────
-function ProfitAnalysis({ invoiceId }: { invoiceId: number }) {
-  const { data: profit, isLoading } = useGetInvoiceProfit(invoiceId, {
-    query: { queryKey: getGetInvoiceProfitQueryKey(invoiceId), enabled: !!invoiceId },
-  });
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
-
-  const fmt = (n: number) =>
-    n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtWt = (n: number) =>
-    n.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-
-  if (isLoading) {
-    return <div className="mt-6 no-print"><Skeleton className="h-40" /></div>;
-  }
-  if (!profit) return null;
-
-  const hasUntracked = profit.items.some((i) => !i.tracked);
-  const profitPositive = profit.profitAed >= 0;
-
-  return (
-    <div className="mt-6 no-print rounded-lg border bg-card text-card-foreground shadow-sm" data-testid="profit-analysis">
-      <div className="p-4 border-b">
-        <h2 className="font-semibold text-base flex items-center gap-2">
-          {profitPositive
-            ? <TrendingUp className="w-4 h-4 text-green-600" />
-            : <TrendingDown className="w-4 h-4 text-red-600" />}
-          Profit Analysis
-          <span className="text-xs font-normal text-muted-foreground">(admin only — not printed)</span>
-        </h2>
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          <div className="rounded-md bg-muted/40 p-3">
-            <div className="text-xs text-muted-foreground">Revenue (billed)</div>
-            <div className="font-bold text-sm sm:text-base" data-testid="text-profit-revenue">AED {fmt(profit.revenueAed)}</div>
-          </div>
-          <div className="rounded-md bg-muted/40 p-3">
-            <div className="text-xs text-muted-foreground">Exact COGS (FIFO)</div>
-            <div className="font-bold text-sm sm:text-base" data-testid="text-profit-cogs">AED {fmt(profit.cogsAed)}</div>
-          </div>
-          <div className="rounded-md bg-muted/40 p-3">
-            <div className="text-xs text-muted-foreground">Profit</div>
-            <div className={`font-bold text-sm sm:text-base ${profitPositive ? "text-green-600" : "text-red-600"}`} data-testid="text-profit-net">
-              AED {fmt(profit.profitAed)}
-            </div>
-          </div>
-        </div>
-        {hasUntracked && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Items marked "not tracked" have no inventory batch records (custom/non-stock items); they are excluded from COGS and profit.
-          </p>
-        )}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
-              <th className="p-2 pl-4 w-6"></th>
-              <th className="p-2">Item</th>
-              <th className="p-2 text-right">Gross Wt. (g)</th>
-              <th className="p-2 text-right">Revenue (AED)</th>
-              <th className="p-2 text-right">COGS (AED)</th>
-              <th className="p-2 pr-4 text-right">Profit (AED)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {profit.items.map((item) => {
-              const isOpen = !!expanded[item.invoiceItemId];
-              const canExpand = item.lots.length > 0;
-              return (
-                <React.Fragment key={item.invoiceItemId}>
-                  <tr
-                    className={`border-b ${canExpand ? "cursor-pointer hover:bg-muted/30" : ""}`}
-                    onClick={() => canExpand && setExpanded((e) => ({ ...e, [item.invoiceItemId]: !e[item.invoiceItemId] }))}
-                    data-testid={`row-profit-item-${item.invoiceItemId}`}
-                  >
-                    <td className="p-2 pl-4 text-muted-foreground">
-                      {canExpand && (isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)}
-                    </td>
-                    <td className="p-2 font-medium">
-                      {item.description}
-                      {!item.tracked && <span className="ml-2 text-xs text-muted-foreground italic">not tracked</span>}
-                    </td>
-                    <td className="p-2 text-right">{item.grossWeight != null ? fmtWt(item.grossWeight) : "-"}</td>
-                    <td className="p-2 text-right">{fmt(item.revenueAed)}</td>
-                    <td className="p-2 text-right">{item.tracked ? fmt(item.cogsAed) : "-"}</td>
-                    <td className={`p-2 pr-4 text-right font-semibold ${!item.tracked ? "" : item.profitAed >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {item.tracked ? fmt(item.profitAed) : "-"}
-                    </td>
-                  </tr>
-                  {isOpen && (
-                    <tr className="border-b bg-muted/20">
-                      <td></td>
-                      <td colSpan={5} className="p-2 pr-4">
-                        <div className="text-xs text-muted-foreground mb-1 font-medium">Consumed purchase lots</div>
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-left text-muted-foreground">
-                              <th className="py-1">Lot</th>
-                              <th className="py-1">Date</th>
-                              <th className="py-1">Supplier</th>
-                              <th className="py-1 text-right">Grams</th>
-                              <th className="py-1 text-right">Rate (AED/g)</th>
-                              <th className="py-1 text-right">Cost (AED)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {item.lots.map((lot, i) => (
-                              <tr key={i} className="border-t border-border/50">
-                                <td className="py-1">{lot.purchaseId != null ? `#${lot.purchaseId}` : "avg-rate (no batch)"}</td>
-                                <td className="py-1">{lot.purchaseDate ?? "-"}</td>
-                                <td className="py-1">{lot.supplierName ?? "-"}</td>
-                                <td className="py-1 text-right">{fmtWt(lot.weightGrams)}</td>
-                                <td className="py-1 text-right">{lot.pricePerGram != null ? fmt(lot.pricePerGram) : "-"}</td>
-                                <td className="py-1 text-right">{fmt(lot.costAed)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 
 export default function InvoiceDetail() {
@@ -643,7 +510,6 @@ export default function InvoiceDetail() {
         </div>
       )}
 
-      {user?.role === "admin" && <ProfitAnalysis invoiceId={id} />}
 
       <style>{`
         @media print {
