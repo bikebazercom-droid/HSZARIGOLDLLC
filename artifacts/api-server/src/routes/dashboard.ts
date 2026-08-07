@@ -971,13 +971,13 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   // ===== SECTION 1: PURCHASES =====
   const purchaseRows = ledger.filter((r) => r.type === "Purchase");
   const totalPurchGrams = purchaseRows.reduce((s, r) => s + r.grams, 0);
-  sectionHeader("Section 1: Purchases");
+  sectionHeader("1. Purchases (Stock In History)");
   if (purchaseRows.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No purchases in this period.", 40, y); y += 20;
   } else {
     gridHeader([
       ["SL", 26], ["Date", 70], ["Supplier", 140], ["Category", 140],
-      ["Weight (g)", 90, true], ["Rate (AED/g)", 96, true], ["Total Cost (AED)", 200, true],
+      ["Weight (g)", 90, true], ["Purchase Rate (AED/g)", 96, true], ["Total Purchase Cost (AED)", 200, true],
     ]);
     purchaseRows.forEach((r, i) => {
       gridRow([
@@ -991,7 +991,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
       ]);
     });
     gridRow([
-      ["TOTAL PURCHASES", 236],
+      ["TOTAL PURCHASED WEIGHT & TOTAL SPENT", 236],
       [`${num3(totalPurchGrams)} g  (${(totalPurchGrams / 1000).toFixed(3)} kg)`, 326, true],
       [`AED ${num2(purchaseRows.reduce((s, r) => s + r.totalAed, 0))}`, 200, true],
     ], { bold: true, bg: "#e2e8f0" });
@@ -1000,15 +1000,15 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
 
   // ===== SECTION 2: SALES & PROFIT =====
   const saleRows = ledger.filter((r) => r.type === "Sale");
-  sectionHeader("Section 2: Sales & Profit");
+  sectionHeader("2. Sales & Profit Realization");
   if (saleRows.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No sales in this period.", 40, y); y += 20;
   } else {
     gridHeader([
       ["SL", 24], ["Date", 62], ["Invoice", 66], ["Customer", 80],
-      ["Item (Category)", 130], ["Sold Wt (g)", 58, true],
-      ["Purchase Cost (AED)", 72, true], ["Sale Value (AED)", 72, true],
-      ["Profit / Loss (AED)", 78, true], ["Consumed Batch", 120],
+      ["Item Category", 130], ["Sold Weight (g)", 58, true],
+      ["COGS (AED)", 72, true], ["Sale Value Received (AED)", 72, true],
+      ["Realized Profit/Loss (AED)", 78, true], ["Consumed Batch Ref", 120],
     ]);
     saleRows.forEach((r, i) => {
       const itemCat = r.itemName === r.category ? r.itemName : `${r.itemName} (${r.category})`;
@@ -1028,8 +1028,8 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     const salesSummary: [string, string, string][] = [
       ["Total Sold Weight:", `${num3(totals.soldGrams)} g  (${(totals.soldGrams / 1000).toFixed(3)} kg)`, "#e2e8f0"],
       ["Purchase Cost of Sold (COGS):", `AED ${num2(totals.cogsAed)}`, "#fdf6e3"],
-      ["Total Revenue Received:", `AED ${num2(totals.revenueAed)}`, "#e2e8f0"],
-      ["Total Net Profit Earned:", `AED ${num2(totals.profitAed)}`, totals.profitAed >= 0 ? "#e7f5ec" : "#fdecec"],
+      ["Total Sales Revenue:", `AED ${num2(totals.revenueAed)}`, "#e2e8f0"],
+      ["Net Realized Profit:", `AED ${num2(totals.profitAed)}`, totals.profitAed >= 0 ? "#e7f5ec" : "#fdecec"],
     ];
     salesSummary.forEach(([label, val, bg], gi) => {
       gridRow([
@@ -1042,14 +1042,14 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   }
 
   // ===== SECTION 3: REMAINING STOCK — LIVE (per batch) =====
-  sectionHeader("Section 3: Remaining Stock - Live (Unsold Batches)");
+  sectionHeader("3. Remaining Stock - Live Inventory Balance");
   if (liveBatches.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No unsold stock batches.", 40, y); y += 20;
   } else {
     gridHeader([
       ["SL", 26], ["Category", 130], ["Batch ID", 70], ["Purchase Date", 76],
-      ["Purchased Wt (g)", 90, true], ["Sold Wt (g)", 84, true],
-      ["Remaining Wt (g)", 90, true], ["Rate (AED/g)", 76, true], ["Cost Value (AED)", 120, true],
+      ["Purchased Wt (g)", 90, true], ["Consumed Wt (g)", 84, true],
+      ["Remaining Wt (g)", 90, true], ["Rate (AED/g)", 76, true], ["Active Cost Value (AED)", 120, true],
     ]);
     liveBatches.forEach((b, i) => {
       gridRow([
@@ -1067,7 +1067,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     const remG = liveBatches.reduce((s, b) => s + b.remainingGrams, 0);
     const remAed = liveBatches.reduce((s, b) => s + b.costValueAed, 0);
     gridRow([
-      ["TOTAL LIVE REMAINING STOCK", 246],
+      ["TOTAL AVAILABLE STOCK WEIGHT & TOTAL VALUATION", 246],
       [`${num3(remG)} g  (${(remG / 1000).toFixed(3)} kg)`, 396, true],
       [`AED ${num2(remAed)}`, 120, true],
     ], { bold: true, bg: "#eef2f7" });
