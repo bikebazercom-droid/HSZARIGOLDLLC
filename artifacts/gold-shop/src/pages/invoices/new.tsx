@@ -281,8 +281,11 @@ function calcItem(item: LineItem, metalRate: number): LineItem {
   const pureWeight = purityFactor > 0 && item.grossWeight > 0
     ? roundTo(item.grossWeight * purityFactor, 3)
     : item.pureWeight;
-  // Gold Value = Pure Weight × the single global Metal Rate, priced per gram.
-  const goldValue = roundTo(pureWeight * (metalRate || 0), 2);
+  // Gold Value = GROSS Weight × the single global Metal Rate, priced per gram.
+  // The metal rate is already the per-gross-gram selling rate for the chosen
+  // item/purity, so purity must NOT discount the total again. Pure Weight stays
+  // as an informational column only.
+  const goldValue = roundTo(item.grossWeight * (metalRate || 0), 2);
   // Item Total = Gold Value + Making Amount
   const totalPrice = roundTo(goldValue + item.makingAmt, 2);
   return { ...item, pureWeight, totalPrice };
@@ -478,11 +481,11 @@ export default function NewInvoice() {
   }, [metalRate]);
 
   // Totals following the formula:
-  // Gold Value = Σ(Pure Weight) × the single global Metal Rate per gram
+  // Gold Value = Σ(Gross Weight) × the single global Metal Rate per gram
   // Total Before VAT = Gold Value + Σ(Making Amount)
   const totalGrossWeight = items.reduce((s, i) => s + (i.grossWeight || 0), 0);
   const totalPureWeight = items.reduce((s, i) => s + (i.pureWeight || 0), 0);
-  const totalGoldValue = roundTo(items.reduce((s, i) => s + roundTo((i.pureWeight || 0) * metalRate, 2), 0), 2);
+  const totalGoldValue = roundTo(items.reduce((s, i) => s + roundTo((i.grossWeight || 0) * metalRate, 2), 0), 2);
   const totalMakingAmount = items.reduce((s, i) => s + (i.makingAmt || 0), 0);
   const subtotal = roundTo(totalGoldValue + totalMakingAmount, 2);
   const totalBeforeVat = Math.max(0, subtotal);
@@ -954,7 +957,7 @@ export default function NewInvoice() {
               <div className="border rounded-md overflow-hidden">
                 <div className="p-3 space-y-2 text-sm">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Gold Value ({fmt(totalPureWeight)}g pure × {fmt(metalRate)}/g)</span>
+                    <span>Gold Value ({fmt(totalGrossWeight)}g gross × {fmt(metalRate)}/g)</span>
                     <span>{fmt(totalGoldValue)} AED</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
