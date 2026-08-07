@@ -349,6 +349,48 @@ export interface ProductInput {
   stock?: number;
 }
 
+export interface ConsumedLot {
+  /**
+     * Null when the slice was costed at the category average (batches exhausted or source lot deleted).
+     * @nullable
+     */
+  purchaseId?: number | null;
+  /** @nullable */
+  purchaseDate?: string | null;
+  /** @nullable */
+  supplierName?: string | null;
+  weightGrams: number;
+  /** @nullable */
+  pricePerGram?: number | null;
+  costAed: number;
+}
+
+export interface InvoiceProfitItem {
+  invoiceItemId: number;
+  description: string;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  grossWeight?: number | null;
+  /** Item's proportional share of the invoice's final billed total. */
+  revenueAed: number;
+  cogsAed: number;
+  profitAed: number;
+  /** False when the item has no FIFO consumption rows (custom/non-stock item) — its COGS is unknown, not zero. */
+  tracked: boolean;
+  lots: ConsumedLot[];
+}
+
+export interface InvoiceProfit {
+  invoiceId: number;
+  revenueAed: number;
+  /** Sum of tracked items' exact FIFO COGS. */
+  cogsAed: number;
+  /** Revenue of tracked items minus their COGS (untracked items excluded). */
+  profitAed: number;
+  items: InvoiceProfitItem[];
+}
+
 export interface InvoiceItemInput {
   productId?: number;
   description: string;

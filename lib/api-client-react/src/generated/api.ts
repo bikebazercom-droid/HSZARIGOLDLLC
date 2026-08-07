@@ -36,6 +36,7 @@ import type {
   HealthStatus,
   Invoice,
   InvoiceInput,
+  InvoiceProfit,
   ListCustomersParams,
   ListInvoicesParams,
   ListProductsParams,
@@ -1946,6 +1947,83 @@ export const useDeleteInvoice = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteInvoiceMutationOptions(options));
     }
+
+export const getGetInvoiceProfitUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/profit`
+}
+
+/**
+ * @summary Per-item exact FIFO COGS, profit, and consumed purchase lots for an invoice (admin only)
+ */
+export const getInvoiceProfit = async (id: number, options?: RequestInit): Promise<InvoiceProfit> => {
+
+  return customFetch<InvoiceProfit>(getGetInvoiceProfitUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceProfitQueryKey = (id: number,) => {
+    return [
+    `/api/invoices/${id}/profit`
+    ] as const;
+    }
+
+
+export const getGetInvoiceProfitQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceProfit>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceProfit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceProfitQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceProfit>>> = ({ signal }) => getInvoiceProfit(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceProfit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceProfitQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceProfit>>>
+export type GetInvoiceProfitQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Per-item exact FIFO COGS, profit, and consumed purchase lots for an invoice (admin only)
+ */
+
+export function useGetInvoiceProfit<TData = Awaited<ReturnType<typeof getInvoiceProfit>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceProfit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceProfitQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListStockLevelsUrl = () => {
 

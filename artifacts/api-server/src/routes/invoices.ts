@@ -383,6 +383,96 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   res.json(GetInvoiceResponse.parse({ ...parseInvoice(invoice), items: items.map(parseItem) }));
 });
 
+// Batch-level profit audit for a single invoice (admin only). Revenue basis
+// matches the sales report: each item's share of the invoice's FINAL billed
+// total, allocated proportionally to pre-VAT line totals. COGS is the exact
+// FIFO consumption ledger; items with no consumption rows (custom/non-stock)
+// are reported as untracked instead of pretending zero cost.
+router.get("/invoices/:id/profit", requireAdmin, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const invoiceId = parseInt(raw, 10);
+  if (!Number.isFinite(invoiceId)) {
+    res.status(400).json({ error: "Invalid invoice id" });
+    return;
+  }
+
+  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId));
+  if (!invoice) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+
+  const items = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, invoiceId));
+
+  // Consumption slices joined to their source purchase lots (LEFT JOIN:
+  // purchase_id is NULL for shortfall slices or deleted lots).
+  const lots = await db.execute<{
+    invoice_item_id: number | null;
+    purchase_id: number | null;
+    purchase_date: string | null;
+    supplier_name: string | null;
+    weight_grams: string;
+    price_per_gram: string | null;
+    cost_aed: string;
+  }>(sql`
+    SELECT c.invoice_item_id, c.purchase_id, sp.purchase_date, sp.supplier_name,
+           c.weight_grams::text, sp.price_per_gram::text, c.cost_aed::text
+    FROM inventory_consumptions c
+    LEFT JOIN stock_purchases sp ON sp.id = c.purchase_id
+    WHERE c.invoice_id = ${invoiceId}
+    ORDER BY c.id ASC
+  `).then((r) => r.rows);
+
+  const lotsByItem = new Map<number, typeof lots>();
+  for (const l of lots) {
+    if (l.invoice_item_id == null) continue;
+    const arr = lotsByItem.get(l.invoice_item_id) ?? [];
+    arr.push(l);
+    lotsByItem.set(l.invoice_item_id, arr);
+  }
+
+  const itemsTotal = items.reduce((s, it) => s + Number(it.totalPrice), 0);
+  const billedTotal = Number(invoice.total);
+
+  const profitItems = items.map((it) => {
+    const itemLots = lotsByItem.get(it.id) ?? [];
+    const tracked = itemLots.length > 0;
+    const cogsAed = itemLots.reduce((s, l) => s + Number(l.cost_aed), 0);
+    // Proportional share of the final billed total (same basis as reports).
+    const revenueAed = itemsTotal > 0 ? Number(it.totalPrice) * billedTotal / itemsTotal : Number(it.totalPrice);
+    return {
+      invoiceItemId: it.id,
+      description: it.description,
+      category: it.category ?? null,
+      grossWeight: it.grossWeight != null ? Number(it.grossWeight) : null,
+      revenueAed: Math.round(revenueAed * 100) / 100,
+      cogsAed: Math.round(cogsAed * 100) / 100,
+      profitAed: tracked ? Math.round((revenueAed - cogsAed) * 100) / 100 : 0,
+      tracked,
+      lots: itemLots.map((l) => ({
+        purchaseId: l.purchase_id,
+        purchaseDate: l.purchase_date,
+        supplierName: l.supplier_name,
+        weightGrams: Number(l.weight_grams),
+        pricePerGram: l.price_per_gram != null ? Number(l.price_per_gram) : null,
+        costAed: Number(l.cost_aed),
+      })),
+    };
+  });
+
+  const trackedItems = profitItems.filter((i) => i.tracked);
+  const cogsAed = trackedItems.reduce((s, i) => s + i.cogsAed, 0);
+  const trackedRevenue = trackedItems.reduce((s, i) => s + i.revenueAed, 0);
+
+  res.json({
+    invoiceId,
+    revenueAed: Math.round(billedTotal * 100) / 100,
+    cogsAed: Math.round(cogsAed * 100) / 100,
+    profitAed: Math.round((trackedRevenue - cogsAed) * 100) / 100,
+    items: profitItems,
+  });
+});
+
 router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = DeleteInvoiceParams.safeParse({ id: parseInt(raw, 10) });

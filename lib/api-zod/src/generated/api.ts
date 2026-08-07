@@ -793,6 +793,39 @@ export const DeleteInvoiceResponse = zod.void()
 
 
 /**
+ * @summary Per-item exact FIFO COGS, profit, and consumed purchase lots for an invoice (admin only)
+ */
+export const GetInvoiceProfitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetInvoiceProfitResponse = zod.object({
+  "invoiceId": zod.number(),
+  "revenueAed": zod.number(),
+  "cogsAed": zod.number().describe('Sum of tracked items\' exact FIFO COGS.'),
+  "profitAed": zod.number().describe('Revenue of tracked items minus their COGS (untracked items excluded).'),
+  "items": zod.array(zod.object({
+  "invoiceItemId": zod.number(),
+  "description": zod.string(),
+  "category": zod.string().nullish(),
+  "grossWeight": zod.number().nullish(),
+  "revenueAed": zod.number().describe('Item\'s proportional share of the invoice\'s final billed total.'),
+  "cogsAed": zod.number(),
+  "profitAed": zod.number(),
+  "tracked": zod.boolean().describe('False when the item has no FIFO consumption rows (custom\/non-stock item) — its COGS is unknown, not zero.'),
+  "lots": zod.array(zod.object({
+  "purchaseId": zod.number().nullish().describe('Null when the slice was costed at the category average (batches exhausted or source lot deleted).'),
+  "purchaseDate": zod.string().nullish(),
+  "supplierName": zod.string().nullish(),
+  "weightGrams": zod.number(),
+  "pricePerGram": zod.number().nullish(),
+  "costAed": zod.number()
+}))
+}))
+})
+
+
+/**
  * @summary Live aggregated stock weight per category
  */
 export const ListStockLevelsResponseItem = zod.object({
