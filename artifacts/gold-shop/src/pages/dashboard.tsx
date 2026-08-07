@@ -282,6 +282,11 @@ export default function Dashboard() {
               </div>
               <div className="border-t border-dashed border-emerald-700 my-4" />
               <div>
+                <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Purchase Cost of Sold Items (COGS)</p>
+                <p className="text-xl font-bold mt-0.5 text-amber-300">AED {fmtAED(summary.soldCostAed)}</p>
+              </div>
+              <div className="border-t border-dashed border-emerald-700 my-4" />
+              <div>
                 <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Net Profit Earned</p>
                 <p className={`text-xl font-bold mt-0.5 ${summary.netProfitAed < 0 ? "text-red-400" : "text-[#4ade80]"}`}>
                   AED {fmtAED(summary.netProfitAed)}

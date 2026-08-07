@@ -17,6 +17,8 @@ export interface DashboardSummaryCards {
   silverStockCostAed: number;
   /** Cumulative invoiced revenue (all-time) */
   totalRevenueAed: number;
+  /** All-time exact FIFO purchase cost (COGS) of sold items */
+  soldCostAed: number;
   /** totalRevenueAed - all-time COGS */
   netProfitAed: number;
 }

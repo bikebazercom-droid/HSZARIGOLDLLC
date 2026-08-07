@@ -778,7 +778,7 @@ components:
 
     DashboardSummaryCards:
       type: object
-      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, netProfitAed]
+      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, soldCostAed, netProfitAed]
       properties:
         availableStockGrams:
           type: number
@@ -795,6 +795,9 @@ components:
         totalRevenueAed:
           type: number
           description: Cumulative invoiced revenue (all-time)
+        soldCostAed:
+          type: number
+          description: All-time exact FIFO purchase cost (COGS) of sold items
         netProfitAed:
           type: number
           description: totalRevenueAed - all-time COGS

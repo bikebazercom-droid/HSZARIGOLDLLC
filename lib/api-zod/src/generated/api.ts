@@ -959,6 +959,7 @@ export const GetDashboardSummaryCardsResponse = zod.object({
   "silverStockGrams": zod.number().describe('Silver purchased grams minus silver sold grams'),
   "silverStockCostAed": zod.number().describe('Silver purchase cost minus COGS of sold silver items'),
   "totalRevenueAed": zod.number().describe('Cumulative invoiced revenue (all-time)'),
+  "soldCostAed": zod.number().describe('All-time exact FIFO purchase cost (COGS) of sold items'),
   "netProfitAed": zod.number().describe('totalRevenueAed - all-time COGS')
 })
 

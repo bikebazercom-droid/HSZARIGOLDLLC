@@ -176,6 +176,7 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
     silverStockGrams: round3(Number(purchaseAgg.silver_grams) - Number(salesAgg.silver_sold)),
     silverStockCostAed: round2(Number(purchaseAgg.silver_cost)),
     totalRevenueAed: round2(revenue),
+    soldCostAed: round2(mainCogs + silverCogs),
     netProfitAed: round2(revenue - mainCogs - silverCogs),
   });
 });
@@ -647,6 +648,7 @@ interface StatementLedgerRow {
   kg: number;
   ratePerG: number;
   totalAed: number;
+  costAed: number | null;   // sales only: exact FIFO purchase cost of this line
   profitAed: number | null; // sales only
 }
 
@@ -778,6 +780,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       kg: grams / 1000,
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
+      costAed: null,
       profitAed: null,
     });
   }
@@ -795,6 +798,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       kg: grams / 1000,
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
+      costAed: itemCogs(s),
       profitAed: total - itemCogs(s),
     });
   }
@@ -805,6 +809,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     grams: ledger.reduce((s, r) => s + r.grams, 0),
     kg: ledger.reduce((s, r) => s + r.kg, 0),
     revenueAed: totalSalesAed,
+    cogsAed: cogs,
     profitAed: profit,
   };
 
@@ -852,9 +857,9 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
 
   // Summary boxes
   const boxes = [
-    ["Purchases (AED)", totalPurchaseAed],
-    ["Sales (AED)", totalSalesAed],
-    ["Est. COGS (AED)", cogs],
+    ["Total Purchases (AED)", totalPurchaseAed],
+    ["Sales Revenue (AED)", totalSalesAed],
+    ["Purchase Cost of Sold - COGS (AED)", cogs],
     ["Net Profit (AED)", profit],
   ] as const;
   let bx = 40;
@@ -920,11 +925,12 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
       h: 16,
     });
 
-  // Unified ledger table: [SL | Date | Type | Party | Category | Item | Wt g | Wt kg | Rate/g | Total]
+  // Unified ledger table: [SL | Date | Type | Party | Category | Item | Wt g | Wt kg | Rate/g | Cost | Revenue | Profit]
   const COLS: [string, number, boolean?][] = [
-    ["SL", 30], ["Date", 62], ["Type", 55], ["Party Name", 110], ["Category", 90],
-    ["Item Name", 130], ["Weight (g)", 70, true], ["Weight (kg)", 55, true],
-    ["Rate/g (AED)", 65, true], ["Total Value (AED)", 95, true],
+    ["SL", 24], ["Date", 58], ["Type", 42], ["Party Name", 88], ["Category", 70],
+    ["Item Name", 100], ["Weight (g)", 62, true], ["Weight (kg)", 48, true],
+    ["Rate/g (AED)", 56, true], ["Purchase Cost (AED)", 72, true],
+    ["Revenue (AED)", 72, true], ["Net Profit (AED)", 70, true],
   ];
   sectionHeader("Transactions (Purchases & Sales)");
   if (ledger.length === 0) {
@@ -933,32 +939,41 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     gridHeader(COLS);
     for (const r of ledger) {
       gridRow([
-        [String(r.sl), 30],
-        [r.date, 62],
-        [r.type, 55],
-        [r.party.substring(0, 22), 110],
-        [r.category.substring(0, 18), 90],
-        [r.itemName.substring(0, 26), 130],
-        [num3(r.grams), 70, true],
-        [r.kg.toFixed(3), 55, true],
-        [num2(r.ratePerG), 65, true],
-        [num2(r.totalAed), 95, true],
+        [String(r.sl), 24],
+        [r.date, 58],
+        [r.type, 42],
+        [r.party.substring(0, 18), 88],
+        [r.category.substring(0, 14), 70],
+        [r.itemName.substring(0, 20), 100],
+        [num3(r.grams), 62, true],
+        [r.kg.toFixed(3), 48, true],
+        [num2(r.ratePerG), 56, true],
+        [r.costAed != null ? num2(r.costAed) : "-", 72, true],
+        [r.type === "Sale" ? num2(r.totalAed) : "-", 72, true],
+        [r.profitAed != null ? num2(r.profitAed) : "-", 70, true],
       ]);
     }
-    // Excel bottom summary rows
+    // Excel bottom summary rows: Revenue / COGS / Net Profit, clearly labelled.
     gridRow([
-      ["TOTAL", 347],
-      [`${num3(totals.grams)} g`, 100, true],
-      [`${totals.kg.toFixed(3)} kg`, 75, true],
-      ["Revenue:", 95, true],
-      [num2(totals.revenueAed), 145, true],
+      ["TOTAL", 382],
+      [`${num3(totals.grams)} g`, 62, true],
+      [`${totals.kg.toFixed(3)} kg`, 48, true],
+      ["Total Revenue Received:", 135, true],
+      [num2(totals.revenueAed), 135, true],
     ], { bold: true, bg: "#e2e8f0" });
     gridRow([
-      ["", 347],
-      ["", 100, true],
-      ["", 75, true],
-      ["Net Profit:", 95, true],
-      [num2(totals.profitAed), 145, true],
+      ["", 382],
+      ["", 62, true],
+      ["", 48, true],
+      ["Purchase Cost of Sold (COGS):", 135, true],
+      [num2(totals.cogsAed), 135, true],
+    ], { bold: true, bg: "#fdf6e3" });
+    gridRow([
+      ["", 382],
+      ["", 62, true],
+      ["", 48, true],
+      ["Total Net Profit Earned:", 135, true],
+      [num2(totals.profitAed), 135, true],
     ], { bold: true, bg: totals.profitAed >= 0 ? "#e7f5ec" : "#fdecec" });
     y += 12;
   }
@@ -985,7 +1000,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
     .text(`Net Profit: AED ${num2(profit)}`, 40, y + 16, { align: "right", width: W });
   doc.fillColor("#666").font("Helvetica").fontSize(7)
-    .text("Profit = Sales revenue − exact FIFO cost of sold items (consumed purchase batches, oldest first).", 40, y + 32, { width: W });
+    .text("Profit = Sales revenue minus exact FIFO cost of sold items (consumed purchase batches, oldest first).", 40, y + 32, { width: W });
 
   doc.end();
 });
@@ -1010,10 +1025,10 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
 
   // Title / criteria
-  ws.mergeCells("A1:J1");
+  ws.mergeCells("A1:L1");
   ws.getCell("A1").value = "Hazari Gold L.L.C — Stock & Profit Statement";
   ws.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
-  ws.mergeCells("A2:J2");
+  ws.mergeCells("A2:L2");
   ws.getCell("A2").value = [
     startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
     `Category: ${category ? (STMT_CAT_LABEL[category] ?? category) : "All"}`,
@@ -1022,7 +1037,7 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   ws.getCell("A2").font = { size: 9, color: { argb: "FF64748B" } };
 
   // Header row
-  const HEADERS = ["SL", "Date", "Type", "Party Name", "Category", "Item Name", "Weight (g)", "Weight (kg)", "Rate/g (AED)", "Total Value (AED)"];
+  const HEADERS = ["SL", "Date", "Type", "Party Name", "Category", "Item Name", "Weight (g)", "Weight (kg)", "Rate/g (AED)", "Purchase Cost (AED)", "Revenue (AED)", "Net Profit (AED)"];
   const headerRow = ws.addRow(HEADERS);
   headerRow.eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
@@ -1032,11 +1047,15 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   });
   ws.columns = [
     { width: 5 }, { width: 12 }, { width: 10 }, { width: 22 }, { width: 18 },
-    { width: 26 }, { width: 13 }, { width: 12 }, { width: 14 }, { width: 17 },
+    { width: 26 }, { width: 13 }, { width: 12 }, { width: 14 }, { width: 18 },
+    { width: 16 }, { width: 16 },
   ];
 
   for (const r of ledger) {
-    const row = ws.addRow([r.sl, r.date, r.type, r.party, r.category, r.itemName, r.grams, r.kg, r.ratePerG, r.totalAed]);
+    const row = ws.addRow([
+      r.sl, r.date, r.type, r.party, r.category, r.itemName, r.grams, r.kg, r.ratePerG,
+      r.costAed ?? "-", r.type === "Sale" ? r.totalAed : "-", r.profitAed ?? "-",
+    ]);
     row.eachCell((cell, col) => {
       cell.border = allBorders;
       if (row.number % 2 === 0) {
@@ -1044,21 +1063,23 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
       }
       if (col === 7) cell.numFmt = "#,##0.000";
       if (col === 8) cell.numFmt = "0.000";
-      if (col === 9 || col === 10) cell.numFmt = "#,##0.00";
+      if (col >= 9 && typeof cell.value === "number") cell.numFmt = "#,##0.00";
+      if (col >= 9 && typeof cell.value !== "number") cell.alignment = { horizontal: "right" };
     });
   }
 
-  // Bold summary row
-  const totalRow = ws.addRow(["", "", "", "", "", "TOTAL", totals.grams, totals.kg, "Revenue →", totals.revenueAed]);
-  const profitRow = ws.addRow(["", "", "", "", "", "", "", "", "Net Profit →", totals.profitAed]);
-  for (const row of [totalRow, profitRow]) {
+  // Bold summary rows: Revenue / COGS / Net Profit
+  const totalRow = ws.addRow(["", "", "", "", "", "TOTAL", totals.grams, totals.kg, "", "", "Total Revenue Received →", totals.revenueAed]);
+  const cogsRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "Purchase Cost of Sold (COGS) →", totals.cogsAed]);
+  const profitRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "Total Net Profit Earned →", totals.profitAed]);
+  for (const row of [totalRow, cogsRow, profitRow]) {
     row.eachCell((cell, col) => {
       cell.border = allBorders;
       cell.font = { bold: true };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: row === profitRow ? "FFE7F5EC" : "FFE2E8F0" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: row === profitRow ? "FFE7F5EC" : row === cogsRow ? "FFFDF6E3" : "FFE2E8F0" } };
       if (col === 7) cell.numFmt = "#,##0.000";
       if (col === 8) cell.numFmt = "0.000";
-      if (col === 10) cell.numFmt = "#,##0.00";
+      if (col === 12) cell.numFmt = "#,##0.00";
     });
   }
 
@@ -1067,9 +1088,9 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   sum.columns = [{ width: 28 }, { width: 20 }];
   const sumRows: [string, number][] = [
     ["Total Purchases (AED)", totalPurchaseAed],
-    ["Total Sales Revenue (AED)", totalSalesAed],
-    ["Est. COGS (AED)", cogs],
-    ["Net Profit (AED)", profit],
+    ["Total Revenue Received (AED)", totalSalesAed],
+    ["Total Purchase Cost of Sold Goods — COGS (AED)", cogs],
+    ["Total Net Profit Earned (AED)", profit],
   ];
   for (const [label, val] of sumRows) {
     const row = sum.addRow([label, val]);
