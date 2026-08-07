@@ -11,3 +11,5 @@ description: Exact multi-batch FIFO COGS replaces weighted-average; consumers mu
 - Idempotent backfill script exists (`scripts/backfill-fifo.ts`); run by bundling with esbuild to cjs (`--external:pg-native`) since tsx isn't installed.
 
 **FIFO order (Aug 2026):** batches consume in `purchase_date ASC, created_at ASC, id ASC` order — back-dated purchases are eaten before newer-dated ones regardless of insertion order. Statement PDF/xlsx ledger shows per-row invoice ref, exact cost/sale/profit, running per-bucket stock balance (opening seeded when startDate filters; live-balance grand total must respect the category filter), and compact consumed-batch refs.
+
+**Statement format (Aug 2026):** statement PDF/xlsx is a 3-section report — (1) Purchases, (2) Sales & Profit (exact FIFO cost, batch refs), (3) live per-batch remaining stock (`#BATCH-<id>`, purchased/sold/remaining, rate, cost value; all-time snapshot, category-filterable but NOT date-filtered by design). The per-transaction running stock-left column and stock_levels category table were removed from statement outputs.

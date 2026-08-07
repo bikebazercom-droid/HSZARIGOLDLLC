@@ -643,7 +643,6 @@ interface StatementLedgerRow {
   invoiceRef: string;    // sales: invoice number; purchases: ""
   type: "Purchase" | "Sale";
   party: string;
-  bucketKey: string | null; // raw stock bucket key (null when not a tracked bucket)
   category: string;      // bucket label
   itemName: string;      // exact custom item name (sales) / category (purchases)
   grams: number;
@@ -652,7 +651,6 @@ interface StatementLedgerRow {
   totalAed: number;
   costAed: number | null;   // sales only: exact FIFO purchase cost of this line
   profitAed: number | null; // sales only
-  stockAfterGrams: number | null; // running bucket balance after this transaction
   batchRefs: string | null; // sales only: consumed FIFO lots, e.g. "#19 (50g)"
 }
 
@@ -785,7 +783,6 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       invoiceRef: "",
       type: "Purchase",
       party: p.supplier_name,
-      bucketKey: STMT_CAT_LABEL[p.category] ? p.category : null,
       category: STMT_CAT_LABEL[p.category] ?? p.category,
       itemName: STMT_CAT_LABEL[p.category] ?? p.category,
       grams,
@@ -794,7 +791,6 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       totalAed: total,
       costAed: null,
       profitAed: null,
-      stockAfterGrams: null,
       batchRefs: null,
     });
   }
@@ -807,7 +803,6 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       invoiceRef: s.invoice_number,
       type: "Sale",
       party: s.customer_name ?? "Walk-in",
-      bucketKey: s.bucket && STMT_CAT_LABEL[s.bucket] ? s.bucket : null,
       category: s.bucket && STMT_CAT_LABEL[s.bucket] ? STMT_CAT_LABEL[s.bucket] : "Custom",
       itemName: s.description.trim(),
       grams,
@@ -816,41 +811,41 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       totalAed: total,
       costAed: itemCogs(s),
       profitAed: total - itemCogs(s),
-      stockAfterGrams: null,
       batchRefs: s.batch_refs,
     });
   }
-  // Purchases before sales on the same date, so the running stock balance
-  // never dips artificially when a same-day purchase covers a same-day sale.
+  // Purchases before sales on the same date.
   ledger.sort((a, b) => a.date.localeCompare(b.date) || (a.type === b.type ? 0 : a.type === "Purchase" ? -1 : 1));
   ledger.forEach((r, i) => { r.sl = i + 1; });
 
-  // Running per-bucket stock balance after each transaction. When the
-  // statement is date-filtered, seed each bucket with its opening balance
-  // (all purchases minus all sold grams strictly before startDate).
-  const running = new Map<string, number>();
-  if (startDate) {
-    const [openPurch, openSales] = await Promise.all([
-      db.execute<{ category: string; g: string }>(sql`
-        SELECT category, COALESCE(SUM(weight_grams::numeric), 0)::text AS g
-        FROM stock_purchases WHERE purchase_date < ${startDate} GROUP BY category
-      `).then((r) => r.rows),
-      db.execute<{ bucket: string | null; g: string }>(sql`
-        SELECT ${bucketExpr} AS bucket, COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0)), 0)::text AS g
-        FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
-        WHERE i.created_at < ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz
-        GROUP BY 1
-      `).then((r) => r.rows),
-    ]);
-    for (const p of openPurch) running.set(p.category, (running.get(p.category) ?? 0) + Number(p.g));
-    for (const s of openSales) if (s.bucket) running.set(s.bucket, (running.get(s.bucket) ?? 0) - Number(s.g));
-  }
-  for (const r of ledger) {
-    if (!r.bucketKey) continue;
-    const bal = (running.get(r.bucketKey) ?? 0) + (r.type === "Purchase" ? r.grams : -r.grams);
-    running.set(r.bucketKey, bal);
-    r.stockAfterGrams = bal;
-  }
+  // Live per-batch remaining stock (all-time snapshot, category-filterable):
+  // one row per purchase lot that still has weight left.
+  const liveBatches = await db.execute<{
+    id: number; category: string; purchase_date: string; supplier_name: string;
+    weight_grams: string; remaining_weight_grams: string; total_price_aed: string;
+  }>(sql`
+    SELECT id, category, purchase_date, supplier_name, weight_grams::text,
+           remaining_weight_grams::text, total_price_aed::text
+    FROM stock_purchases
+    WHERE remaining_weight_grams::numeric > 0
+      ${category ? sql`AND category = ${category}` : sql``}
+    ORDER BY category, purchase_date, id
+  `).then((r) => r.rows.map((b) => {
+    const purchased = Number(b.weight_grams);
+    const remaining = Number(b.remaining_weight_grams);
+    const ratePerG = purchased > 0 ? Number(b.total_price_aed) / purchased : 0;
+    return {
+      id: b.id,
+      category: b.category,
+      purchaseDate: b.purchase_date,
+      supplier: b.supplier_name,
+      purchasedGrams: purchased,
+      soldGrams: purchased - remaining,
+      remainingGrams: remaining,
+      ratePerG,
+      costValueAed: remaining * ratePerG,
+    };
+  }));
 
   const totals = {
     grams: ledger.reduce((s, r) => s + r.grams, 0),
@@ -859,12 +854,9 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     revenueAed: totalSalesAed,
     cogsAed: cogs,
     profitAed: profit,
-    liveBalanceGrams: levels
-      .filter((l) => !category || l.category === category)
-      .reduce((s, l) => s + Number(l.weight_grams), 0),
   };
 
-  return { purchases, sales, levels, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit };
+  return { purchases, sales, levels, ledger, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit };
 }
 
 // /api/dashboard/statement-pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
@@ -876,7 +868,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     return;
   }
   const { startDate, endDate, category } = parsed;
-  const { levels, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+  const { ledger, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
     await loadStatementData(startDate, endDate, category);
   const catLabel = STMT_CAT_LABEL;
 
@@ -976,71 +968,109 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
       h: 16,
     });
 
-  // Unified ledger table (PRD layout): date & invoice ref, item & category,
-  // weight, exact purchase cost, sale value, profit, running stock, batch refs.
-  const COLS: [string, number, boolean?][] = [
-    ["SL", 22], ["Date", 56], ["Invoice Ref", 62], ["Type", 44], ["Party", 62],
-    ["Item (Category)", 100], ["Weight (g)", 54, true],
-    ["Purchase Cost (AED)", 66, true], ["Sale Value (AED)", 66, true],
-    ["Net Profit (AED)", 62, true], ["Stock Left (g)", 56, true],
-    ["Consumed Batch Ref", 112],
-  ];
-  sectionHeader("Transactions (Purchases & Sales)");
-  if (ledger.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No transactions in this period.", 40, y); y += 20;
+  // ===== SECTION 1: PURCHASES =====
+  const purchaseRows = ledger.filter((r) => r.type === "Purchase");
+  const totalPurchGrams = purchaseRows.reduce((s, r) => s + r.grams, 0);
+  sectionHeader("Section 1: Purchases");
+  if (purchaseRows.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No purchases in this period.", 40, y); y += 20;
   } else {
-    gridHeader(COLS);
-    for (const r of ledger) {
+    gridHeader([
+      ["SL", 26], ["Date", 70], ["Supplier", 140], ["Category", 140],
+      ["Weight (g)", 90, true], ["Rate (AED/g)", 96, true], ["Total Cost (AED)", 200, true],
+    ]);
+    purchaseRows.forEach((r, i) => {
+      gridRow([
+        [String(i + 1), 26],
+        [r.date, 70],
+        [r.party.substring(0, 30), 140],
+        [r.category.substring(0, 30), 140],
+        [num3(r.grams), 90, true],
+        [num2(r.ratePerG), 96, true],
+        [num2(r.totalAed), 200, true],
+      ]);
+    });
+    gridRow([
+      ["TOTAL PURCHASES", 236],
+      [`${num3(totalPurchGrams)} g  (${(totalPurchGrams / 1000).toFixed(3)} kg)`, 326, true],
+      [`AED ${num2(purchaseRows.reduce((s, r) => s + r.totalAed, 0))}`, 200, true],
+    ], { bold: true, bg: "#e2e8f0" });
+    y += 12;
+  }
+
+  // ===== SECTION 2: SALES & PROFIT =====
+  const saleRows = ledger.filter((r) => r.type === "Sale");
+  sectionHeader("Section 2: Sales & Profit");
+  if (saleRows.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No sales in this period.", 40, y); y += 20;
+  } else {
+    gridHeader([
+      ["SL", 24], ["Date", 62], ["Invoice", 66], ["Customer", 80],
+      ["Item (Category)", 130], ["Sold Wt (g)", 58, true],
+      ["Purchase Cost (AED)", 72, true], ["Sale Value (AED)", 72, true],
+      ["Profit / Loss (AED)", 78, true], ["Consumed Batch", 120],
+    ]);
+    saleRows.forEach((r, i) => {
       const itemCat = r.itemName === r.category ? r.itemName : `${r.itemName} (${r.category})`;
       gridRow([
-        [String(r.sl), 22],
-        [r.date, 56],
-        [r.invoiceRef || "-", 62],
-        [r.type, 44],
-        [r.party.substring(0, 14), 62],
-        [itemCat.substring(0, 22), 100],
-        [num3(r.grams), 54, true],
-        [r.type === "Sale" ? (r.costAed != null ? num2(r.costAed) : "-") : num2(r.totalAed), 66, true],
-        [r.type === "Sale" ? num2(r.totalAed) : "-", 66, true],
-        [r.profitAed != null ? num2(r.profitAed) : "-", 62, true],
-        [r.stockAfterGrams != null ? num3(r.stockAfterGrams) : "-", 56, true],
-        [(r.batchRefs ?? "-").substring(0, 28), 112],
+        [String(i + 1), 24],
+        [r.date, 62],
+        [r.invoiceRef || "-", 66],
+        [r.party.substring(0, 18), 80],
+        [itemCat.substring(0, 30), 130],
+        [num3(r.grams), 58, true],
+        [r.costAed != null ? num2(r.costAed) : "-", 72, true],
+        [num2(r.totalAed), 72, true],
+        [r.profitAed != null ? `${r.profitAed >= 0 ? "+" : ""}${num2(r.profitAed)}` : "-", 78, true],
+        [(r.batchRefs ?? "-").substring(0, 30), 120],
       ]);
-    }
-    // Grand summary rows (bold): sold weight, COGS, revenue, profit, live balance.
-    const grand: [string, number, string][] = [
-      ["Total Sold Weight:", totals.soldGrams, "#e2e8f0"],
-      ["Total Purchase Cost of Sold Goods (COGS):", totals.cogsAed, "#fdf6e3"],
-      ["Total Sales Revenue Received:", totals.revenueAed, "#e2e8f0"],
-      ["Total Net Profit Earned:", totals.profitAed, totals.profitAed >= 0 ? "#e7f5ec" : "#fdecec"],
-      ["Current Live Stock Balance:", totals.liveBalanceGrams, "#eef2f7"],
+    });
+    const salesSummary: [string, string, string][] = [
+      ["Total Sold Weight:", `${num3(totals.soldGrams)} g  (${(totals.soldGrams / 1000).toFixed(3)} kg)`, "#e2e8f0"],
+      ["Purchase Cost of Sold (COGS):", `AED ${num2(totals.cogsAed)}`, "#fdf6e3"],
+      ["Total Revenue Received:", `AED ${num2(totals.revenueAed)}`, "#e2e8f0"],
+      ["Total Net Profit Earned:", `AED ${num2(totals.profitAed)}`, totals.profitAed >= 0 ? "#e7f5ec" : "#fdecec"],
     ];
-    grand.forEach(([label, val, bg], gi) => {
-      const isGrams = gi === 0 || gi === 4;
+    salesSummary.forEach(([label, val, bg], gi) => {
       gridRow([
-        [gi === 0 ? "GRAND TOTAL" : "", 176],
+        [gi === 0 ? "TOTAL SALES" : "", 176],
         [label, 350, true],
-        [isGrams ? `${num3(val)} g  (${(val / 1000).toFixed(3)} kg)` : `AED ${num2(val)}`, 236, true],
+        [val, 236, true],
       ], { bold: true, bg });
     });
     y += 12;
   }
 
-  // Remaining stock (live, all-time)
-  sectionHeader("Remaining Stock (Live)");
-  const levelRows = category ? levels.filter((l) => l.category === category) : levels;
-  if (levelRows.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No stock records.", 40, y); y += 20;
+  // ===== SECTION 3: REMAINING STOCK — LIVE (per batch) =====
+  sectionHeader("Section 3: Remaining Stock - Live (Unsold Batches)");
+  if (liveBatches.length === 0) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No unsold stock batches.", 40, y); y += 20;
   } else {
-    gridHeader([["Category", 250], ["Net Remaining (g)", 180, true], ["Net Remaining (kg)", 180, true]]);
-    for (const l of levelRows) {
-      const g = Number(l.weight_grams);
+    gridHeader([
+      ["SL", 26], ["Category", 130], ["Batch ID", 70], ["Purchase Date", 76],
+      ["Purchased Wt (g)", 90, true], ["Sold Wt (g)", 84, true],
+      ["Remaining Wt (g)", 90, true], ["Rate (AED/g)", 76, true], ["Cost Value (AED)", 120, true],
+    ]);
+    liveBatches.forEach((b, i) => {
       gridRow([
-        [catLabel[l.category] ?? l.category, 250],
-        [num3(g), 180, true],
-        [(g / 1000).toFixed(3), 180, true],
+        [String(i + 1), 26],
+        [(catLabel[b.category] ?? b.category).substring(0, 26), 130],
+        [`#BATCH-${b.id}`, 70],
+        [b.purchaseDate, 76],
+        [num3(b.purchasedGrams), 90, true],
+        [num3(b.soldGrams), 84, true],
+        [num3(b.remainingGrams), 90, true],
+        [num2(b.ratePerG), 76, true],
+        [num2(b.costValueAed), 120, true],
       ]);
-    }
+    });
+    const remG = liveBatches.reduce((s, b) => s + b.remainingGrams, 0);
+    const remAed = liveBatches.reduce((s, b) => s + b.costValueAed, 0);
+    gridRow([
+      ["TOTAL LIVE REMAINING STOCK", 246],
+      [`${num3(remG)} g  (${(remG / 1000).toFixed(3)} kg)`, 396, true],
+      [`AED ${num2(remAed)}`, 120, true],
+    ], { bold: true, bg: "#eef2f7" });
   }
 
   ensureSpace(60);
@@ -1062,7 +1092,7 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
     return;
   }
   const { startDate, endDate, category } = parsed;
-  const { levels, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+  const { levels, ledger, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
     await loadStatementData(startDate, endDate, category);
 
   const wb = new ExcelJS.Workbook();
@@ -1073,10 +1103,10 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
 
   // Title / criteria
-  ws.mergeCells("A1:M1");
+  ws.mergeCells("A1:K1");
   ws.getCell("A1").value = "Hazari Gold L.L.C — Stock & Profit Statement";
   ws.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
-  ws.mergeCells("A2:M2");
+  ws.mergeCells("A2:K2");
   ws.getCell("A2").value = [
     startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
     `Category: ${category ? (STMT_CAT_LABEL[category] ?? category) : "All"}`,
@@ -1084,55 +1114,95 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   ].join("   ·   ");
   ws.getCell("A2").font = { size: 9, color: { argb: "FF64748B" } };
 
-  // Header row
-  const HEADERS = ["SL", "Date", "Invoice Ref", "Type", "Party Name", "Category", "Item Name", "Weight (g)", "Purchase Cost (AED)", "Sale Value (AED)", "Net Profit (AED)", "Stock Remaining (g)", "Consumed Batch Ref"];
-  const headerRow = ws.addRow(HEADERS);
-  headerRow.eachCell((cell) => {
+  ws.columns = [
+    { width: 5 }, { width: 12 }, { width: 16 }, { width: 22 }, { width: 22 },
+    { width: 26 }, { width: 14 }, { width: 18 }, { width: 18 }, { width: 18 },
+    { width: 30 },
+  ];
+
+  const styleHeader = (row: ExcelJS.Row) => row.eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.border = allBorders;
     cell.alignment = { vertical: "middle" };
   });
-  ws.columns = [
-    { width: 5 }, { width: 12 }, { width: 15 }, { width: 10 }, { width: 22 },
-    { width: 18 }, { width: 26 }, { width: 13 }, { width: 18 }, { width: 16 },
-    { width: 16 }, { width: 17 }, { width: 30 },
-  ];
+  const styleTotal = (row: ExcelJS.Row, argb: string) => row.eachCell((cell) => {
+    cell.border = allBorders;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
+  });
+  const sectionTitle = (title: string) => {
+    ws.addRow([]);
+    const r = ws.addRow([title]);
+    r.getCell(1).font = { bold: true, size: 12, color: { argb: "FF1E3A5F" } };
+    return r;
+  };
 
-  for (const r of ledger) {
+  // ===== SECTION 1: PURCHASES =====
+  sectionTitle("SECTION 1: PURCHASES");
+  styleHeader(ws.addRow(["SL", "Date", "Supplier", "Category", "Weight (g)", "Rate (AED/g)", "Total Cost (AED)"]));
+  const purchaseRows = ledger.filter((r) => r.type === "Purchase");
+  for (const [i, r] of purchaseRows.entries()) {
+    const row = ws.addRow([i + 1, r.date, r.party, r.category, r.grams, r.ratePerG, r.totalAed]);
+    row.eachCell((cell, col) => {
+      cell.border = allBorders;
+      if (col === 5) cell.numFmt = "#,##0.000";
+      if (col === 6 || col === 7) cell.numFmt = "#,##0.00";
+    });
+  }
+  const p1 = ws.addRow(["", "", "", "TOTAL PURCHASES", purchaseRows.reduce((s, r) => s + r.grams, 0), "", purchaseRows.reduce((s, r) => s + r.totalAed, 0)]);
+  styleTotal(p1, "FFE2E8F0");
+  p1.getCell(5).numFmt = "#,##0.000";
+  p1.getCell(7).numFmt = "#,##0.00";
+
+  // ===== SECTION 2: SALES & PROFIT =====
+  sectionTitle("SECTION 2: SALES & PROFIT");
+  styleHeader(ws.addRow(["SL", "Date", "Invoice", "Customer", "Item Name", "Category", "Sold Wt (g)", "Purchase Cost (AED)", "Sale Value (AED)", "Profit / Loss (AED)", "Consumed Batch"]));
+  const saleRows = ledger.filter((r) => r.type === "Sale");
+  for (const [i, r] of saleRows.entries()) {
     const row = ws.addRow([
-      r.sl, r.date, r.invoiceRef || "-", r.type, r.party, r.category, r.itemName, r.grams,
-      r.type === "Sale" ? (r.costAed ?? "-") : r.totalAed,
-      r.type === "Sale" ? r.totalAed : "-",
-      r.profitAed ?? "-",
-      r.stockAfterGrams ?? "-",
-      r.batchRefs ?? "-",
+      i + 1, r.date, r.invoiceRef || "-", r.party, r.itemName, r.category, r.grams,
+      r.costAed ?? "-", r.totalAed, r.profitAed ?? "-", r.batchRefs ?? "-",
     ]);
     row.eachCell((cell, col) => {
       cell.border = allBorders;
-      if (row.number % 2 === 0) {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
-      }
-      if (col === 8 || col === 12) cell.numFmt = "#,##0.000";
-      if (col >= 9 && col <= 11 && typeof cell.value === "number") cell.numFmt = "#,##0.00";
-      if (col >= 8 && col <= 12 && typeof cell.value !== "number") cell.alignment = { horizontal: "right" };
+      if (col === 7) cell.numFmt = "#,##0.000";
+      if (col >= 8 && col <= 10 && typeof cell.value === "number") cell.numFmt = "#,##0.00";
+      if (col >= 7 && col <= 10 && typeof cell.value !== "number") cell.alignment = { horizontal: "right" };
     });
+  }
+  const salesTotals: [string, number, string, string][] = [
+    ["Total Sold Weight (g)", totals.soldGrams, "#,##0.000", "FFE2E8F0"],
+    ["Purchase Cost of Sold - COGS (AED)", totals.cogsAed, "#,##0.00", "FFFDF6E3"],
+    ["Total Revenue Received (AED)", totals.revenueAed, "#,##0.00", "FFE2E8F0"],
+    ["Total Net Profit Earned (AED)", totals.profitAed, "#,##0.00", "FFE7F5EC"],
+  ];
+  for (const [label, val, fmt, argb] of salesTotals) {
+    const row = ws.addRow(["", "", "", "", "", "", "", "", "", label, val]);
+    styleTotal(row, argb);
+    row.getCell(11).numFmt = fmt;
   }
 
-  // Bold grand summary rows: sold weight / COGS / revenue / profit / live balance
-  const soldRow = ws.addRow(["", "", "", "", "", "", "GRAND TOTAL", "", "", "", "Total Sold Weight (g) →", totals.soldGrams, ""]);
-  const cogsRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "Purchase Cost of Sold (COGS) →", totals.cogsAed, ""]);
-  const revRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "Total Revenue Received →", totals.revenueAed, ""]);
-  const profitRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "Total Net Profit Earned →", totals.profitAed, ""]);
-  const liveRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "Current Live Stock Balance (g) →", totals.liveBalanceGrams, ""]);
-  for (const row of [soldRow, cogsRow, revRow, profitRow, liveRow]) {
+  // ===== SECTION 3: REMAINING STOCK - LIVE =====
+  sectionTitle("SECTION 3: REMAINING STOCK - LIVE (Unsold Batches)");
+  styleHeader(ws.addRow(["SL", "Category", "Batch ID", "Purchase Date", "Supplier", "Purchased Wt (g)", "Sold Wt (g)", "Remaining Wt (g)", "Rate (AED/g)", "Cost Value (AED)"]));
+  for (const [i, b] of liveBatches.entries()) {
+    const row = ws.addRow([
+      i + 1, STMT_CAT_LABEL[b.category] ?? b.category, `#BATCH-${b.id}`, b.purchaseDate, b.supplier,
+      b.purchasedGrams, b.soldGrams, b.remainingGrams, b.ratePerG, b.costValueAed,
+    ]);
     row.eachCell((cell, col) => {
       cell.border = allBorders;
-      cell.font = { bold: true };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: row === profitRow ? "FFE7F5EC" : row === cogsRow ? "FFFDF6E3" : "FFE2E8F0" } };
-      if (col === 12) cell.numFmt = row === soldRow || row === liveRow ? "#,##0.000" : "#,##0.00";
+      if (col >= 6 && col <= 8) cell.numFmt = "#,##0.000";
+      if (col === 9 || col === 10) cell.numFmt = "#,##0.00";
     });
   }
+  const remG = liveBatches.reduce((s, b) => s + b.remainingGrams, 0);
+  const remAed = liveBatches.reduce((s, b) => s + b.costValueAed, 0);
+  const s3 = ws.addRow(["", "", "", "", "TOTAL LIVE REMAINING STOCK", "", "", remG, "", remAed]);
+  styleTotal(s3, "FFEEF2F7");
+  s3.getCell(8).numFmt = "#,##0.000";
+  s3.getCell(10).numFmt = "#,##0.00";
 
   // Summary sheet
   const sum = wb.addWorksheet("Summary");
