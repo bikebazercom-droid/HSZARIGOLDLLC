@@ -868,7 +868,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     return;
   }
   const { startDate, endDate, category } = parsed;
-  const { purchases, ledger, levels, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+  const { purchases, ledger, levels, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
     await loadStatementData(startDate, endDate, category);
   const catLabel = STMT_CAT_LABEL;
 
@@ -898,24 +898,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   doc.rect(40, 100, W, 30).fill(LIGHT);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, 110);
 
-  // Summary boxes
-  const boxes = [
-    ["Total Purchases (AED)", totalPurchaseAed],
-    ["Sales Revenue (AED)", totalSalesAed],
-    ["Purchase Cost of Sold - COGS (AED)", cogs],
-    ["Net Profit (AED)", profit],
-  ] as const;
-  let bx = 40;
-  const bw = (W - 3 * 8) / 4;
-  for (const [label, val] of boxes) {
-    doc.rect(bx, 140, bw, 40).fill(label.startsWith("Net Profit") ? "#e7f5ec" : LIGHT);
-    doc.fillColor("#666").font("Helvetica").fontSize(7.5).text(label, bx + 8, 147, { width: bw - 16 });
-    doc.fillColor(label.startsWith("Net Profit") ? "#1c7a3d" : NAVY).font("Helvetica-Bold").fontSize(11)
-      .text(val.toLocaleString("en-AE", { minimumFractionDigits: 2 }), bx + 8, 159, { width: bw - 16 });
-    bx += bw + 8;
-  }
-
-  let y = 195;
+  let y = 145;
   const ensureSpace = (h: number) => {
     if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
   };
@@ -969,172 +952,103 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     });
 
   // ===== SECTION 1: PURCHASES & PRODUCT LISTING =====
-  // Column widths per section sum to exactly 762 (A4 landscape minus margins).
-  const totalPurchGrams = purchases.reduce((s, p) => s + Number(p.weight_grams), 0);
-  sectionHeader("1. Purchases & Product Listing Ledger");
+  // Column widths per table sum to exactly 762 (A4 landscape minus margins).
+  const totalPurchGrams = purchases.reduce((sum, p) => sum + Number(p.weight_grams), 0);
+  sectionHeader("1. Purchases & Product Listing");
   if (purchases.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No purchases in this period.", 40, y); y += 20;
   } else {
     gridHeader([
-      ["Date", 66], ["Voucher Ref", 70], ["Supplier", 130], ["Category", 120],
-      ["Gross Weight (g)", 90, true], ["Purchase Rate (AED/g)", 86, true],
-      ["Cash Outflow (AED)", 110, true], ["Metal Credit (g)", 90, true],
+      ["Date", 70], ["Ref / Batch", 80], ["Supplier", 150], ["Category", 140],
+      ["Weight (g)", 100, true], ["Purchase Rate (AED/g)", 100, true], ["Cash Outflow (AED)", 122, true],
     ]);
     purchases.forEach((p) => {
       const grams = Number(p.weight_grams);
       const total = Number(p.total_price_aed);
       gridRow([
-        [p.purchase_date, 66],
-        [`#BATCH-${p.id}`, 70],
-        [p.supplier_name.substring(0, 28), 130],
-        [(catLabel[p.category] ?? p.category).substring(0, 26), 120],
-        [num3(grams), 90, true],
-        [num2(grams > 0 ? total / grams : 0), 86, true],
-        [num2(total), 110, true],
-        [num3(grams), 90, true],
+        [p.purchase_date, 70],
+        [`#BATCH-${p.id}`, 80],
+        [p.supplier_name.substring(0, 32), 150],
+        [(catLabel[p.category] ?? p.category).substring(0, 30), 140],
+        [num3(grams), 100, true],
+        [num2(grams > 0 ? total / grams : 0), 100, true],
+        [num2(total), 122, true],
       ]);
     });
     gridRow([
-      ["TOTAL PURCHASED WEIGHT & TOTAL SPENT", 386],
-      [`${num3(totalPurchGrams)} g  (${(totalPurchGrams / 1000).toFixed(3)} kg)`, 176, true],
-      [`AED ${num2(totalPurchaseAed)}`, 110, true],
-      [num3(totalPurchGrams), 90, true],
+      ["TOTAL PURCHASED WEIGHT & TOTAL SPENT", 440],
+      [`${num3(totalPurchGrams)} g  (${(totalPurchGrams / 1000).toFixed(3)} kg)`, 100, true],
+      ["", 100],
+      [`AED ${num2(totalPurchaseAed)}`, 122, true],
     ], { bold: true, bg: "#e2e8f0" });
-    y += 12;
+    y += 14;
   }
 
-  // ===== SECTION 2: SALES INVOICES LEDGER =====
+  // ===== SECTION 2: SALES INVOICES =====
   const saleRows = ledger.filter((r) => r.type === "Sale");
-  sectionHeader("2. Sales Invoices Ledger");
+  sectionHeader("2. Sales Invoices");
   if (saleRows.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No sales in this period.", 40, y); y += 20;
   } else {
     gridHeader([
-      ["Date", 66], ["Invoice Ref", 70], ["Customer", 120], ["Category", 130],
-      ["Sold Weight (g)", 90, true], ["Selling Rate (AED/g)", 86, true],
-      ["Cash Inflow (AED)", 110, true], ["Metal Debit (g)", 90, true],
+      ["Date", 70], ["Invoice Ref", 80], ["Customer", 150], ["Category", 140],
+      ["Sold Weight (g)", 100, true], ["Selling Rate (AED/g)", 100, true], ["Cash Inflow (AED)", 122, true],
     ]);
     saleRows.forEach((r) => {
       const itemCat = r.itemName === r.category ? r.itemName : `${r.itemName} (${r.category})`;
       gridRow([
-        [r.date, 66],
-        [r.invoiceRef || "-", 70],
-        [r.party.substring(0, 26), 120],
-        [itemCat.substring(0, 30), 130],
-        [num3(r.grams), 90, true],
-        [num2(r.ratePerG), 86, true],
-        [num2(r.totalAed), 110, true],
-        [num3(r.grams), 90, true],
+        [r.date, 70],
+        [r.invoiceRef || "-", 80],
+        [r.party.substring(0, 32), 150],
+        [itemCat.substring(0, 30), 140],
+        [num3(r.grams), 100, true],
+        [num2(r.ratePerG), 100, true],
+        [num2(r.totalAed), 122, true],
       ]);
     });
     gridRow([
-      ["TOTAL SOLD WEIGHT & TOTAL SALES INVOICED REVENUE", 386],
-      [`${num3(totals.soldGrams)} g  (${(totals.soldGrams / 1000).toFixed(3)} kg)`, 176, true],
-      [`AED ${num2(totalSalesAed)}`, 110, true],
-      [num3(totals.soldGrams), 90, true],
+      ["TOTAL SOLD WEIGHT & TOTAL SALES REVENUE", 440],
+      [`${num3(totals.soldGrams)} g  (${(totals.soldGrams / 1000).toFixed(3)} kg)`, 100, true],
+      ["", 100],
+      [`AED ${num2(totalSalesAed)}`, 122, true],
     ], { bold: true, bg: "#e2e8f0" });
-    y += 12;
+    y += 14;
   }
 
-  // ===== SECTION 3: REALIZED PROFIT & LOSS =====
-  sectionHeader("3. Realized Profit & Loss Ledger");
-  if (saleRows.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No realized profit/loss in this period.", 40, y); y += 20;
-  } else {
-    gridHeader([
-      ["Invoice Ref", 90], ["Category", 180], ["Sold Weight (g)", 110, true],
-      ["Purchase Cost / COGS (AED)", 130, true], ["Sale Value (AED)", 130, true],
-      ["Net Profit / Loss (AED)", 122, true],
-    ]);
-    saleRows.forEach((r) => {
-      const itemCat = r.itemName === r.category ? r.itemName : `${r.itemName} (${r.category})`;
-      gridRow([
-        [r.invoiceRef || "-", 90],
-        [itemCat.substring(0, 42), 180],
-        [num3(r.grams), 110, true],
-        [r.costAed != null ? num2(r.costAed) : "-", 130, true],
-        [num2(r.totalAed), 130, true],
-        [r.profitAed != null ? `${r.profitAed >= 0 ? "+" : ""}${num2(r.profitAed)}` : "-", 122, true],
-      ]);
-    });
-    gridRow([
-      ["GRAND REALIZED NET PROFIT", 380],
-      [`AED ${num2(cogs)}`, 130, true],
-      [`AED ${num2(totalSalesAed)}`, 130, true],
-      [`${profit >= 0 ? "+" : ""}AED ${num2(profit)}`, 122, true],
-    ], { bold: true, bg: profit >= 0 ? "#e7f5ec" : "#fdecec" });
-    y += 12;
-  }
-
-  // ===== SECTION 4: LIVE REMAINING STOCK VALUATION =====
-  sectionHeader("4. Live Remaining Stock Valuation");
-  if (liveBatches.length === 0) {
-    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No unsold stock batches.", 40, y); y += 20;
-  } else {
-    gridHeader([
-      ["Batch / Lot ID", 90], ["Category", 150],
-      ["Original Purchased Wt (g)", 110, true], ["Sold Wt (g)", 100, true],
-      ["Current Stock Left (g)", 110, true], ["Cost Rate (AED/g)", 90, true],
-      ["Total Valuation (AED)", 112, true],
-    ]);
-    liveBatches.forEach((b) => {
-      gridRow([
-        [`#BATCH-${b.id}`, 90],
-        [(catLabel[b.category] ?? b.category).substring(0, 30), 150],
-        [num3(b.purchasedGrams), 110, true],
-        [num3(b.soldGrams), 100, true],
-        [num3(b.remainingGrams), 110, true],
-        [num2(b.ratePerG), 90, true],
-        [num2(b.costValueAed), 112, true],
-      ]);
-    });
-    const remG = liveBatches.reduce((s, b) => s + b.remainingGrams, 0);
-    const remAed = liveBatches.reduce((s, b) => s + b.costValueAed, 0);
-    gridRow([
-      ["TOTAL AVAILABLE STOCK WEIGHT & TOTAL INVENTORY ASSET VALUE", 340],
-      [`${num3(remG)} g  (${(remG / 1000).toFixed(3)} kg)`, 310, true],
-      [`AED ${num2(remAed)}`, 112, true],
-    ], { bold: true, bg: "#eef2f7" });
-    y += 12;
-  }
-
-  // ===== SECTION 5: CONSOLIDATED DUAL-LEDGER MASTER SUMMARY =====
-  // Cash side vs metal side, one balance grid. Live metal balance comes from
-  // stock_levels (category-filtered when a category filter is active).
+  // ===== SECTION 3: PROFIT & REMAINING STOCK SUMMARY BOX =====
+  // Live remaining stock from stock_levels (category-filtered when active) —
+  // a live snapshot by design, not date-filtered.
   const liveMetalG = levels
     .filter((l) => !category || l.category === category)
-    .reduce((s, l) => s + Number(l.weight_grams), 0);
-  const cashBalance = totalSalesAed - totalPurchaseAed;
-  sectionHeader("5. Consolidated Dual-Ledger Running Summary");
-  {
-    const L1 = 190; const V1 = 191; const L2 = 190; const V2 = 191; // 762
-    gridHeader([
-      ["CASH LEDGER (AED)", L1 + V1], ["METAL LEDGER (grams)", L2 + V2],
-    ]);
-    const rows: [string, string, string, string, string?][] = [
-      ["Cash Inflow (Sales)", num2(totalSalesAed), "Metal Stock In (Purchases)", num3(totalPurchGrams)],
-      ["Cash Outflow (Purchases)", num2(totalPurchaseAed), "Metal Stock Out (Sales)", num3(totals.soldGrams)],
-      [
-        "Net Cash Balance",
-        `${num2(Math.abs(cashBalance))} ${cashBalance >= 0 ? "CR" : "DR"}`,
-        "Live Metal Balance",
-        `${num3(liveMetalG)} g  (${(liveMetalG / 1000).toFixed(3)} kg)`,
-        "#eee6cf",
-      ],
-    ];
-    rows.forEach(([la, va, lb, vb, bg]) => {
-      gridRow([
-        [la, L1], [va, V1, true], [lb, L2], [vb, V2, true],
-      ], bg ? { bold: true, bg } : undefined);
-    });
-  }
-
-  ensureSpace(60);
-  doc.rect(40, y + 8, W, 1).fill(GOLD);
-  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
-    .text(`Net Profit: AED ${num2(profit)}`, 40, y + 16, { align: "right", width: W });
+    .reduce((sum, l) => sum + Number(l.weight_grams), 0);
+  const summaryLines: [string, string, boolean][] = [
+    ["Total Sold Weight:", `${num3(totals.soldGrams)} g`, false],
+    ["Total Sales Revenue:", `AED ${num2(totalSalesAed)}`, false],
+    ["Purchase Cost of Goods Sold (COGS):", `AED ${num2(cogs)}`, false],
+    ["TOTAL NET PROFIT EARNED:", `${profit >= 0 ? "+" : "-"}AED ${num2(Math.abs(profit))}`, true],
+    ["CURRENT REMAINING STOCK:", `${num3(liveMetalG)} g  (${(liveMetalG / 1000).toFixed(3)} kg)`, true],
+  ];
+  const boxRowH = 22;
+  const boxH = 34 + summaryLines.length * boxRowH + 10;
+  ensureSpace(boxH + 20);
+  doc.rect(40, y, W, boxH).fillAndStroke("#fdf9ee", GOLD);
+  doc.rect(40, y, W, 26).fill(NAVY);
+  doc.fillColor(GOLD).font("Helvetica-Bold").fontSize(11).text("3. Profit & Remaining Stock Summary", 52, y + 8);
+  let ly = y + 34;
+  summaryLines.forEach(([label, val, strong]) => {
+    if (strong) {
+      doc.rect(46, ly - 3, W - 12, boxRowH - 2).fill(label.startsWith("TOTAL NET") ? (profit >= 0 ? "#e7f5ec" : "#fdecec") : "#eef2f7");
+    }
+    doc.fillColor(strong ? NAVY : "#444").font(strong ? "Helvetica-Bold" : "Helvetica").fontSize(strong ? 11 : 10)
+      .text(label, 56, ly, { width: W * 0.6, lineBreak: false });
+    doc.fillColor(strong && label.startsWith("TOTAL NET") ? (profit >= 0 ? "#1c7a3d" : "#b3261e") : NAVY)
+      .font("Helvetica-Bold").fontSize(strong ? 12 : 10)
+      .text(val, 40, ly, { width: W - 56, align: "right" });
+    ly += boxRowH;
+  });
+  y = y + boxH + 8;
   doc.fillColor("#666").font("Helvetica").fontSize(7)
-    .text("Profit = Sales revenue minus exact FIFO cost of sold items (consumed purchase batches, oldest first).", 40, y + 32, { width: W });
+    .text("Profit = Sales revenue minus exact FIFO cost of sold items (consumed purchase batches, oldest first). Remaining stock is the live balance.", 40, y, { width: W });
 
   doc.end();
 });
