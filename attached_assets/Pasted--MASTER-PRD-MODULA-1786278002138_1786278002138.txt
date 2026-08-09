@@ -1,0 +1,39 @@
+================================================================================
+MASTER PRD: MODULARIZED DUAL-LEDGER PDF STATEMENT GENERATOR
+================================================================================
+
+Target Objective:
+Update the downloadable PDF statement exporter (`statementExporter.ts`) so that it splits the output into 5 distinct, standalone table sections (Purchases, Invoices, Profit/Loss, Remaining Stock, and Consolidated Dual-Ledger Summary).
+
+--------------------------------------------------------------------------------
+REQUIREMENTS & SPECIFICATION FOR THE 5 SECTIONS:
+--------------------------------------------------------------------------------
+
+1. SECTION 1: PURCHASES & PRODUCT LISTING
+   - Header: "1. Purchases & Product Listing Ledger"
+   - Table Columns: `Date`, `Voucher Ref`, `Supplier`, `Category`, `Gross Weight (g)`, `Purchase Rate (AED/g)`, `Cash Outflow (AED)`, `Metal Credit (g)`
+   - Section Total: Sum of Purchased Weight (g) & Total Spent (AED).
+
+2. SECTION 2: SALES INVOICES LEDGER
+   - Header: "2. Sales Invoices Ledger"
+   - Table Columns: `Date`, `Invoice Ref`, `Customer`, `Category`, `Sold Weight (g)`, `Selling Rate (AED/g)`, `Cash Inflow (AED)`, `Metal Debit (g)`
+   - Section Total: Sum of Sold Weight (g) & Total Sales Invoiced Revenue (AED).
+
+3. SECTION 3: TOTAL PROFIT & LOSS BREAKDOWN
+   - Header: "3. Realized Profit & Loss Ledger"
+   - Table Columns: `Invoice Ref`, `Category`, `Sold Weight (g)`, `Purchase Cost / COGS (AED)`, `Sale Value (AED)`, `Net Profit / Loss (AED)`
+   - Section Total: Grand Realized Net Profit (AED).
+
+4. SECTION 4: LIVE REMAINING STOCK VALUATION
+   - Header: "4. Live Remaining Stock Valuation"
+   - Table Columns: `Batch / Lot ID`, `Category`, `Original Purchased Wt`, `Sold Wt`, `Current Stock Left (g)`, `Cost Rate (AED/g)`, `Total Valuation (AED)`
+   - Section Total: Total Available Stock Weight (g) & Total Inventory Asset Value (AED).
+
+5. SECTION 5: CONSOLIDATED DUAL-LEDGER MASTER SUMMARY
+   - Header: "5. Consolidated Dual-Ledger Running Summary"
+   - Single Balance Summary Grid mapping Cash (AED Inflow/Outflow/Balance) against Gold Grams (Stock In/Stock Out/Live Balance).
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please refactor the PDF Statement exporter logic to generate these 5 distinct sections now!
+================================================================================
