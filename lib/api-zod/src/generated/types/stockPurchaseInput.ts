@@ -16,4 +16,5 @@ export interface StockPurchaseInput {
   weightGrams: number;
   /** @minimum 0 */
   totalPriceAed: number;
+  narrative?: string;
 }

@@ -1,0 +1,61 @@
+================================================================================
+MASTER SYSTEM PRD: DUAL-LEDGER PRODUCT LISTING & PDF STATEMENT GENERATOR
+================================================================================
+
+Target Objective:
+Implement a unified end-to-end Bullion Dual-Ledger engine containing:
+1. Product Listing & Entry Module (Capturing Purchases, Categories, Weights, Rates, and Narratives).
+2. Downloadable Dual-Ledger PDF Statement Generator (Rendering Cash AED and Gold Grams running balance).
+
+--------------------------------------------------------------------------------
+PART 1: PRODUCT LISTING & STOCK ENTRY MODULE
+--------------------------------------------------------------------------------
+1. Product Purchase / Stock Entry Form:
+   - Form Fields:
+     * `Date` (Defaults to today)
+     * `Supplier / Party Name` (Text input or dropdown, e.g., "bablu")
+     * `Category` (Gold Jewelry 22K, TT Bar, 995, Silver, etc.)
+     * `Gross Weight (g)` (Numeric)
+     * `Purchase Rate (AED/g)` (Numeric)
+     * `Total Cost (AED)` (Auto-calculated: Gross Weight * Purchase Rate)
+     * `Narrative Note` (Optional input, e.g., "100.000 gms 22K recd @ 470/g")
+
+2. Product Listing Table UI:
+   - Render all active inventory items and stock entries with columns:
+     * `Date` | `Supplier` | `Category` | `Weight (g)` | `Purchase Rate (AED/g)` | `Total Cost (AED)` | `Narrative / Batch Ref` | `Actions`
+
+3. Automated Ledger Posting on Stock Save:
+   - Posting Rule:
+     * `Metal Credit (+ Weight)` -> Increases Live Gold Balance.
+     * `Cash Debit (+ Total Cost)` -> Updates Active Cash Balance / Supplier Liability.
+
+--------------------------------------------------------------------------------
+PART 2: DOWNLOADABLE DUAL-LEDGER PDF STATEMENT GENERATOR (`statementExporter.ts`)
+--------------------------------------------------------------------------------
+1. Layout & Header:
+   - Header Title: "GOLD & SILVER ACCOUNT LEDGER STATEMENT"
+   - Display Selected Account/Party Name and Statement Period Date.
+
+2. Table Grid Columns (Matching International Bullion Ledger Standard):
+   - Col 1: `Date`
+   - Col 2: `Ref / Voucher` (Purchase ID, Invoice No, or Receipt Voucher Ref)
+   - Col 3: `Type & Narrative` (Transaction Title on main line; Narrative Note on sub-line in subtle text)
+   - Col 4: `Cash Debit (AED)`
+   - Col 5: `Cash Credit (AED)`
+   - Col 6: `Cash Balance (AED)` (Running Cash Balance with DR/CR indicator)
+   - Col 7: `Metal Debit (g)`
+   - Col 8: `Metal Credit (g)`
+   - Col 9: `Metal Balance (g)` (Running Gold Balance with DR/CR indicator)
+
+3. Calculation Logic:
+   - Compute row-by-row cumulative running balance for both Cash (AED) and Metal (Grams).
+   - Render a bold Grand Total Row at the bottom summarizing:
+     * Total Cash Debit & Credit
+     * Net Final Cash Balance (AED)
+     * Total Metal Debit & Credit
+     * Net Final Gold Balance (Grams CR/DR)
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please execute both Part 1 (Product Listing & Entry) and Part 2 (Dual-Ledger PDF Exporter) across the platform now!
+================================================================================

@@ -558,6 +558,8 @@ export interface StockPurchase {
   weightGrams: number;
   totalPriceAed: number;
   pricePerGram: number;
+  /** @nullable */
+  narrative?: string | null;
   createdAt: string;
 }
 
@@ -582,6 +584,7 @@ export interface StockPurchaseInput {
   weightGrams: number;
   /** @minimum 0 */
   totalPriceAed: number;
+  narrative?: string;
 }
 
 export interface StockMovement {

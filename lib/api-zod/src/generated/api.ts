@@ -854,6 +854,7 @@ export const ListStockPurchasesResponseItem = zod.object({
   "weightGrams": zod.number(),
   "totalPriceAed": zod.number(),
   "pricePerGram": zod.number(),
+  "narrative": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListStockPurchasesResponse = zod.array(ListStockPurchasesResponseItem)
@@ -874,7 +875,8 @@ export const CreateStockPurchaseBody = zod.object({
   "supplierName": zod.string().min(1),
   "purchaseDate": zod.string(),
   "weightGrams": zod.number().gt(createStockPurchaseBodyWeightGramsExclusiveMin),
-  "totalPriceAed": zod.number().min(createStockPurchaseBodyTotalPriceAedMin)
+  "totalPriceAed": zod.number().min(createStockPurchaseBodyTotalPriceAedMin),
+  "narrative": zod.string().optional()
 })
 
 export const CreateStockPurchaseResponse = zod.object({
@@ -885,6 +887,7 @@ export const CreateStockPurchaseResponse = zod.object({
   "weightGrams": zod.number(),
   "totalPriceAed": zod.number(),
   "pricePerGram": zod.number(),
+  "narrative": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 

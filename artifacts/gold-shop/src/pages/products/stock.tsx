@@ -59,15 +59,30 @@ export function PurchaseDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
   const [purchaseDate, setPurchaseDate] = useState(todayStr);
   const [weightUnit, setWeightUnit] = useState<"g" | "kg">("g");
   const [weightInput, setWeightInput] = useState("");
+  const [rateInput, setRateInput] = useState("");
   const [totalPrice, setTotalPrice] = useState("");
+  const [narrative, setNarrative] = useState("");
 
   const weightGrams = (parseFloat(weightInput) || 0) * (weightUnit === "kg" ? 1000 : 1);
   const totalPriceAed = parseFloat(totalPrice) || 0;
   const pricePerGram = weightGrams > 0 ? totalPriceAed / weightGrams : 0;
 
+  // Total Cost auto-calculates from Gross Weight x Purchase Rate whenever
+  // either changes; the total stays manually editable (which clears the rate).
+  const syncTotal = (weightStr: string, unit: "g" | "kg", rateStr: string) => {
+    const g = (parseFloat(weightStr) || 0) * (unit === "kg" ? 1000 : 1);
+    const rate = parseFloat(rateStr) || 0;
+    // Only act while the rate field is driving the total (rate non-empty):
+    // a manually entered total (rate cleared) is never touched here.
+    if (rateStr === "") return;
+    if (g > 0 && rate > 0) setTotalPrice((g * rate).toFixed(2));
+    // Zeroing/invalidating a driving rate clears the stale auto total.
+    else setTotalPrice("");
+  };
+
   const reset = () => {
     setCategory("gold"); setSupplierName(""); setPurchaseDate(todayStr);
-    setWeightUnit("g"); setWeightInput(""); setTotalPrice("");
+    setWeightUnit("g"); setWeightInput(""); setRateInput(""); setTotalPrice(""); setNarrative("");
   };
 
   const handleSave = () => {
@@ -75,7 +90,7 @@ export function PurchaseDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
     if (!(weightGrams > 0)) { toast({ title: "Enter a valid weight", variant: "destructive" }); return; }
     if (!(totalPriceAed >= 0) || totalPrice === "") { toast({ title: "Enter the total purchase price", variant: "destructive" }); return; }
     createPurchase.mutate(
-      { data: { category: category as any, supplierName: supplierName.trim(), purchaseDate, weightGrams, totalPriceAed } },
+      { data: { category: category as any, supplierName: supplierName.trim(), purchaseDate, weightGrams, totalPriceAed, ...(narrative.trim() ? { narrative: narrative.trim() } : {}) } },
       {
         onSuccess: () => {
           toast({ title: "Stock purchase recorded", description: `${fmtG(weightGrams)} g ${stockCategoryLabel(category)} from ${supplierName.trim()}` });
@@ -128,10 +143,10 @@ export function PurchaseDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
             <div className="flex gap-2">
               <Input
                 type="number" min="0" step="any" className="flex-1"
-                value={weightInput} onChange={(e) => setWeightInput(e.target.value)}
+                value={weightInput} onChange={(e) => { setWeightInput(e.target.value); syncTotal(e.target.value, weightUnit, rateInput); }}
                 placeholder={weightUnit === "kg" ? "e.g. 1.5" : "e.g. 1500"}
               />
-              <Select value={weightUnit} onValueChange={(v) => setWeightUnit(v as "g" | "kg")}>
+              <Select value={weightUnit} onValueChange={(v) => { setWeightUnit(v as "g" | "kg"); syncTotal(weightInput, v as "g" | "kg", rateInput); }}>
                 <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="g">Grams</SelectItem>
@@ -144,16 +159,40 @@ export function PurchaseDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Total Purchase Price (AED)</Label>
+            <Label>Purchase Rate (AED/g)</Label>
             <Input
               type="number" min="0" step="any"
-              value={totalPrice} onChange={(e) => setTotalPrice(e.target.value)}
-              placeholder="e.g. 550000"
+              value={rateInput}
+              onChange={(e) => {
+                setRateInput(e.target.value);
+                // Clearing the driving rate clears its auto total; otherwise re-sync.
+                if (e.target.value === "") setTotalPrice("");
+                else syncTotal(weightInput, weightUnit, e.target.value);
+              }}
+              placeholder="e.g. 470"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Total Cost (AED)</Label>
+            <Input
+              type="number" min="0" step="any"
+              value={totalPrice} onChange={(e) => { setTotalPrice(e.target.value); setRateInput(""); }}
+              placeholder="Auto: Weight x Rate (editable)"
+            />
+            {rateInput && weightGrams > 0 && (
+              <p className="text-xs text-muted-foreground">Auto-calculated: {fmtG(weightGrams)} g x {rateInput} AED/g</p>
+            )}
           </div>
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex justify-between">
             <span className="text-muted-foreground">Price Per Gram (auto)</span>
             <span className="font-semibold">AED {fmtAED(pricePerGram)}</span>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Narrative Note (optional)</Label>
+            <Input
+              value={narrative} onChange={(e) => setNarrative(e.target.value)}
+              placeholder={'e.g. "100.000 gms 22K recd @ 470/g"'}
+            />
           </div>
           <Button className="w-full" onClick={handleSave} disabled={createPurchase.isPending}>
             {createPurchase.isPending ? "Saving..." : "Save Purchase"}
@@ -290,6 +329,20 @@ export function StockLedger() {
           <FileDown className="w-4 h-4 mr-1.5" />
           {isDownloading ? "Preparing PDF..." : "Download PDF Statement"}
         </Button>
+        {user?.role === "admin" && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (supplierFilter !== "all") params.set("party", supplierFilter);
+              const qs = params.toString();
+              window.open(`${import.meta.env.BASE_URL}api/dashboard/ledger-pdf${qs ? `?${qs}` : ""}`, "_blank");
+            }}
+          >
+            <FileDown className="w-4 h-4 mr-1.5" />
+            Dual-Ledger Account PDF
+          </Button>
+        )}
       </div>
 
       {/* Ledger table */}
@@ -304,14 +357,15 @@ export function StockLedger() {
                 <TableHead className="text-right">Weight (g)</TableHead>
                 <TableHead className="text-right">Price/Gram (AED)</TableHead>
                 <TableHead className="text-right">Total (AED)</TableHead>
+                <TableHead>Narrative / Batch Ref</TableHead>
                 <TableHead className="text-right pr-4">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No purchases recorded yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No purchases recorded yet.</TableCell></TableRow>
               ) : (
                 <>
                   {filtered.map((p) => (
@@ -322,6 +376,12 @@ export function StockLedger() {
                       <TableCell className="text-right">{fmtG(p.weightGrams)}</TableCell>
                       <TableCell className="text-right">{fmtAED(p.pricePerGram)}</TableCell>
                       <TableCell className="text-right font-semibold">{fmtAED(p.totalPriceAed)}</TableCell>
+                      <TableCell className="max-w-52">
+                        <div className="text-xs text-muted-foreground truncate" title={p.narrative ?? undefined}>
+                          <span className="font-mono text-foreground/80">#BATCH-{p.id}</span>
+                          {p.narrative ? <span> — {p.narrative}</span> : null}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right pr-4">
                         <Button
                           variant="ghost" size="icon"
@@ -338,6 +398,7 @@ export function StockLedger() {
                     <TableCell className="text-right">{fmtG(totals.grams)}</TableCell>
                     <TableCell />
                     <TableCell className="text-right">AED {fmtAED(totals.aed)}</TableCell>
+                    <TableCell />
                     <TableCell />
                   </TableRow>
                 </>

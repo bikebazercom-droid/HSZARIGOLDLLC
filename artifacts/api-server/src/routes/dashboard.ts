@@ -1239,4 +1239,238 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   res.end();
 });
 
+// /api/dashboard/ledger-pdf?party=<name|all>&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+// Dual-ledger account statement: every purchase posts Cash Debit + Metal Credit,
+// every sale posts Cash Credit + Metal Debit, with running balances for both.
+router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void> => {
+  const q = req.query as Record<string, string | undefined>;
+  const party = q.party?.trim() && q.party.trim().toLowerCase() !== "all" ? q.party.trim() : null;
+  const startDate = q.startDate?.trim() || null;
+  const endDate = q.endDate?.trim() || null;
+  const isValidDate = (s: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  };
+  if ((startDate && !isValidDate(startDate)) || (endDate && !isValidDate(endDate))) {
+    res.status(400).json({ error: "startDate/endDate must be a valid YYYY-MM-DD date" });
+    return;
+  }
+
+  const purchWhere = sql.join([
+    sql`TRUE`,
+    ...(party ? [sql`supplier_name ILIKE ${party}`] : []),
+    ...(startDate ? [sql`purchase_date >= ${startDate}`] : []),
+    ...(endDate ? [sql`purchase_date <= ${endDate}`] : []),
+  ], sql` AND `);
+  let endExclusive: string | null = null;
+  if (endDate) {
+    const d = new Date(`${endDate}T00:00:00`);
+    d.setDate(d.getDate() + 1);
+    endExclusive = d.toISOString();
+  }
+  const salesWhere = sql.join([
+    sql`TRUE`,
+    ...(party ? [sql`i.customer_name ILIKE ${party}`] : []),
+    ...(startDate ? [sql`i.created_at >= ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz`] : []),
+    ...(endExclusive ? [sql`i.created_at < ${endExclusive}::timestamptz`] : []),
+  ], sql` AND `);
+
+  // Opening balances: cumulative party-scoped postings strictly before startDate,
+  // so a date-filtered statement starts from the account's true running balance.
+  let openCash = 0;
+  let openMetal = 0;
+  if (startDate) {
+    const [op, os] = await Promise.all([
+      db.execute<{ aed: string; g: string }>(sql`
+        SELECT COALESCE(SUM(total_price_aed::numeric), 0)::text AS aed,
+               COALESCE(SUM(weight_grams::numeric), 0)::text AS g
+        FROM stock_purchases
+        WHERE purchase_date < ${startDate}
+          ${party ? sql`AND supplier_name ILIKE ${party}` : sql``}
+      `).then((r) => r.rows[0]),
+      db.execute<{ aed: string; g: string }>(sql`
+        SELECT COALESCE(SUM(i.total::numeric), 0)::text AS aed,
+               COALESCE(SUM(s.g), 0)::text AS g
+        FROM invoices i
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(COALESCE(gross_weight::numeric, 0)), 0) AS g
+          FROM invoice_items WHERE invoice_id = i.id
+        ) s ON TRUE
+        WHERE i.created_at < ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz
+          ${party ? sql`AND i.customer_name ILIKE ${party}` : sql``}
+      `).then((r) => r.rows[0]),
+    ]);
+    openCash = Number(os.aed) - Number(op.aed);   // credits - debits
+    openMetal = Number(op.g) - Number(os.g);      // metal credits - metal debits
+  }
+
+  const [purchases, invoices] = await Promise.all([
+    db.execute<{ id: number; purchase_date: string; supplier_name: string; category: string; weight_grams: string; total_price_aed: string; narrative: string | null }>(sql`
+      SELECT id, purchase_date, supplier_name, category, weight_grams::text, total_price_aed::text, narrative
+      FROM stock_purchases WHERE ${purchWhere} ORDER BY purchase_date, id
+    `).then((r) => r.rows),
+    db.execute<{ id: number; created_at: string; invoice_number: string; customer_name: string | null; total: string; grams: string; items_desc: string | null }>(sql`
+      SELECT i.id, i.created_at::text, i.invoice_number, i.customer_name, i.total::text,
+             COALESCE(s.grams, '0') AS grams, s.items_desc
+      FROM invoices i
+      LEFT JOIN LATERAL (
+        SELECT SUM(COALESCE(gross_weight::numeric, 0))::text AS grams,
+               STRING_AGG(DISTINCT TRIM(description), ', ') AS items_desc
+        FROM invoice_items WHERE invoice_id = i.id
+      ) s ON TRUE
+      WHERE ${salesWhere} ORDER BY i.created_at, i.id
+    `).then((r) => r.rows),
+  ]);
+
+  interface LedgerEntry {
+    date: string; ref: string; title: string; narrative: string | null;
+    cashDebit: number; cashCredit: number; metalDebit: number; metalCredit: number;
+  }
+  const entries: LedgerEntry[] = [
+    ...purchases.map((p) => ({
+      date: p.purchase_date,
+      ref: `#BATCH-${p.id}`,
+      title: `Stock Purchase - ${STMT_CAT_LABEL[p.category] ?? p.category} (${p.supplier_name})`,
+      narrative: p.narrative,
+      cashDebit: Number(p.total_price_aed), cashCredit: 0,
+      metalDebit: 0, metalCredit: Number(p.weight_grams),
+    })),
+    ...invoices.map((i) => ({
+      date: i.created_at.slice(0, 10),
+      ref: i.invoice_number,
+      title: `Sale - ${i.customer_name ?? "Walk-in"}`,
+      narrative: i.items_desc,
+      cashDebit: 0, cashCredit: Number(i.total),
+      metalDebit: Number(i.grams), metalCredit: 0,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || (a.cashDebit > 0 ? -1 : 1));
+
+  const now = new Date();
+  const doc = new PDFDocument({ margin: 40, size: "A4", layout: "landscape" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-account-ledger.pdf"`);
+  doc.pipe(res);
+
+  const NAVY = "#1e3a5f";
+  const HEADER_BG = "#1e293b";
+  const GRID = "#d1d5db";
+  const ZEBRA = "#f8fafc";
+  const GOLD = "#c8a43a";
+  const LIGHT = "#f5f3ee";
+  const W = doc.page.width - 80;
+  const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const bal2 = (n: number) => `${num2(Math.abs(n))} ${n >= 0 ? "CR" : "DR"}`;
+  const bal3 = (n: number) => `${num3(Math.abs(n))} ${n >= 0 ? "CR" : "DR"}`;
+
+  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
+  doc.fillColor(GOLD).fontSize(20).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 20);
+  doc.fillColor("#aac4e8").fontSize(11).font("Helvetica-Bold").text("GOLD & SILVER ACCOUNT LEDGER STATEMENT", 40, 46);
+  doc.fillColor("white").fontSize(9).font("Helvetica").text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 64);
+
+  const criteria = [
+    `Account / Party: ${party ?? "All Parties"}`,
+    startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
+  ].join("   ·   ");
+  doc.rect(40, 100, W, 28).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, 109);
+
+  let y = 145;
+  // Column layout (sums to 762): Date 54, Ref 60, Type&Narrative 180,
+  // Cash Debit 76, Cash Credit 76, Cash Balance 94, Metal Debit 66,
+  // Metal Credit 66, Metal Balance 90.
+  const COLS: [string, number, boolean?][] = [
+    ["Date", 54], ["Ref / Voucher", 60], ["Type & Narrative", 180],
+    ["Cash Debit (AED)", 76, true], ["Cash Credit (AED)", 76, true], ["Cash Balance (AED)", 94, true],
+    ["Metal Debit (g)", 66, true], ["Metal Credit (g)", 66, true], ["Metal Balance (g)", 90, true],
+  ];
+  const drawRow = (
+    cells: [string, number, boolean?][],
+    opts: { bg: string; color: string; bold: boolean; h: number; sub?: { text: string; colIdx: number } },
+  ) => {
+    const totalH = opts.h + (opts.sub ? 11 : 0);
+    if (y + totalH + 1 > doc.page.height - 50) {
+      doc.addPage();
+      y = 40;
+      drawRow(COLS, { bg: HEADER_BG, color: "white", bold: true, h: 20 });
+    }
+    let x = 40;
+    doc.lineWidth(0.5);
+    cells.forEach(([text, width, right], ci) => {
+      doc.rect(x, y, width, totalH).fillAndStroke(opts.bg, GRID);
+      doc.fillColor(opts.color).font(opts.bold ? "Helvetica-Bold" : "Helvetica").fontSize(7.5);
+      doc.text(text, x + 4, y + (opts.h - 8) / 2, { width: width - 8, align: right ? "right" : "left", lineBreak: false });
+      if (opts.sub && ci === opts.sub.colIdx && opts.sub.text) {
+        doc.fillColor("#6b7280").font("Helvetica-Oblique").fontSize(6.5);
+        doc.text(opts.sub.text, x + 4, y + opts.h - 2, { width: width - 8, lineBreak: false });
+      }
+      x += width;
+    });
+    y += totalH;
+  };
+
+  drawRow(COLS, { bg: HEADER_BG, color: "white", bold: true, h: 20 });
+  // With a startDate the opening-balance row is still meaningful even when the
+  // period itself has no transactions, so only short-circuit without one.
+  if (entries.length === 0 && !startDate) {
+    doc.fillColor("#888").font("Helvetica").fontSize(9).text("No transactions found for this account/period.", 40, y + 8);
+  } else {
+    let cashBal = openCash;
+    let metalBal = openMetal;
+    let zebra = 0;
+    if (startDate) {
+      drawRow([
+        [startDate, 54], ["-", 60], ["Opening Balance (brought forward)", 180],
+        ["-", 76, true], ["-", 76, true], [bal2(openCash), 94, true],
+        ["-", 66, true], ["-", 66, true], [bal3(openMetal), 90, true],
+      ], { bg: "#eef2f7", color: "#1a1a1a", bold: true, h: 16 });
+      zebra = 1;
+    }
+    entries.forEach((e, i) => {
+      cashBal += e.cashCredit - e.cashDebit;
+      metalBal += e.metalCredit - e.metalDebit;
+      const narrative = (e.narrative ?? "").trim();
+      drawRow([
+        [e.date, 54],
+        [e.ref, 60],
+        [e.title.substring(0, 44), 180],
+        [e.cashDebit > 0 ? num2(e.cashDebit) : "-", 76, true],
+        [e.cashCredit > 0 ? num2(e.cashCredit) : "-", 76, true],
+        [bal2(cashBal), 94, true],
+        [e.metalDebit > 0 ? num3(e.metalDebit) : "-", 66, true],
+        [e.metalCredit > 0 ? num3(e.metalCredit) : "-", 66, true],
+        [bal3(metalBal), 90, true],
+      ], {
+        bg: (i + zebra) % 2 === 0 ? "white" : ZEBRA, color: "#1a1a1a", bold: false, h: 16,
+        sub: narrative ? { text: narrative.substring(0, 44), colIdx: 2 } : undefined,
+      });
+    });
+    const totCashD = entries.reduce((s, e) => s + e.cashDebit, 0);
+    const totCashC = entries.reduce((s, e) => s + e.cashCredit, 0);
+    const totMetalD = entries.reduce((s, e) => s + e.metalDebit, 0);
+    const totMetalC = entries.reduce((s, e) => s + e.metalCredit, 0);
+    drawRow([
+      ["GRAND TOTAL", 114],
+      ["Totals & Net Final Balance", 180],
+      [num2(totCashD), 76, true],
+      [num2(totCashC), 76, true],
+      [bal2(cashBal), 94, true],
+      [num3(totMetalD), 66, true],
+      [num3(totMetalC), 66, true],
+      [bal3(metalBal), 90, true],
+    ], { bg: "#eee6cf", color: NAVY, bold: true, h: 18 });
+
+    y += 10;
+    if (y + 40 > doc.page.height - 50) { doc.addPage(); y = 40; }
+    doc.rect(40, y, W, 1).fill(GOLD);
+    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
+      .text(`Net Final Cash Balance: AED ${bal2(cashBal)}     ·     Net Final Gold Balance: ${bal3(metalBal)} grams`, 40, y + 8, { width: W, align: "right" });
+    doc.fillColor("#666").font("Helvetica").fontSize(7)
+      .text("Posting rule: Stock purchase = Cash Debit + Metal Credit. Sale = Cash Credit + Metal Debit. Balances run cumulatively; CR = credit surplus, DR = debit surplus.", 40, y + 24, { width: W });
+  }
+
+  doc.end();
+});
+
 export default router;

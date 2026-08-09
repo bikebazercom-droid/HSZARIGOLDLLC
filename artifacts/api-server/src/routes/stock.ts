@@ -58,6 +58,7 @@ function parsePurchase(row: typeof stockPurchasesTable.$inferSelect) {
     weightGrams: Number(row.weightGrams),
     totalPriceAed: Number(row.totalPriceAed),
     pricePerGram: Number(row.pricePerGram),
+    narrative: row.narrative ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -96,7 +97,7 @@ router.post("/stock/purchases", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { category, supplierName, purchaseDate, weightGrams, totalPriceAed } = parsed.data;
+  const { category, supplierName, purchaseDate, weightGrams, totalPriceAed, narrative } = parsed.data;
   const pricePerGram = weightGrams > 0 ? totalPriceAed / weightGrams : 0;
 
   const purchase = await db.transaction(async (tx) => {
@@ -111,6 +112,7 @@ router.post("/stock/purchases", async (req, res): Promise<void> => {
         pricePerGram: String(Math.round(pricePerGram * 10000) / 10000),
         // New batch starts fully available for FIFO consumption
         remainingWeightGrams: String(weightGrams),
+        narrative: narrative?.trim() || null,
       })
       .returning();
     await applyStockDelta(tx as unknown as typeof db, category, weightGrams, "purchase", "stock_purchase", row.id);

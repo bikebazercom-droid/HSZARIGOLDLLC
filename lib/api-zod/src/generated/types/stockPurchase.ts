@@ -14,5 +14,7 @@ export interface StockPurchase {
   weightGrams: number;
   totalPriceAed: number;
   pricePerGram: number;
+  /** @nullable */
+  narrative?: string | null;
   createdAt: Date;
 }

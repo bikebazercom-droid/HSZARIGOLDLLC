@@ -16,6 +16,9 @@ export const stockPurchasesTable = pgTable("stock_purchases", {
   // FIFO batch tracking: grams of this purchase lot not yet consumed by sales.
   // Initialized to weightGrams on insert; decremented by the inventory engine.
   remainingWeightGrams: numeric("remaining_weight_grams", { precision: 14, scale: 4 }).notNull().default("0"),
+  // Optional free-text narrative shown in listings and ledger statements,
+  // e.g. "100.000 gms 22K recd @ 470/g".
+  narrative: text("narrative"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

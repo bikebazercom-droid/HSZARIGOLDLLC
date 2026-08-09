@@ -1622,6 +1622,8 @@ components:
           type: number
         pricePerGram:
           type: number
+        narrative:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -1644,6 +1646,8 @@ components:
         totalPriceAed:
           type: number
           minimum: 0
+        narrative:
+          type: string
 
     StockMovement:
       type: object
