@@ -58,6 +58,7 @@ function lineCalc(l: LineDraft) {
 interface AuditLogEntry {
   id: number;
   actorId: number | null;
+  entityType: string;
   entityId: number;
   action: string;
   billNo: string | null;
@@ -611,8 +612,8 @@ export default function PurchaseBillsPage() {
             <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <p>
-                This log records all significant actions on purchase bills — including payment-status changes and
-                deletions of paid (settled) bills. Entries are permanent and cannot be edited.
+                This log records all significant actions — including invoice deletions, purchase bill deletions, and
+                payment-status changes. Entries are permanent and cannot be edited.
               </p>
             </div>
 
@@ -632,17 +633,30 @@ export default function PurchaseBillsPage() {
                       <TableRow>
                         <TableHead className="pl-4">Timestamp</TableHead>
                         <TableHead>Action</TableHead>
-                        <TableHead>Bill No</TableHead>
-                        <TableHead>Supplier</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead>Party</TableHead>
                         <TableHead>Details</TableHead>
                         <TableHead className="text-right">Total (AED)</TableHead>
-                        <TableHead className="text-right pr-4">Actor (User ID)</TableHead>
+                        <TableHead className="text-right pr-4">Deleted by</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {auditLog.map((entry) => {
                         const d = entry.details as Record<string, unknown>;
+                        const isInvoice = entry.entityType === "invoice";
                         const isStatusChange = entry.action === "update_payment_status";
+                        // For invoice deletions, the actor name is stored in details;
+                        // for purchase bill entries it falls back to the numeric actor ID.
+                        const actorLabel = isInvoice
+                          ? (typeof d.deletedByUserName === "string" ? d.deletedByUserName : null)
+                            ?? (entry.actorId != null ? `#${entry.actorId}` : "unknown")
+                          : (entry.actorId != null ? `#${entry.actorId}` : "unknown");
+                        // "Party" is supplier for bill events, customer for invoice events.
+                        const partyLabel = isInvoice
+                          ? (typeof d.customerName === "string" ? d.customerName : "—")
+                          : (typeof d.supplierName === "string" ? d.supplierName : "—");
+                        // Total: invoices store numeric `total`, bills store `totalAed`.
+                        const totalRaw = isInvoice ? d.total : d.totalAed;
                         return (
                           <TableRow key={entry.id}>
                             <TableCell className="pl-4 whitespace-nowrap text-xs text-muted-foreground">
@@ -653,6 +667,10 @@ export default function PurchaseBillsPage() {
                                 <Badge className="uppercase text-xs tracking-wide bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100">
                                   Status Changed
                                 </Badge>
+                              ) : isInvoice ? (
+                                <Badge variant="destructive" className="uppercase text-xs tracking-wide bg-red-700 hover:bg-red-700">
+                                  Invoice Deleted
+                                </Badge>
                               ) : (
                                 <Badge variant="destructive" className="uppercase text-xs tracking-wide">
                                   {entry.action}
@@ -660,7 +678,7 @@ export default function PurchaseBillsPage() {
                               )}
                             </TableCell>
                             <TableCell className="font-medium">{entry.billNo ?? "—"}</TableCell>
-                            <TableCell>{typeof d.supplierName === "string" ? d.supplierName : "—"}</TableCell>
+                            <TableCell>{partyLabel}</TableCell>
                             <TableCell className="text-sm">
                               {isStatusChange ? (
                                 typeof d.from === "string" && typeof d.to === "string" ? (
@@ -670,6 +688,10 @@ export default function PurchaseBillsPage() {
                                     <span className="font-medium">{PAYMENT_LABEL[d.to] ?? d.to}</span>
                                   </span>
                                 ) : "—"
+                              ) : isInvoice ? (
+                                typeof d.paymentMethod === "string"
+                                  ? `Payment: ${d.paymentMethod}`
+                                  : "Deleted"
                               ) : (
                                 typeof d.paymentStatus === "string"
                                   ? `Was: ${PAYMENT_LABEL[d.paymentStatus] ?? d.paymentStatus}`
@@ -677,12 +699,12 @@ export default function PurchaseBillsPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              {typeof d.totalAed === "string" || typeof d.totalAed === "number"
-                                ? fmtAED(Number(d.totalAed))
+                              {typeof totalRaw === "string" || typeof totalRaw === "number"
+                                ? fmtAED(Number(totalRaw))
                                 : "—"}
                             </TableCell>
                             <TableCell className="text-right pr-4 text-xs text-muted-foreground">
-                              {entry.actorId != null ? `#${entry.actorId}` : "unknown"}
+                              {actorLabel}
                             </TableCell>
                           </TableRow>
                         );

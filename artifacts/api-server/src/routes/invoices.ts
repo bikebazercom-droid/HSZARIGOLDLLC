@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, gte, lte, and, desc, sql } from "drizzle-orm";
-import { db, invoicesTable, invoiceItemsTable, stockMovementsTable } from "@workspace/db";
+import { db, invoicesTable, invoiceItemsTable, stockMovementsTable, auditLogTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 import { broadcast } from "../lib/socket.js";
 import { applyStockDelta } from "./stock";
@@ -517,6 +517,25 @@ router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => 
     await reverseInvoiceConsumption(tx as unknown as typeof db, invoiceId);
     const [row] = await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId)).returning();
     if (!row) return null;
+    // Write an immutable audit log entry so the deletion is traceable after the fact.
+    await tx.insert(auditLogTable).values({
+      actorId: req.session?.userId ?? null,
+      entityType: "invoice",
+      entityId: invoiceId,
+      action: "delete",
+      billNo: row.invoiceNumber,
+      details: JSON.stringify({
+        invoiceNumber: row.invoiceNumber,
+        customerName: row.customerName,
+        customerMobile: row.customerMobile,
+        total: row.total,
+        paymentMethod: row.paymentMethod,
+        isPending: row.isPending,
+        createdAt: row.createdAt,
+        deletedByUserId: req.session?.userId ?? null,
+        deletedByUserName: req.session?.fullName ?? null,
+      }),
+    });
     const movements = await tx
       .select()
       .from(stockMovementsTable)

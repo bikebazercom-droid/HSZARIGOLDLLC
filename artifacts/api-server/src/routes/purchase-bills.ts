@@ -259,16 +259,19 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
 
 // Audit log: recent destructive actions on purchase bills (most recent first).
 router.get("/purchase-bills/audit-log", requireAdmin, async (_req, res): Promise<void> => {
+  // Return audit events for all tracked entity types so admins see a single
+  // unified log: purchase_bill actions (delete, status change) and invoice
+  // deletions all appear together, ordered newest-first.
   const entries = await db
     .select()
     .from(auditLogTable)
-    .where(eq(auditLogTable.entityType, "purchase_bill"))
     .orderBy(desc(auditLogTable.createdAt))
     .limit(200);
   res.json(
     entries.map((e) => ({
       id: e.id,
       actorId: e.actorId,
+      entityType: e.entityType,
       entityId: e.entityId,
       action: e.action,
       billNo: e.billNo,
