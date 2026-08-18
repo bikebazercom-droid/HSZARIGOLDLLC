@@ -236,6 +236,58 @@ async function testB_PaidInvoiceDeleteWritesAuditEntry(): Promise<void> {
   }
 }
 
+/**
+ * Test C: Attempt to DELETE a non-existent invoice (id never existed).
+ *
+ * The transaction locks the invoice row first; when the lock returns no row
+ * (locked === null) the transaction immediately returns null — the audit insert
+ * is never reached. This test verifies the reverse atomicity guarantee: a
+ * failed deletion must leave zero audit_log rows for the entity.
+ *
+ * Approach:
+ *  1. Create a real invoice so we know its id (n).
+ *  2. Delete that invoice for real (200 → 204) so the id is gone from the DB.
+ *  3. Immediately attempt to DELETE the same id again.
+ *  4. The second attempt must return 404 (invoice does not exist at lock time).
+ *  5. The audit log must contain exactly ONE delete entry (from step 2), not two.
+ *     i.e. the failed second attempt must NOT have written an orphan audit row.
+ */
+async function testC_FailedDeletionLeavesNoOrphanAuditEntry(): Promise<void> {
+  console.log(
+    "\nTest C: A failed deletion (invoice absent at lock time) leaves no orphan audit entry",
+  );
+
+  // Create and then delete a real invoice to obtain a valid-then-gone id.
+  const inv = await createTestInvoice(true, "ATOMICITY");
+  console.log(`  Created ${inv.invoiceNumber} (isPending=true, id=${inv.id})`);
+
+  // First deletion — must succeed and write exactly one audit entry.
+  const { status: firstStatus } = await deleteInvoice(inv.id);
+  assert(firstStatus === 204, `First DELETE returned 204 (got ${firstStatus})`);
+
+  const afterFirst = await deleteAuditEntriesForInvoice(inv.id);
+  assert(
+    afterFirst.length === 1,
+    `Exactly one audit entry after the first (successful) delete (got ${afterFirst.length})`,
+  );
+
+  // Second deletion of the same id — the transaction's SELECT … FOR UPDATE will
+  // find no row (locked === null) and return without reaching the audit insert.
+  const { status: secondStatus } = await deleteInvoice(inv.id);
+  assert(
+    secondStatus === 404,
+    `Second DELETE of a gone invoice returns 404 (got ${secondStatus})`,
+  );
+
+  // Audit count must still be exactly one — the failed attempt must not have
+  // written an additional (orphan) row.
+  const afterSecond = await deleteAuditEntriesForInvoice(inv.id);
+  assert(
+    afterSecond.length === 1,
+    `Still exactly one audit entry after the failed second delete (got ${afterSecond.length}) — no orphan row written`,
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -246,6 +298,7 @@ async function main(): Promise<void> {
 
   await testA_PendingInvoiceDeleteWritesAuditEntry();
   await testB_PaidInvoiceDeleteWritesAuditEntry();
+  await testC_FailedDeletionLeavesNoOrphanAuditEntry();
 
   console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
   if (failed > 0) process.exit(1);
