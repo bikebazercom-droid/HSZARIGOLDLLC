@@ -15,6 +15,11 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +69,7 @@ export default function PurchaseBillsPage() {
   const [open, setOpen] = useState(false);
   const [settleId, setSettleId] = useState<number | null>(null);
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
+  const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
 
   // Client-side accumulator: tracks supplier names that received an unpaid/unfixed
   // bill in this session. Lets the warning fire instantly when the drawer reopens
@@ -490,7 +496,17 @@ export default function PurchaseBillsPage() {
             </div>
             <Button
               className="w-full"
-              onClick={handleSettle}
+              onClick={() => {
+                // Downgrading a paid bill back to unpaid/unfixed needs confirmation
+                if (
+                  settlingBill?.paymentStatus === "paid" &&
+                  (settleStatus === "unpaid" || settleStatus === "unfixed")
+                ) {
+                  setShowDowngradeConfirm(true);
+                } else {
+                  handleSettle();
+                }
+              }}
               disabled={updatePaymentStatus.isPending || settleStatus === settlingBill?.paymentStatus}
             >
               {updatePaymentStatus.isPending ? "Saving..." : "Save Status"}
@@ -498,6 +514,43 @@ export default function PurchaseBillsPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* ─── Downgrade-from-paid confirmation dialog ─── */}
+      <AlertDialog open={showDowngradeConfirm} onOpenChange={setShowDowngradeConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Reopen a settled bill?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  You are changing bill <strong className="text-foreground">{settlingBill?.billNo}</strong> from{" "}
+                  <strong className="text-foreground">Paid in Cash</strong> back to{" "}
+                  <strong className="text-foreground">{PAYMENT_LABEL[settleStatus]}</strong>.
+                </p>
+                <p>
+                  This will re-add the bill to the supplier liability report and it will
+                  appear as an outstanding obligation until it is marked paid again.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setShowDowngradeConfirm(false);
+                handleSettle();
+              }}
+            >
+              Yes, reopen bill
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ─── New purchase bill sheet ─── */}
       <Sheet open={open} onOpenChange={setOpen}>
