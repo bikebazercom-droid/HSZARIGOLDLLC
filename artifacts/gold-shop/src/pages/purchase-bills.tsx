@@ -74,7 +74,7 @@ export default function PurchaseBillsPage() {
     query: { queryKey: getListPurchaseBillsQueryKey(undefined) },
   });
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
-    query: { queryKey: getGetSupplierLiabilityQueryKey() },
+    query: { queryKey: getGetSupplierLiabilityQueryKey(), refetchOnWindowFocus: true, staleTime: 0 },
   });
   const { data: suppliers } = useListStockSuppliers({ query: { queryKey: getListStockSuppliersQueryKey() } });
   const createBill = useCreatePurchaseBill();
