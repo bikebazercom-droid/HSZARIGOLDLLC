@@ -283,6 +283,104 @@ async function testB_BackdatedInvoiceCreationWritesAuditEntry(): Promise<void> {
   await deleteInvoice(inv.id);
 }
 
+/**
+ * Test C: Static source-code assertion — audit insert is inside the transaction.
+ *
+ * If a future refactor moves `tx.insert(auditLogTable)` outside the transaction
+ * (changing it to `db.insert(auditLogTable)`), a server crash between COMMIT and
+ * the insert would leave an invoice with no creation audit record. This test
+ * catches that mistake at the source level without needing a running server.
+ *
+ * Strategy:
+ *   1. Read invoices.ts.
+ *   2. Locate the POST /invoices handler (`router.post("/invoices"`) and the
+ *      `db.transaction(async (tx) =>` call within it.
+ *   3. Extract the transaction body (from the opening `{` to its matching `}`).
+ *   4. Assert `tx.insert(auditLogTable)` appears inside that body.
+ *   5. Assert `db.insert(auditLogTable)` does NOT appear inside that body.
+ */
+async function testC_AuditInsertIsInsideTransaction(): Promise<void> {
+  console.log("\nTest C: Static assertion — audit insert uses tx.insert (inside transaction)");
+
+  // Resolve the source file relative to this script's location.
+  // __dirname is not available in ESM, so derive it from import.meta.url when
+  // available, otherwise fall back to process.cwd()-relative path.
+  let srcPath: string;
+  try {
+    const { fileURLToPath } = await import("url");
+    const { dirname, resolve } = await import("path");
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname  = dirname(__filename);
+    srcPath = resolve(__dirname, "../src/routes/invoices.ts");
+  } catch {
+    const { resolve } = await import("path");
+    srcPath = resolve(process.cwd(), "src/routes/invoices.ts");
+  }
+
+  const { readFileSync } = await import("fs");
+  let src: string;
+  try {
+    src = readFileSync(srcPath, "utf8");
+  } catch (err) {
+    assert(false, `Could not read invoices.ts at ${srcPath}: ${err}`);
+    return;
+  }
+
+  // ── Step 1: find the POST /invoices handler ───────────────────────────────
+  const postHandlerMarker = 'router.post("/invoices"';
+  const postHandlerIdx = src.indexOf(postHandlerMarker);
+  assert(
+    postHandlerIdx !== -1,
+    `Found router.post("/invoices" in invoices.ts`,
+  );
+  if (postHandlerIdx === -1) return;
+
+  const postHandlerSrc = src.slice(postHandlerIdx);
+
+  // ── Step 2: find the db.transaction( call ────────────────────────────────
+  const txMarker = "db.transaction(async (tx) =>";
+  const txIdx = postHandlerSrc.indexOf(txMarker);
+  assert(
+    txIdx !== -1,
+    `Found db.transaction(async (tx) => inside the POST handler`,
+  );
+  if (txIdx === -1) return;
+
+  // The transaction callback body starts at the `{` that immediately follows
+  // the arrow. Walk forward to find that opening brace.
+  let braceStart = postHandlerSrc.indexOf("{", txIdx + txMarker.length);
+  assert(braceStart !== -1, `Found opening brace of transaction body`);
+  if (braceStart === -1) return;
+
+  // ── Step 3: extract the balanced transaction body ─────────────────────────
+  let depth = 0;
+  let braceEnd = -1;
+  for (let i = braceStart; i < postHandlerSrc.length; i++) {
+    if (postHandlerSrc[i] === "{") depth++;
+    else if (postHandlerSrc[i] === "}") {
+      depth--;
+      if (depth === 0) { braceEnd = i; break; }
+    }
+  }
+  assert(braceEnd !== -1, `Transaction body has balanced braces`);
+  if (braceEnd === -1) return;
+
+  const txBody = postHandlerSrc.slice(braceStart, braceEnd + 1);
+
+  // ── Step 4 & 5: check for tx.insert / absence of db.insert ───────────────
+  const hasTxInsert = txBody.includes("tx.insert(auditLogTable)");
+  const hasDbInsert = txBody.includes("db.insert(auditLogTable)");
+
+  assert(
+    hasTxInsert,
+    `tx.insert(auditLogTable) is present inside the db.transaction body`,
+  );
+  assert(
+    !hasDbInsert,
+    `db.insert(auditLogTable) is NOT present inside the db.transaction body (would bypass crash safety)`,
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -293,6 +391,7 @@ async function main(): Promise<void> {
 
   await testA_NormalInvoiceCreationWritesAuditEntry();
   await testB_BackdatedInvoiceCreationWritesAuditEntry();
+  await testC_AuditInsertIsInsideTransaction();
 
   console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
   if (failed > 0) process.exit(1);
