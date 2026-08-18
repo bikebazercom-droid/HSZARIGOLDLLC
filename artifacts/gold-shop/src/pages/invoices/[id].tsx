@@ -1,5 +1,5 @@
-import React, { useRef } from "react";
-import { Link, useParams } from "wouter";
+import React, { useRef, useState } from "react";
+import { Link, useParams, useLocation } from "wouter";
 import {
   useGetInvoice,
   getGetInvoiceQueryKey,
@@ -8,10 +8,19 @@ import {
 } from "@workspace/api-client-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, Printer, Download, Trash2, Lock, LockOpen } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/context/auth";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -72,6 +81,17 @@ export default function InvoiceDetail() {
   const id = parseInt(params.id || "0");
   const invoiceRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+
+  // Session-level unlock: paid (non-pending) invoices are protected by default.
+  // Admin must toggle the unlock switch, then type the invoice reference to
+  // confirm the exact invoice in a challenge dialog.
+  const [paidDeleteUnlocked, setPaidDeleteUnlocked] = useState(false);
+  const [showChallenge, setShowChallenge] = useState(false);
+  const [deleteChallenge, setDeleteChallenge] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data: invoice, isLoading } = useGetInvoice(id, {
     query: { queryKey: getGetInvoiceQueryKey(id), enabled: !!id }
@@ -126,6 +146,67 @@ export default function InvoiceDetail() {
   // Split address only on explicit newlines (as typed in the textarea)
   const addressLines = companyAddress.split("\n").map(s => s.trim()).filter(Boolean);
 
+  const isPaid = invoice ? invoice.isPending === false : false;
+
+  const handleDeleteClick = () => {
+    if (!invoice) return;
+    if (isPaid) {
+      if (!paidDeleteUnlocked) {
+        toast({
+          title: "Invoice is locked",
+          description: "Enable the 'Unlock invoice deletion' toggle below before deleting a paid invoice.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Paid + unlocked → open challenge dialog
+      setDeleteChallenge("");
+      setShowChallenge(true);
+      return;
+    }
+    // Pending invoice — simple confirm
+    if (!confirm(`Delete invoice ${invoice.invoiceNumber}? Deducted stock will be restored.`)) return;
+    void doDelete(false);
+  };
+
+  const doDelete = async (isPaidDeletion: boolean) => {
+    if (!invoice) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/invoices/${invoice.id}`, {
+        method: "DELETE",
+        ...(isPaidDeletion ? { headers: { "X-Allow-Invoice-Delete": "true" } } : {}),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const errorMsg = body?.error ?? "Unknown error";
+        toast({ title: "Failed to delete invoice", description: errorMsg, variant: "destructive" });
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(invoice.id) });
+      toast({
+        title: isPaidDeletion ? "Paid invoice deleted" : "Invoice deleted successfully",
+        description: isPaidDeletion ? `Invoice ${invoice.invoiceNumber} has been permanently removed.` : undefined,
+      });
+      navigate("/invoices");
+    } catch {
+      toast({ title: "Failed to delete invoice", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const confirmDeletePaidInvoice = async () => {
+    if (!invoice) return;
+    if (deleteChallenge.trim() !== invoice.invoiceNumber) {
+      toast({ title: "Invoice number does not match", variant: "destructive" });
+      return;
+    }
+    setShowChallenge(false);
+    setDeleteChallenge("");
+    await doDelete(true);
+  };
+
   const handleDownloadPdf = async () => {
     if (!invoiceRef.current) return;
     const html2pdf = (await import("html2pdf.js")).default;
@@ -177,18 +258,69 @@ export default function InvoiceDetail() {
 
   return (
     <div data-invoice-page className="mx-auto pb-20 px-2 sm:px-0 print:p-0 print:m-0 print:w-full print:max-w-full" style={{ maxWidth: "210mm" }}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6 no-print">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-3 no-print">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link href="/invoices">
             <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
           </Link>
           <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-primary truncate">Invoice {invoice.invoiceNumber}</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" className="flex-1 sm:flex-none" onClick={handleDownloadPdf}><Download className="w-4 h-4 mr-2" /> Download PDF</Button>
-          <Button className="flex-1 sm:flex-none" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Print Invoice</Button>
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Print Invoice</Button>
+          {/* Delete — only shown to admins */}
+          {user?.role === "admin" && (
+            isPaid && !paidDeleteUnlocked ? (
+              <Button
+                variant="outline"
+                className="flex-1 sm:flex-none text-muted-foreground"
+                disabled
+                title="Paid invoice is locked. Enable 'Unlock invoice deletion' below to delete."
+              >
+                <Lock className="w-4 h-4 mr-2" /> Delete
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                className="flex-1 sm:flex-none"
+                onClick={handleDeleteClick}
+                disabled={isDeleting}
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </Button>
+            )
+          )}
         </div>
       </div>
+
+      {/* Session-level deletion unlock toggle — only shown to admins on paid invoices */}
+      {user?.role === "admin" && isPaid && (
+        <div className={`no-print mb-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm ${paidDeleteUnlocked ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
+          <div className="flex items-center gap-2 min-w-0">
+            {paidDeleteUnlocked
+              ? <LockOpen className="h-4 w-4 text-destructive shrink-0" />
+              : <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+            }
+            <span className="font-medium">Unlock invoice deletion</span>
+            {paidDeleteUnlocked
+              ? <span className="ml-2 text-destructive">Unlocked — this paid invoice can be deleted</span>
+              : <span className="ml-2 text-muted-foreground">Locked — paid invoices are protected from accidental deletion</span>
+            }
+          </div>
+          <Switch
+            checked={paidDeleteUnlocked}
+            onCheckedChange={(checked) => {
+              setPaidDeleteUnlocked(checked);
+              if (!checked) { setShowChallenge(false); setDeleteChallenge(""); }
+            }}
+          />
+        </div>
+      )}
+      {user?.role === "admin" && isPaid && paidDeleteUnlocked && (
+        <div className="no-print mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <p><strong>Deletion unlocked.</strong> Deleting this paid invoice permanently removes the revenue record and reverses FIFO COGS. This cannot be undone.</p>
+        </div>
+      )}
 
       {/* ─── INVOICE DOCUMENT ───
           Fixed A4 (210mm) width by design for print/PDF fidelity — on narrow
@@ -510,6 +642,49 @@ export default function InvoiceDetail() {
         </div>
       )}
 
+      {/* ─── Delete paid invoice confirmation dialog ─── */}
+      <AlertDialog open={showChallenge} onOpenChange={(o) => { if (!o) { setShowChallenge(false); setDeleteChallenge(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">
+              Delete a paid invoice — this cannot be undone
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Invoice <strong className="text-foreground">{invoice.invoiceNumber}</strong> is a paid record. Deleting it will:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                  <li>Permanently erase the revenue record</li>
+                  <li>Reverse the FIFO COGS deduction and restore stock</li>
+                  <li>Remove it from all reports</li>
+                </ul>
+                <div>
+                  <p className="mb-1">Type the invoice number <strong>{invoice.invoiceNumber}</strong> to confirm:</p>
+                  <Input
+                    value={deleteChallenge}
+                    onChange={(e) => setDeleteChallenge(e.target.value)}
+                    placeholder={invoice.invoiceNumber}
+                    className="font-mono"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter") confirmDeletePaidInvoice(); }}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowChallenge(false); setDeleteChallenge(""); }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteChallenge.trim() !== invoice.invoiceNumber}
+              onClick={(e) => { e.preventDefault(); confirmDeletePaidInvoice(); }}
+            >
+              Permanently delete invoice
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <style>{`
         @media print {
