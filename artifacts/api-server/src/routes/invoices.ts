@@ -352,6 +352,31 @@ router.post("/invoices", async (req, res): Promise<void> => {
     }
   }
 
+  // Write an immutable audit log entry inside the same transaction so that
+  // every committed invoice is guaranteed to have a matching creation record.
+  // If the audit insert fails, the entire transaction rolls back — no invoice
+  // without a trace, and no orphaned audit row without an invoice.
+  await tx.insert(auditLogTable).values({
+    actorId: req.session?.userId ?? null,
+    entityType: "invoice",
+    entityId: invoice.id,
+    action: "create",
+    billNo: invoice.invoiceNumber,
+    details: JSON.stringify({
+      invoiceNumber: invoice.invoiceNumber,
+      customerName: invoice.customerName,
+      customerMobile: invoice.customerMobile,
+      total: invoice.total,
+      paymentMethod: invoice.paymentMethod,
+      isPending: invoice.isPending,
+      createdByUserId: req.session?.userId ?? null,
+      createdByUserName: req.session?.fullName ?? null,
+      ...(invoiceCreatedAt
+        ? { backdated: true, suppliedCreatedAt: invoiceCreatedAt.toISOString() }
+        : { backdated: false }),
+    }),
+  });
+
   return { invoice, savedItems, hadDeductions: deductions.size > 0 };
   });
 
