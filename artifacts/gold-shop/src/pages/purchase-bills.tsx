@@ -227,7 +227,18 @@ export default function PurchaseBillsPage() {
         invalidate();
         setSettleId(null);
       },
-      onError: (e: any) => toast({ title: "Failed to update status", description: e?.message, variant: "destructive" }),
+      onError: (e: any) => {
+        toast({ title: "Failed to update status", description: e?.message, variant: "destructive" });
+        // Reset the select back to the bill's actual server-side status so the
+        // sheet doesn't keep showing the failed attempted value.
+        if (settlingBill) {
+          setSettleStatus(
+            settlingBill.paymentStatus === "paid" ? "paid"
+            : settlingBill.paymentStatus === "unfixed" ? "unfixed"
+            : "unpaid",
+          );
+        }
+      },
     });
   };
 
