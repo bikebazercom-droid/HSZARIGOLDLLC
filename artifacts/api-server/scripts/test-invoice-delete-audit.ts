@@ -354,6 +354,116 @@ async function testD_ConcurrentDeletesProduceExactlyOneAuditEntry(): Promise<voi
 }
 
 /**
+ * Test F: Static source-code verification — FOR UPDATE row lock precedes audit insert.
+ *
+ * Motivation: concurrent DELETE requests for the same invoice race to acquire
+ * the SELECT … FOR UPDATE lock inside db.transaction().  The lock serializes
+ * them at the DB level so that only the winner deletes the row and writes an
+ * audit entry; the loser finds no row after acquiring the lock and returns null
+ * without ever reaching the audit insert.
+ *
+ * Without the lock two transactions could both read the invoice as "present",
+ * both delete it (one gets the row, the other gets nothing from RETURNING), and
+ * then both attempt to write audit entries — potentially producing duplicate or
+ * orphan rows depending on timing.
+ *
+ * This test reads the actual source file and asserts:
+ *   1. A FOR UPDATE clause appears inside the transaction body.
+ *   2. tx.insert(auditLogTable) appears inside the transaction body.
+ *   3. The FOR UPDATE lock appears BEFORE the audit insert (ordering guarantee).
+ *
+ * Mutation guard: removing or moving the FOR UPDATE lock causes assertion 1 or
+ * 3 to fail, giving CI a clear signal before the regression ships.
+ */
+async function testF_RowLockPrecedesAuditInsertInDeleteTransaction(): Promise<void> {
+  console.log(
+    "\nTest F: Source-code verification — FOR UPDATE row lock precedes audit insert in DELETE transaction",
+  );
+  console.log("  (Mutation guard: removing the FOR UPDATE lock would fail assertion 1;");
+  console.log("   moving it after the audit insert would fail assertion 3.)");
+
+  const { readFile } = await import("node:fs/promises");
+  const { resolve }  = await import("node:path");
+
+  const routeFile = resolve(process.cwd(), "src/routes/invoices.ts");
+  let source: string;
+  try {
+    source = await readFile(routeFile, "utf-8");
+  } catch (err) {
+    assert(false, `Could not read invoices.ts route file (${routeFile}): ${err}`);
+    return;
+  }
+
+  // ── Locate the DELETE /invoices/:id handler ───────────────────────────────
+
+  const deleteHandlerStart = source.indexOf('router.delete("/invoices/:id"');
+  assert(
+    deleteHandlerStart !== -1,
+    'DELETE /invoices/:id handler exists in invoices.ts',
+  );
+  if (deleteHandlerStart === -1) return;
+
+  // ── Locate the db.transaction call within the handler ────────────────────
+
+  const txCallStart = source.indexOf("db.transaction(async (tx) =>", deleteHandlerStart);
+  assert(
+    txCallStart !== -1,
+    'DELETE handler wraps its work in db.transaction(async (tx) => ...)',
+  );
+  if (txCallStart === -1) return;
+
+  // ── Extract the transaction callback body by tracking brace depth ─────────
+
+  const openBrace = source.indexOf("{", txCallStart);
+  assert(openBrace !== -1, 'Transaction block has an opening brace');
+  if (openBrace === -1) return;
+
+  let depth = 0;
+  let closeBrace = -1;
+  for (let i = openBrace; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) { closeBrace = i; break; }
+    }
+  }
+  assert(closeBrace !== -1, 'Transaction block has a matching closing brace');
+  if (closeBrace === -1) return;
+
+  const transactionBody = source.slice(openBrace, closeBrace + 1);
+
+  // ── Core assertions ───────────────────────────────────────────────────────
+
+  // 1. A FOR UPDATE clause must appear inside the transaction body.
+  //    Mutation guard: removing the lock causes this assertion to fail.
+  const forUpdateIdx = transactionBody.search(/FOR\s+UPDATE/);
+  assert(
+    forUpdateIdx !== -1,
+    'Transaction body contains a FOR UPDATE row-level lock — serializes concurrent deletes',
+  );
+  if (forUpdateIdx === -1) return;
+
+  // 2. The audit insert must also appear inside the transaction body.
+  //    (Complements Test E; needed here to check ordering in step 3.)
+  const auditInsertIdx = transactionBody.indexOf("tx.insert(auditLogTable)");
+  assert(
+    auditInsertIdx !== -1,
+    'Transaction body contains tx.insert(auditLogTable)',
+  );
+  if (auditInsertIdx === -1) return;
+
+  // 3. The FOR UPDATE lock must appear BEFORE the audit insert.
+  //    Mutation guard: moving the lock after the audit insert causes this to fail,
+  //    meaning a crashbetween the insert and the lock acquisition would leave an
+  //    orphan audit row with no corresponding deletion.
+  assert(
+    forUpdateIdx < auditInsertIdx,
+    `FOR UPDATE lock (offset ${forUpdateIdx}) precedes tx.insert(auditLogTable) (offset ${auditInsertIdx}) — lock acquired before audit write`,
+  );
+}
+
+/**
  * Test E: Static source-code verification — audit insert is inside the DB transaction.
  *
  * Motivation: the existing runtime tests (A–D) all run against a live server and
@@ -483,6 +593,7 @@ async function main(): Promise<void> {
   await testB_PaidInvoiceDeleteWritesAuditEntry();
   await testC_FailedDeletionLeavesNoOrphanAuditEntry();
   await testD_ConcurrentDeletesProduceExactlyOneAuditEntry();
+  await testF_RowLockPrecedesAuditInsertInDeleteTransaction();
   await testE_AuditInsertIsInsideDeleteTransaction();
 
   console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
