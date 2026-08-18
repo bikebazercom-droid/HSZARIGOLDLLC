@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { invoicesTable } from "./invoices";
@@ -89,16 +89,26 @@ export const stockMovementsTable = pgTable("stock_movements", {
 
 // Immutable audit log for destructive admin actions (bill deletions, etc.).
 // Stores who did what and when; details JSON captures a snapshot of the entity.
-export const auditLogTable = pgTable("audit_log", {
-  id: serial("id").primaryKey(),
-  actorId: integer("actor_id"), // session userId; null if indeterminate
-  entityType: text("entity_type").notNull(), // e.g. "purchase_bill"
-  entityId: integer("entity_id").notNull(),
-  action: text("action").notNull(), // e.g. "delete"
-  billNo: text("bill_no"), // denormalised for quick display without joins
-  details: text("details").notNull(), // JSON snapshot of the deleted entity
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+// A BRIN index on created_at keeps time-range scans fast as the table grows;
+// BRIN is ideal here because rows are inserted in roughly chronological order.
+export const auditLogTable = pgTable(
+  "audit_log",
+  {
+    id: serial("id").primaryKey(),
+    actorId: integer("actor_id"), // session userId; null if indeterminate
+    entityType: text("entity_type").notNull(), // e.g. "purchase_bill"
+    entityId: integer("entity_id").notNull(),
+    action: text("action").notNull(), // e.g. "delete"
+    billNo: text("bill_no"), // denormalised for quick display without joins
+    details: text("details").notNull(), // JSON snapshot of the deleted entity
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // BRIN index: very small (a few pages) yet speeds up date-range queries and
+    // the retention-cleanup DELETE that scans by created_at.
+    index("audit_log_created_at_brin_idx").using("brin", table.createdAt),
+  ],
+);
 
 export const insertStockPurchaseSchema = createInsertSchema(stockPurchasesTable).omit({ id: true, createdAt: true });
 export type InsertStockPurchase = z.infer<typeof insertStockPurchaseSchema>;
