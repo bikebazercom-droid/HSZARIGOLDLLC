@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './billPaymentStatusUpdate';
+export * from './billPaymentStatusUpdatePaymentStatus';
 export * from './categorySummary';
 export * from './categorySummaryRow';
 export * from './companySettings';
@@ -66,3 +68,5 @@ export * from './stockMovement';
 export * from './stockPurchase';
 export * from './stockPurchaseInput';
 export * from './stockPurchaseInputCategory';
+export * from './supplierLiabilityReport';
+export * from './supplierLiabilityRow';

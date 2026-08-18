@@ -652,6 +652,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/PurchaseBill"
 
+  /purchase-bills/supplier-liability:
+    get:
+      operationId: getSupplierLiability
+      tags: [stock]
+      summary: Per-supplier summary of outstanding (unpaid + unfixed) purchase bill liabilities
+      responses:
+        "200":
+          description: Supplier liability rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierLiabilityReport"
+
   /purchase-bills/{id}:
     get:
       operationId: getPurchaseBill
@@ -683,6 +696,37 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /purchase-bills/{id}/payment-status:
+    patch:
+      operationId: updatePurchaseBillPaymentStatus
+      tags: [stock]
+      summary: Update the payment status of a purchase bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillPaymentStatusUpdate"
+      responses:
+        "200":
+          description: Updated purchase bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseBill"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /stock/suppliers:
     get:
@@ -1806,6 +1850,53 @@ components:
         lineTotalAed:
           type: number
           minimum: 0
+
+    SupplierLiabilityRow:
+      type: object
+      required: [supplierName, unpaidCount, unpaidTotalAed, unfixedCount, unfixedPureGrams, billIds]
+      properties:
+        supplierName:
+          type: string
+        unpaidCount:
+          type: integer
+          description: Number of unpaid bills outstanding
+        unpaidTotalAed:
+          type: number
+          description: Sum of totalAed for unpaid bills
+        unfixedCount:
+          type: integer
+          description: Number of unfixed bills outstanding
+        unfixedPureGrams:
+          type: number
+          description: Sum of totalPureGrams for unfixed bills
+        billIds:
+          type: array
+          items:
+            type: integer
+          description: All outstanding bill IDs for this supplier (unpaid + unfixed)
+
+    SupplierLiabilityReport:
+      type: object
+      required: [rows, totalUnpaidAed, totalUnfixedPureGrams]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierLiabilityRow"
+        totalUnpaidAed:
+          type: number
+          description: Grand total of all unpaid AED liabilities
+        totalUnfixedPureGrams:
+          type: number
+          description: Grand total of all unfixed pure-gram liabilities
+
+    BillPaymentStatusUpdate:
+      type: object
+      required: [paymentStatus]
+      properties:
+        paymentStatus:
+          type: string
+          enum: [paid, unpaid, unfixed]
 
     PurchaseBillInput:
       type: object

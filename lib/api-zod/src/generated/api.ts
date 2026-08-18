@@ -1001,6 +1001,23 @@ export const CreatePurchaseBillResponse = zod.object({
 
 
 /**
+ * @summary Per-supplier summary of outstanding (unpaid + unfixed) purchase bill liabilities
+ */
+export const GetSupplierLiabilityResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "supplierName": zod.string(),
+  "unpaidCount": zod.number().describe('Number of unpaid bills outstanding'),
+  "unpaidTotalAed": zod.number().describe('Sum of totalAed for unpaid bills'),
+  "unfixedCount": zod.number().describe('Number of unfixed bills outstanding'),
+  "unfixedPureGrams": zod.number().describe('Sum of totalPureGrams for unfixed bills'),
+  "billIds": zod.array(zod.number()).describe('All outstanding bill IDs for this supplier (unpaid + unfixed)')
+})),
+  "totalUnpaidAed": zod.number().describe('Grand total of all unpaid AED liabilities'),
+  "totalUnfixedPureGrams": zod.number().describe('Grand total of all unfixed pure-gram liabilities')
+})
+
+
+/**
  * @summary Get a purchase bill with its line items
  */
 export const GetPurchaseBillParams = zod.object({
@@ -1041,6 +1058,43 @@ export const DeletePurchaseBillParams = zod.object({
 })
 
 export const DeletePurchaseBillResponse = zod.void()
+
+
+/**
+ * @summary Update the payment status of a purchase bill
+ */
+export const UpdatePurchaseBillPaymentStatusParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePurchaseBillPaymentStatusBody = zod.object({
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed'])
+})
+
+export const UpdatePurchaseBillPaymentStatusResponse = zod.object({
+  "id": zod.number(),
+  "billNo": zod.string(),
+  "billDate": zod.string(),
+  "supplierName": zod.string(),
+  "purchaseType": zod.enum(['fixed', 'unfixed']),
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalAed": zod.number(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "stockPurchaseId": zod.number().nullish(),
+  "category": zod.string(),
+  "grossWeightGrams": zod.number(),
+  "purityPercent": zod.number(),
+  "pureWeightGrams": zod.number(),
+  "rateAedPerG": zod.number(),
+  "makingChargeAed": zod.number(),
+  "lineTotalAed": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
 
 
 /**

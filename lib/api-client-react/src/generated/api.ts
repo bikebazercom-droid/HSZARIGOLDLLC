@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BillPaymentStatusUpdate,
   CategorySummary,
   CompanySettings,
   CompanySettingsInput,
@@ -56,7 +57,8 @@ import type {
   StockLevel,
   StockMovement,
   StockPurchase,
-  StockPurchaseInput
+  StockPurchaseInput,
+  SupplierLiabilityReport
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2483,6 +2485,83 @@ export const useCreatePurchaseBill = <TError = ErrorType<unknown>,
       return useMutation(getCreatePurchaseBillMutationOptions(options));
     }
 
+export const getGetSupplierLiabilityUrl = () => {
+
+
+
+
+  return `/api/purchase-bills/supplier-liability`
+}
+
+/**
+ * @summary Per-supplier summary of outstanding (unpaid + unfixed) purchase bill liabilities
+ */
+export const getSupplierLiability = async ( options?: RequestInit): Promise<SupplierLiabilityReport> => {
+
+  return customFetch<SupplierLiabilityReport>(getGetSupplierLiabilityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierLiabilityQueryKey = () => {
+    return [
+    `/api/purchase-bills/supplier-liability`
+    ] as const;
+    }
+
+
+export const getGetSupplierLiabilityQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierLiability>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierLiability>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierLiabilityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierLiability>>> = ({ signal }) => getSupplierLiability({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierLiability>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierLiabilityQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierLiability>>>
+export type GetSupplierLiabilityQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-supplier summary of outstanding (unpaid + unfixed) purchase bill liabilities
+ */
+
+export function useGetSupplierLiability<TData = Awaited<ReturnType<typeof getSupplierLiability>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierLiability>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierLiabilityQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetPurchaseBillUrl = (id: number,) => {
 
 
@@ -2628,6 +2707,77 @@ export const useDeletePurchaseBill = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeletePurchaseBillMutationOptions(options));
+    }
+
+export const getUpdatePurchaseBillPaymentStatusUrl = (id: number,) => {
+
+
+
+
+  return `/api/purchase-bills/${id}/payment-status`
+}
+
+/**
+ * @summary Update the payment status of a purchase bill
+ */
+export const updatePurchaseBillPaymentStatus = async (id: number,
+    billPaymentStatusUpdate: BillPaymentStatusUpdate, options?: RequestInit): Promise<PurchaseBill> => {
+
+  return customFetch<PurchaseBill>(getUpdatePurchaseBillPaymentStatusUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(billPaymentStatusUpdate)
+  }
+);}
+
+
+
+
+export const getUpdatePurchaseBillPaymentStatusMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePurchaseBillPaymentStatus>>, TError,{id: number;data: BodyType<BillPaymentStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePurchaseBillPaymentStatus>>, TError,{id: number;data: BodyType<BillPaymentStatusUpdate>}, TContext> => {
+
+const mutationKey = ['updatePurchaseBillPaymentStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePurchaseBillPaymentStatus>>, {id: number;data: BodyType<BillPaymentStatusUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePurchaseBillPaymentStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePurchaseBillPaymentStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updatePurchaseBillPaymentStatus>>>
+    export type UpdatePurchaseBillPaymentStatusMutationBody = BodyType<BillPaymentStatusUpdate>
+    export type UpdatePurchaseBillPaymentStatusMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update the payment status of a purchase bill
+ */
+export const useUpdatePurchaseBillPaymentStatus = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePurchaseBillPaymentStatus>>, TError,{id: number;data: BodyType<BillPaymentStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePurchaseBillPaymentStatus>>,
+        TError,
+        {id: number;data: BodyType<BillPaymentStatusUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdatePurchaseBillPaymentStatusMutationOptions(options));
     }
 
 export const getListStockSuppliersUrl = () => {

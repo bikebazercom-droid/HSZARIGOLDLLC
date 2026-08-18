@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import PDFDocument from "pdfkit";
-import { and, desc, eq, gte, ilike, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
 import { requireAdmin } from "../middlewares/auth.js";
@@ -9,8 +9,12 @@ import {
   CreatePurchaseBillBody,
   CreatePurchaseBillResponse,
   GetPurchaseBillResponse,
+  GetSupplierLiabilityResponse,
   ListPurchaseBillsQueryParams,
   ListPurchaseBillsResponse,
+  UpdatePurchaseBillPaymentStatusBody,
+  UpdatePurchaseBillPaymentStatusParams,
+  UpdatePurchaseBillPaymentStatusResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -61,6 +65,52 @@ async function loadBill(id: number) {
     .where(eq(purchaseBillItemsTable.billId, id)).orderBy(purchaseBillItemsTable.id);
   return { bill, items };
 }
+
+// Must be before /:id to avoid Express treating "supplier-liability" as a param.
+router.get("/purchase-bills/supplier-liability", requireAdmin, async (_req, res): Promise<void> => {
+  const outstandingBills = await db
+    .select()
+    .from(purchaseBillsTable)
+    .where(
+      sql`${purchaseBillsTable.paymentStatus} IN ('unpaid', 'unfixed')`
+    )
+    .orderBy(purchaseBillsTable.supplierName, purchaseBillsTable.billDate);
+
+  // Group by supplier
+  const bySupplier = new Map<string, {
+    unpaidCount: number;
+    unpaidTotalAed: number;
+    unfixedCount: number;
+    unfixedPureGrams: number;
+    billIds: number[];
+  }>();
+
+  for (const bill of outstandingBills) {
+    const key = bill.supplierName;
+    if (!bySupplier.has(key)) {
+      bySupplier.set(key, { unpaidCount: 0, unpaidTotalAed: 0, unfixedCount: 0, unfixedPureGrams: 0, billIds: [] });
+    }
+    const entry = bySupplier.get(key)!;
+    entry.billIds.push(bill.id);
+    if (bill.paymentStatus === "unpaid") {
+      entry.unpaidCount += 1;
+      entry.unpaidTotalAed += Number(bill.totalAed);
+    } else if (bill.paymentStatus === "unfixed") {
+      entry.unfixedCount += 1;
+      entry.unfixedPureGrams += Number(bill.totalPureGrams);
+    }
+  }
+
+  const rows = Array.from(bySupplier.entries()).map(([supplierName, data]) => ({
+    supplierName,
+    ...data,
+  }));
+
+  const totalUnpaidAed = rows.reduce((s, r) => s + r.unpaidTotalAed, 0);
+  const totalUnfixedPureGrams = rows.reduce((s, r) => s + r.unfixedPureGrams, 0);
+
+  res.json(GetSupplierLiabilityResponse.parse({ rows, totalUnpaidAed, totalUnfixedPureGrams }));
+});
 
 router.get("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {
   const query = ListPurchaseBillsQueryParams.safeParse(req.query);
@@ -215,6 +265,23 @@ router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<voi
   if (!deleted) { res.status(404).json({ error: "Bill not found" }); return; }
   res.status(204).end();
   broadcast("STOCK_MUTATION");
+});
+
+router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res): Promise<void> => {
+  const params = UpdatePurchaseBillPaymentStatusParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { id } = params.data;
+  const body = UpdatePurchaseBillPaymentStatusBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const [updated] = await db
+    .update(purchaseBillsTable)
+    .set({ paymentStatus: body.data.paymentStatus })
+    .where(eq(purchaseBillsTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "Bill not found" }); return; }
+  const items = await db.select().from(purchaseBillItemsTable)
+    .where(eq(purchaseBillItemsTable.billId, id)).orderBy(purchaseBillItemsTable.id);
+  res.json(UpdatePurchaseBillPaymentStatusResponse.parse(parseBill(updated, items)));
 });
 
 // Raw PDF route (outside the OpenAPI spec, like other document downloads):

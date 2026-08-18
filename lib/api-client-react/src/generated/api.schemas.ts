@@ -662,6 +662,41 @@ export interface PurchaseBillItemInput {
   lineTotalAed: number;
 }
 
+export interface SupplierLiabilityRow {
+  supplierName: string;
+  /** Number of unpaid bills outstanding */
+  unpaidCount: number;
+  /** Sum of totalAed for unpaid bills */
+  unpaidTotalAed: number;
+  /** Number of unfixed bills outstanding */
+  unfixedCount: number;
+  /** Sum of totalPureGrams for unfixed bills */
+  unfixedPureGrams: number;
+  /** All outstanding bill IDs for this supplier (unpaid + unfixed) */
+  billIds: number[];
+}
+
+export interface SupplierLiabilityReport {
+  rows: SupplierLiabilityRow[];
+  /** Grand total of all unpaid AED liabilities */
+  totalUnpaidAed: number;
+  /** Grand total of all unfixed pure-gram liabilities */
+  totalUnfixedPureGrams: number;
+}
+
+export type BillPaymentStatusUpdatePaymentStatus = typeof BillPaymentStatusUpdatePaymentStatus[keyof typeof BillPaymentStatusUpdatePaymentStatus];
+
+
+export const BillPaymentStatusUpdatePaymentStatus = {
+  paid: 'paid',
+  unpaid: 'unpaid',
+  unfixed: 'unfixed',
+} as const;
+
+export interface BillPaymentStatusUpdate {
+  paymentStatus: BillPaymentStatusUpdatePaymentStatus;
+}
+
 export type PurchaseBillInputPurchaseType = typeof PurchaseBillInputPurchaseType[keyof typeof PurchaseBillInputPurchaseType];
 
 

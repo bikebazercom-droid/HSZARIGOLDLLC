@@ -5,6 +5,8 @@ import {
   useListStockSuppliers, getListStockSuppliersQueryKey,
   useListStockLevels, getListStockLevelsQueryKey,
   useListStockPurchases, getListStockPurchasesQueryKey,
+  useGetSupplierLiability, getGetSupplierLiabilityQueryKey,
+  useUpdatePurchaseBillPaymentStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -14,9 +16,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { FileDown, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, Plus, Trash2, X } from "lucide-react";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "@/pages/products/stock";
 
 function fmtG(n: number | undefined | null): string {
@@ -49,17 +52,29 @@ const PAYMENT_LABEL: Record<string, string> = {
   paid: "Paid in Cash", unpaid: "Unpaid / Liability", unfixed: "Unfixed Balance",
 };
 
+const PAYMENT_OPTIONS = [
+  { value: "paid", label: "Paid in Cash" },
+  { value: "unpaid", label: "Unpaid / Liability" },
+  { value: "unfixed", label: "Unfixed Balance" },
+];
+
 export default function PurchaseBillsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [settleId, setSettleId] = useState<number | null>(null);
+  const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
 
   const { data: bills, isLoading } = useListPurchaseBills(undefined, {
     query: { queryKey: getListPurchaseBillsQueryKey(undefined) },
   });
+  const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
+    query: { queryKey: getGetSupplierLiabilityQueryKey() },
+  });
   const { data: suppliers } = useListStockSuppliers({ query: { queryKey: getListStockSuppliersQueryKey() } });
   const createBill = useCreatePurchaseBill();
   const deleteBill = useDeletePurchaseBill();
+  const updatePaymentStatus = useUpdatePurchaseBillPaymentStatus();
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [billNo, setBillNo] = useState("");
@@ -88,6 +103,7 @@ export default function PurchaseBillsPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getListPurchaseBillsQueryKey(undefined) });
+    queryClient.invalidateQueries({ queryKey: getGetSupplierLiabilityQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockLevelsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockPurchasesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockSuppliersQueryKey() });
@@ -138,6 +154,27 @@ export default function PurchaseBillsPage() {
     });
   };
 
+  const openSettle = (id: number, currentStatus: string) => {
+    setSettleId(id);
+    setSettleStatus(currentStatus === "paid" ? "paid" : currentStatus === "unfixed" ? "unfixed" : "unpaid");
+  };
+
+  const handleSettle = () => {
+    if (settleId == null) return;
+    updatePaymentStatus.mutate({ id: settleId, data: { paymentStatus: settleStatus } }, {
+      onSuccess: (bill) => {
+        toast({ title: `Bill ${bill.billNo} updated to "${PAYMENT_LABEL[bill.paymentStatus]}"` });
+        invalidate();
+        setSettleId(null);
+      },
+      onError: (e: any) => toast({ title: "Failed to update status", description: e?.message, variant: "destructive" }),
+    });
+  };
+
+  const settlingBill = settleId != null ? bills?.find((b) => b.id === settleId) : null;
+
+  const hasOutstanding = liability != null && (liability.totalUnpaidAed > 0 || liability.totalUnfixedPureGrams > 0);
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
@@ -150,68 +187,224 @@ export default function PurchaseBillsPage() {
         </Button>
       </div>
 
-      <div className="bg-card rounded-md border overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="pl-4">Bill Date</TableHead>
-                <TableHead>Bill No / Ref</TableHead>
-                <TableHead>Supplier</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead className="text-right">Gross Wt (g)</TableHead>
-                <TableHead className="text-right">Pure Wt (g)</TableHead>
-                <TableHead className="text-right">Total (AED)</TableHead>
-                <TableHead className="text-right pr-4">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading...</TableCell></TableRow>
-              ) : !bills || bills.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="h-24 text-center text-muted-foreground">No purchase bills recorded yet.</TableCell></TableRow>
-              ) : (
-                bills.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="pl-4 whitespace-nowrap">{b.billDate}</TableCell>
-                    <TableCell className="font-medium">{b.billNo}</TableCell>
-                    <TableCell>{b.supplierName}</TableCell>
-                    <TableCell>
-                      <Badge variant={b.purchaseType === "fixed" ? "default" : "secondary"}>
-                        {b.purchaseType === "fixed" ? "Fixed" : "Unfixed"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={b.paymentStatus === "paid" ? "outline" : "destructive"}>
-                        {PAYMENT_LABEL[b.paymentStatus] ?? b.paymentStatus}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{fmtG(b.totalGrossGrams)}</TableCell>
-                    <TableCell className="text-right">{fmtG(b.totalPureGrams)}</TableCell>
-                    <TableCell className="text-right font-semibold">{fmtAED(b.totalAed)}</TableCell>
-                    <TableCell className="text-right pr-4 whitespace-nowrap">
-                      <Button
-                        variant="ghost" size="icon" className="h-8 w-8" title="Download bill PDF"
-                        onClick={() => window.open(`${import.meta.env.BASE_URL}api/purchase-bills/${b.id}/pdf`, "_blank")}
-                      >
-                        <FileDown className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(b.id, b.billNo)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+      <Tabs defaultValue="bills">
+        <TabsList>
+          <TabsTrigger value="bills">All Bills</TabsTrigger>
+          <TabsTrigger value="liability" className="relative">
+            Supplier Liability
+            {hasOutstanding && (
+              <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive w-2 h-2" />
+            )}
+          </TabsTrigger>
+        </TabsList>
 
+        {/* ─── All Bills tab ─── */}
+        <TabsContent value="bills">
+          <div className="bg-card rounded-md border overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead className="pl-4">Bill Date</TableHead>
+                    <TableHead>Bill No / Ref</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead className="text-right">Gross Wt (g)</TableHead>
+                    <TableHead className="text-right">Pure Wt (g)</TableHead>
+                    <TableHead className="text-right">Total (AED)</TableHead>
+                    <TableHead className="text-right pr-4">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading...</TableCell></TableRow>
+                  ) : !bills || bills.length === 0 ? (
+                    <TableRow><TableCell colSpan={9} className="h-24 text-center text-muted-foreground">No purchase bills recorded yet.</TableCell></TableRow>
+                  ) : (
+                    bills.map((b) => (
+                      <TableRow key={b.id}>
+                        <TableCell className="pl-4 whitespace-nowrap">{b.billDate}</TableCell>
+                        <TableCell className="font-medium">{b.billNo}</TableCell>
+                        <TableCell>{b.supplierName}</TableCell>
+                        <TableCell>
+                          <Badge variant={b.purchaseType === "fixed" ? "default" : "secondary"}>
+                            {b.purchaseType === "fixed" ? "Fixed" : "Unfixed"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={b.paymentStatus === "paid" ? "outline" : "destructive"}>
+                            {PAYMENT_LABEL[b.paymentStatus] ?? b.paymentStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{fmtG(b.totalGrossGrams)}</TableCell>
+                        <TableCell className="text-right">{fmtG(b.totalPureGrams)}</TableCell>
+                        <TableCell className="text-right font-semibold">{fmtAED(b.totalAed)}</TableCell>
+                        <TableCell className="text-right pr-4 whitespace-nowrap">
+                          {b.paymentStatus !== "paid" && (
+                            <Button
+                              variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700"
+                              title="Update payment status"
+                              onClick={() => openSettle(b.id, b.paymentStatus)}
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost" size="icon" className="h-8 w-8" title="Download bill PDF"
+                            onClick={() => window.open(`${import.meta.env.BASE_URL}api/purchase-bills/${b.id}/pdf`, "_blank")}
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(b.id, b.billNo)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ─── Supplier Liability tab ─── */}
+        <TabsContent value="liability">
+          {liabilityLoading ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground">Loading...</div>
+          ) : !liability || liability.rows.length === 0 ? (
+            <div className="rounded-md border bg-card p-8 text-center space-y-2">
+              <CheckCircle2 className="mx-auto h-8 w-8 text-green-500" />
+              <p className="font-semibold">All clear — no outstanding supplier liabilities.</p>
+              <p className="text-sm text-muted-foreground">All purchase bills are marked as paid.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Summary cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-md border bg-card p-4 space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Unpaid (Cash)</p>
+                  <p className="text-2xl font-bold text-destructive">AED {fmtAED(liability.totalUnpaidAed)}</p>
+                  <p className="text-xs text-muted-foreground">{liability.rows.reduce((s, r) => s + r.unpaidCount, 0)} unpaid bill(s)</p>
+                </div>
+                <div className="rounded-md border bg-card p-4 space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Unfixed (Metal)</p>
+                  <p className="text-2xl font-bold text-amber-600">{fmtG(liability.totalUnfixedPureGrams)} g</p>
+                  <p className="text-xs text-muted-foreground">{liability.rows.reduce((s, r) => s + r.unfixedCount, 0)} unfixed bill(s)</p>
+                </div>
+              </div>
+
+              {/* Per-supplier breakdown */}
+              <div className="bg-card rounded-md border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="pl-4">Supplier</TableHead>
+                        <TableHead className="text-right">Unpaid Bills</TableHead>
+                        <TableHead className="text-right">Unpaid (AED)</TableHead>
+                        <TableHead className="text-right">Unfixed Bills</TableHead>
+                        <TableHead className="text-right">Unfixed (Pure g)</TableHead>
+                        <TableHead className="text-right pr-4">Settle</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {liability.rows.map((row) => {
+                        const supplierBills = bills?.filter((b) => row.billIds.includes(b.id)) ?? [];
+                        return (
+                          <TableRow key={row.supplierName}>
+                            <TableCell className="pl-4 font-semibold">{row.supplierName}</TableCell>
+                            <TableCell className="text-right">
+                              {row.unpaidCount > 0 ? (
+                                <Badge variant="destructive">{row.unpaidCount}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {row.unpaidCount > 0 ? `AED ${fmtAED(row.unpaidTotalAed)}` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {row.unfixedCount > 0 ? (
+                                <Badge variant="secondary" className="bg-amber-100 text-amber-800">{row.unfixedCount}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {row.unfixedCount > 0 ? `${fmtG(row.unfixedPureGrams)} g` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right pr-4">
+                              <div className="flex gap-1 justify-end flex-wrap">
+                                {supplierBills.map((b) => (
+                                  <Button
+                                    key={b.id}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => openSettle(b.id, b.paymentStatus)}
+                                  >
+                                    {b.billNo}
+                                  </Button>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                Click a bill number above to update its payment status and remove it from the liability report.
+              </p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* ─── Settle / update payment status sheet ─── */}
+      <Sheet open={settleId != null} onOpenChange={(o) => { if (!o) setSettleId(null); }}>
+        <SheetContent className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Update Payment Status</SheetTitle>
+            <SheetDescription>
+              {settlingBill ? (
+                <>Bill <strong>{settlingBill.billNo}</strong> · {settlingBill.supplierName} · AED {fmtAED(settlingBill.totalAed)}</>
+              ) : "Update the payment status of this purchase bill."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div className="space-y-1.5">
+              <Label>New Payment Status</Label>
+              <Select value={settleStatus} onValueChange={(v) => setSettleStatus(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleSettle}
+              disabled={updatePaymentStatus.isPending}
+            >
+              {updatePaymentStatus.isPending ? "Saving..." : "Save Status"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ─── New purchase bill sheet ─── */}
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
           <SheetHeader>
