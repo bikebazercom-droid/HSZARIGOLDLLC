@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import {
-  useListInvoices, getListInvoicesQueryKey, useDeleteInvoice,
+  useListInvoices, getListInvoicesQueryKey,
   useGetSalesReport, getGetSalesReportQueryKey,
   useGetSettings, getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
@@ -11,7 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Trash2, Eye, FileDown, Scale, Banknote, ReceiptText } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AlertTriangle, Plus, Search, Trash2, Eye, FileDown, Scale, Banknote, ReceiptText, Lock, LockOpen } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +53,13 @@ export default function Invoices() {
   const [isDownloading, setIsDownloading] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
+  // Session-level unlock: paid (non-pending) invoices are protected by default.
+  // The user must explicitly enable the toggle before deletion is allowed, then
+  // confirm the exact invoice reference in a challenge dialog.
+  const [paidDeleteUnlocked, setPaidDeleteUnlocked] = useState(false);
+  const [deleteConfirmInvoice, setDeleteConfirmInvoice] = useState<{ id: number; ref: string } | null>(null);
+  const [deleteChallenge, setDeleteChallenge] = useState("");
+
   const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
   const companyName = settings?.companyName ?? "HAZARI GOLD L.L.C";
   const companyTrn = settings?.trn ?? "";
@@ -71,20 +84,70 @@ export default function Invoices() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const deleteInvoice = useDeleteInvoice();
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this invoice? Deducted stock will be restored.")) {
-      deleteInvoice.mutate({ id }, {
-        onSuccess: () => {
-          toast({ title: "Invoice deleted successfully" });
-          queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetSalesReportQueryKey() });
-        },
-        onError: () => {
-          toast({ title: "Failed to delete invoice", variant: "destructive" });
-        }
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetSalesReportQueryKey() });
+  };
+
+  const handleDelete = (id: number, invoiceNumber: string, isPending: boolean | undefined | null) => {
+    // isPending === false → invoice is paid/closed and therefore protected
+    const isPaid = isPending === false;
+    if (isPaid) {
+      if (!paidDeleteUnlocked) {
+        toast({
+          title: "Paid invoice is protected",
+          description: "Enable the 'Unlock invoice deletion' toggle above the table before deleting a paid invoice.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Paid + unlocked → open the challenge dialog
+      setDeleteChallenge("");
+      setDeleteConfirmInvoice({ id, ref: invoiceNumber });
+      return;
+    }
+    if (!confirm(`Delete invoice ${invoiceNumber}? Deducted stock will be restored.`)) return;
+    fetch(`${import.meta.env.BASE_URL}api/invoices/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      toast({ title: "Invoice deleted successfully" });
+      invalidate();
+    }).catch(() => {
+      toast({ title: "Failed to delete invoice", variant: "destructive" });
+    });
+  };
+
+  const confirmDeletePaidInvoice = async () => {
+    if (!deleteConfirmInvoice) return;
+    if (deleteChallenge.trim() !== deleteConfirmInvoice.ref) {
+      toast({ title: "Invoice number does not match", description: "Type the exact invoice number to confirm deletion.", variant: "destructive" });
+      return;
+    }
+    const { id, ref } = deleteConfirmInvoice;
+    setDeleteConfirmInvoice(null);
+    setDeleteChallenge("");
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/invoices/${id}`, {
+        method: "DELETE",
+        headers: { "X-Allow-Invoice-Delete": "true" },
+        credentials: "include",
       });
+      if (!response.ok) {
+        let errorMsg = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (typeof body?.error === "string") errorMsg = body.error;
+        } catch { /* ignore */ }
+        toast({ title: "Failed to delete invoice", description: errorMsg, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Paid invoice deleted", description: `Invoice ${ref} has been permanently removed.` });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to delete invoice", variant: "destructive" });
     }
   };
 
@@ -200,6 +263,36 @@ export default function Invoices() {
         </Button>
       </div>
 
+      {/* Session-level deletion unlock toggle — mirrors the purchase-bills pattern */}
+      {isAdmin && (
+        <div className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm ${paidDeleteUnlocked ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {paidDeleteUnlocked
+              ? <LockOpen className="h-4 w-4 text-destructive shrink-0" />
+              : <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+            }
+            <span className="font-medium">Unlock invoice deletion</span>
+            {paidDeleteUnlocked
+              ? <span className="ml-2 text-destructive">Unlocked — paid invoices can be deleted</span>
+              : <span className="ml-2 text-muted-foreground">Locked — paid invoices are protected from accidental deletion</span>
+            }
+          </div>
+          <Switch
+            checked={paidDeleteUnlocked}
+            onCheckedChange={(checked) => {
+              setPaidDeleteUnlocked(checked);
+              if (!checked) { setDeleteConfirmInvoice(null); setDeleteChallenge(""); }
+            }}
+          />
+        </div>
+      )}
+      {paidDeleteUnlocked && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <p><strong>Deletion unlocked.</strong> Deleting a paid invoice permanently removes the revenue record and reverses FIFO COGS. This cannot be undone.</p>
+        </div>
+      )}
+
       <div className="bg-card rounded-md border overflow-x-auto">
         <Table>
           <TableHeader className="bg-muted/50">
@@ -253,14 +346,26 @@ export default function Invoices() {
                         </Button>
                       </Link>
                       {isAdmin && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(invoice.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        invoice.isPending === false && !paidDeleteUnlocked ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground cursor-not-allowed"
+                            title="Paid invoice is locked. Enable 'Unlock invoice deletion' to delete."
+                            disabled
+                          >
+                            <Lock className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(invoice.id, invoice.invoiceNumber, invoice.isPending)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )
                       )}
                     </div>
                   </TableCell>
@@ -270,6 +375,54 @@ export default function Invoices() {
           </TableBody>
         </Table>
       </div>
+
+      {/* ─── Delete paid invoice confirmation dialog ─── */}
+      <AlertDialog open={deleteConfirmInvoice != null} onOpenChange={(o) => { if (!o) { setDeleteConfirmInvoice(null); setDeleteChallenge(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete a paid invoice — this cannot be undone
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Invoice <strong className="text-foreground">{deleteConfirmInvoice?.ref}</strong> is a paid record. Deleting it will:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Permanently erase this revenue record from financial history</li>
+                  <li>Restore the deducted stock to inventory</li>
+                  <li>Remove any FIFO COGS data associated with this invoice</li>
+                </ul>
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-medium text-foreground">
+                    Type the invoice number <strong>{deleteConfirmInvoice?.ref}</strong> to confirm:
+                  </label>
+                  <Input
+                    value={deleteChallenge}
+                    onChange={(e) => setDeleteChallenge(e.target.value)}
+                    placeholder={deleteConfirmInvoice?.ref}
+                    className="h-9 font-mono"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDeleteConfirmInvoice(null); setDeleteChallenge(""); }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteChallenge.trim() !== deleteConfirmInvoice?.ref}
+              onClick={(e) => { e.preventDefault(); confirmDeletePaidInvoice(); }}
+            >
+              Permanently delete invoice
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Hidden printable A4 sales statement (html2pdf source) */}
       <div style={{ position: "fixed", top: 0, left: "-9999px", width: "190mm" }}>

@@ -481,6 +481,23 @@ router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => 
     return;
   }
 
+  const allowDelete = req.headers["x-allow-invoice-delete"] === "true";
+
+  // Guard: paid (non-pending) invoices require the explicit unlock header.
+  // This prevents accidental deletion of settled revenue records from financial
+  // history. The frontend only sends the header after the user has enabled the
+  // session-level unlock toggle and passed the invoice-number challenge.
+  const [preCheck] = await db
+    .select({ isPending: invoicesTable.isPending })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, params.data.id));
+  if (preCheck && preCheck.isPending === false && !allowDelete) {
+    res.status(409).json({
+      error: "This invoice is paid/closed. Enable the deletion unlock and confirm the invoice number before deleting.",
+    });
+    return;
+  }
+
   // Delete the invoice and reverse its stock deductions in ONE transaction.
   // DELETE ... RETURNING guarantees only the request that actually removed the
   // row applies the reversal (no double-reversal on concurrent deletes). Net
