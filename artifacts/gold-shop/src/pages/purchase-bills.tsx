@@ -174,6 +174,26 @@ export default function PurchaseBillsPage() {
     updatePaymentStatus.mutate({ id: settleId, data: { paymentStatus: settleStatus } }, {
       onSuccess: (bill) => {
         toast({ title: `Bill ${bill.billNo} updated to "${PAYMENT_LABEL[bill.paymentStatus]}"` });
+        // If the bill was settled to "paid", check whether this supplier still has any
+        // other unpaid/unfixed bills. If not, remove them from the session accumulator
+        // so the warning no longer fires when the new-bill drawer is opened for them.
+        if (bill.paymentStatus === "paid") {
+          const supplierKey = bill.supplierName.toLowerCase();
+          if (sessionLiableSuppliers.has(supplierKey)) {
+            const otherOutstanding = bills?.some(
+              (b) => b.id !== bill.id &&
+                b.supplierName.toLowerCase() === supplierKey &&
+                (b.paymentStatus === "unpaid" || b.paymentStatus === "unfixed")
+            );
+            if (!otherOutstanding) {
+              setSessionLiableSuppliers((prev) => {
+                const next = new Set(prev);
+                next.delete(supplierKey);
+                return next;
+              });
+            }
+          }
+        }
         invalidate();
         setSettleId(null);
       },
