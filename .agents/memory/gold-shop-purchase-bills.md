@@ -16,5 +16,6 @@ description: Purchase Bill module conventions — bill lines materialize as FIFO
 - Unfixed bills are created with zero pricing (rate/making/total = 0; only weights). UI disables rate fields and forces paymentStatus "unfixed".
 - Settling unfixed → paid REQUIRES `fixingRateAedPerG` (server-enforced 400). Each line reprices as pureWeight × rate; bill totalAed, item rate/lineTotal, and linked stock batch total_price_aed/price_per_gram all update in one transaction.
 - Rate is quantized to 4dp server-side before any math (matches numeric column scale) and bounded ≤ 1,000,000.
-- Repricing is REFUSED (409) if any linked batch is partially consumed — past FIFO consumptions persisted cost at sale time and cannot be revalued. User must delete related invoices first.
-  **Why:** selling from a zero-cost unfixed batch then repricing it would leave historical COGS at zero while the batch claims a settled cost.
+- Repricing already-sold stock is ALLOWED (user demanded removal of the earlier 409): settlement retroactively updates the inventory_consumptions rows of the bill's batches (cost_aed = weight × new price_per_gram). Dashboard COGS, invoice profit, and statement PDFs all derive from inventory_consumptions, so nothing else needs updating.
+- Deadlock protocol: every transaction that takes FOR UPDATE row locks on stock_purchases (consumeFifo, reverseInvoiceConsumption, bill settlement, bill delete) must first call `acquireStockMutationLock(tx)` (pg_advisory_xact_lock).
+  **Why:** these paths lock batch rows in different orders (FIFO order vs IN-list), which can deadlock without a global serializing lock.

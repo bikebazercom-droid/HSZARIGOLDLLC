@@ -5,6 +5,7 @@ import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable, au
 import { broadcast } from "../lib/socket.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { applyStockDelta } from "./stock.js";
+import { acquireStockMutationLock } from "../services/inventoryEngine.js";
 import {
   CreatePurchaseBillBody,
   CreatePurchaseBillResponse,
@@ -483,6 +484,9 @@ router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<voi
     // we decide; reject deletion if any batch is already (partially) sold —
     // reversing a consumed batch would corrupt live stock and FIFO history.
     if (batchIds.length) {
+      // Same lock protocol as settlement/FIFO: take the global stock-mutation
+      // advisory lock before batch row locks to prevent deadlock with sales.
+      await acquireStockMutationLock(tx as unknown as typeof db);
       const batches = await tx.select().from(stockPurchasesTable)
         .where(inArray(stockPurchasesTable.id, batchIds)).for("update");
       if (batches.some((b) => Number(b.remainingWeightGrams) < Number(b.weightGrams))) {
@@ -599,21 +603,20 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
         .where(eq(purchaseBillItemsTable.billId, id))
         .orderBy(purchaseBillItemsTable.id)
         .for("update");
-      // Lock the linked stock batches and refuse to reprice any batch that has
-      // already been (partially) consumed by a sale: past FIFO consumptions
-      // persisted their cost at sale time and cannot be revalued retroactively.
+      // Lock the linked stock batches so a concurrent sale cannot consume them
+      // while we reprice. Already-consumed batches are allowed: their past FIFO
+      // consumption rows are retroactively repriced below so COGS/profit follow
+      // the fixing rate instead of the provisional zero cost.
       const batchIds = items.map((it) => it.stockPurchaseId).filter((v): v is number => v != null);
       if (batchIds.length > 0) {
-        const batches = await tx.select().from(stockPurchasesTable)
+        // Serialize with FIFO consumption/reversal via the global stock
+        // mutation advisory lock before taking batch row locks — the two
+        // paths lock batch rows in different orders and would otherwise
+        // be able to deadlock.
+        await acquireStockMutationLock(tx as unknown as typeof db);
+        await tx.select().from(stockPurchasesTable)
           .where(inArray(stockPurchasesTable.id, batchIds))
           .for("update");
-        const consumed = batches.filter((b) => Number(b.remainingWeightGrams) < Number(b.weightGrams));
-        if (consumed.length > 0) {
-          throw Object.assign(
-            new Error("Some of this bill's stock has already been sold at the unfixed (zero) cost. Delete the related invoices first, then apply the fixing rate."),
-            { statusCode: 409 },
-          );
-        }
       }
       let sum = 0;
       for (const item of items) {
@@ -632,6 +635,20 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
             })
             .where(eq(stockPurchasesTable.id, item.stockPurchaseId));
         }
+      }
+      // Retroactive COGS adjustment: any FIFO consumption slice that already
+      // pulled from these batches was costed at the provisional (zero) rate.
+      // Reprice those ledger rows from the batch's new price_per_gram so the
+      // dashboard's "Purchase Cost of Sold Items", per-invoice profit, and
+      // statement PDFs (all derived from inventory_consumptions.cost_aed)
+      // reflect the fixing rate without deleting invoices.
+      if (batchIds.length > 0) {
+        await tx.execute(sql`
+          UPDATE inventory_consumptions c
+          SET cost_aed = ROUND(c.weight_grams::numeric * sp.price_per_gram::numeric, 2)
+          FROM stock_purchases sp
+          WHERE c.purchase_id = sp.id AND c.purchase_id IN (${sql.join(batchIds.map((b) => sql`${b}`), sql`, `)})
+        `);
       }
       newTotalAed = Math.round(sum * 100) / 100;
     }

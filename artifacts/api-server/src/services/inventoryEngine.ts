@@ -14,6 +14,18 @@ import { db } from "@workspace/db";
 
 type Tx = typeof db;
 
+// Global stock-mutation lock. Every transaction that acquires FOR UPDATE row
+// locks on stock_purchases (FIFO consumption, consumption reversal, unfixed
+// bill settlement repricing) takes this advisory lock FIRST. Because each of
+// those paths locks batch rows in a different order (FIFO order per category,
+// arbitrary IN-list order, etc.), row locks alone can deadlock; serializing
+// on one advisory lock gives a deterministic protocol. It is transaction
+// scoped (auto-released on commit/rollback) and reentrant within a session,
+// so multiple consumeFifo calls in one transaction are safe.
+export async function acquireStockMutationLock(tx: Tx): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('stock_mutation'))`);
+}
+
 export interface FifoResult {
   cogsAed: number;
   shortfallGrams: number;
@@ -25,6 +37,8 @@ export async function consumeFifo(
 ): Promise<FifoResult> {
   const { invoiceId, invoiceItemId, category, grams } = args;
   if (!(grams > 0)) return { cogsAed: 0, shortfallGrams: 0 };
+
+  await acquireStockMutationLock(tx);
 
   // Lock the open batches of this category so concurrent invoices can't
   // consume the same grams twice.
@@ -85,6 +99,7 @@ export async function consumeFifo(
 // source batches (deleted batches are skipped — their consumption rows have
 // purchase_id NULL via ON DELETE SET NULL) and remove the ledger rows.
 export async function reverseInvoiceConsumption(tx: Tx, invoiceId: number): Promise<void> {
+  await acquireStockMutationLock(tx);
   await tx.execute(sql`
     UPDATE stock_purchases sp
     SET remaining_weight_grams = LEAST(
