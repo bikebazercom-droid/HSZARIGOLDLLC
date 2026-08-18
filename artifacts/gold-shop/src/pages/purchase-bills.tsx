@@ -491,7 +491,7 @@ export default function PurchaseBillsPage() {
             <Button
               className="w-full"
               onClick={handleSettle}
-              disabled={updatePaymentStatus.isPending}
+              disabled={updatePaymentStatus.isPending || settleStatus === settlingBill?.paymentStatus}
             >
               {updatePaymentStatus.isPending ? "Saving..." : "Save Status"}
             </Button>
