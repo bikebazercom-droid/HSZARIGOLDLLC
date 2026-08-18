@@ -195,6 +195,15 @@ export default function PurchaseBillsPage() {
     updatePaymentStatus.mutate({ id: settleId, data: { paymentStatus: settleStatus } }, {
       onSuccess: (bill) => {
         toast({ title: `Bill ${bill.billNo} updated to "${PAYMENT_LABEL[bill.paymentStatus]}"` });
+
+        // Immediately flip the badge in the table without waiting for the invalidation
+        // refetch — setQueryData makes the change visible in the same render cycle.
+        queryClient.setQueryData(
+          getListPurchaseBillsQueryKey(undefined),
+          (old: typeof bills) =>
+            old?.map((b) => b.id === bill.id ? { ...b, paymentStatus: bill.paymentStatus } : b),
+        );
+
         // If the bill was settled to "paid", check whether this supplier still has any
         // other unpaid/unfixed bills. If not, remove them from the session accumulator
         // so the warning no longer fires when the new-bill drawer is opened for them.
