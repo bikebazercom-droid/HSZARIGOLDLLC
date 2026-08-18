@@ -354,6 +354,75 @@ async function testD_ConcurrentDeletesProduceExactlyOneAuditEntry(): Promise<voi
 }
 
 /**
+ * Test D2: Two concurrent DELETE requests for the same PAID (non-pending) invoice,
+ * both carrying the X-Allow-Invoice-Delete unlock header.
+ *
+ * This is the financially sensitive path: both requests pass the pre-check guard
+ * (allowDelete = true) and enter the db.transaction concurrently.  The SELECT …
+ * FOR UPDATE lock inside the transaction serialises them exactly as for pending
+ * invoices (Test D), so:
+ *  - The first request to acquire the lock deletes the row, writes one audit
+ *    entry, and commits → must return 204.
+ *  - The second request acquires the lock after the first commits, finds no row
+ *    (locked === null), and returns null → must return 404.
+ *
+ * Invariants checked:
+ *  1. The pair of status codes is {204, 404} (one each, in any order).
+ *  2. The audit log for that invoice ID has exactly ONE "delete" entry afterward
+ *     — the concurrent loser must not write an orphan row.
+ */
+async function testD2_ConcurrentPaidDeletesProduceExactlyOneAuditEntry(): Promise<void> {
+  console.log(
+    "\nTest D2: Two concurrent DELETEs (with unlock header) race for the same PAID invoice — only one audit entry is written",
+  );
+
+  // Create a paid (non-pending) invoice so both requests need the header.
+  const inv = await createTestInvoice(false, "CONCURRENT-PAID");
+  console.log(`  Created ${inv.invoiceNumber} (isPending=false, id=${inv.id})`);
+
+  // Confirm no pre-existing delete entries.
+  const before = await deleteAuditEntriesForInvoice(inv.id);
+  assert(
+    before.length === 0,
+    `No delete audit entries before the race (got ${before.length})`,
+  );
+
+  // Both requests carry the unlock header — they both pass the pre-check guard
+  // and race into the transaction where the FOR UPDATE lock serialises them.
+  const [r1, r2] = await Promise.all([
+    deleteInvoice(inv.id, { withHeader: true }),
+    deleteInvoice(inv.id, { withHeader: true }),
+  ]);
+
+  const statuses = [r1.status, r2.status].sort();
+  assert(
+    statuses[0] === 204 && statuses[1] === 404,
+    `One 204 and one 404 (got ${r1.status} and ${r2.status})`,
+  );
+
+  // Allow a brief moment for both DB transactions to fully commit before
+  // reading the audit log (prevents a rare read-before-commit false failure).
+  await new Promise<void>((resolve) => setTimeout(resolve, 200));
+
+  const after = await deleteAuditEntriesForInvoice(inv.id);
+  assert(
+    after.length === 1,
+    `Exactly one delete audit entry written after the race (got ${after.length}) — concurrent loser must not produce an orphan row`,
+  );
+
+  if (after.length >= 1) {
+    const entry = after[0]!;
+    assert(entry.entityType === "invoice", `entityType is "invoice" (got "${entry.entityType}")`);
+    assert(entry.action === "delete", `action is "delete" (got "${entry.action}")`);
+    assert(entry.entityId === inv.id, `entityId matches invoice id ${inv.id} (got ${entry.entityId})`);
+    assert(
+      entry.billNo === inv.invoiceNumber,
+      `billNo matches invoice number ${inv.invoiceNumber} (got "${entry.billNo}")`,
+    );
+  }
+}
+
+/**
  * Test F: Static source-code verification — FOR UPDATE row lock precedes audit insert.
  *
  * Motivation: concurrent DELETE requests for the same invoice race to acquire
@@ -593,6 +662,7 @@ async function main(): Promise<void> {
   await testB_PaidInvoiceDeleteWritesAuditEntry();
   await testC_FailedDeletionLeavesNoOrphanAuditEntry();
   await testD_ConcurrentDeletesProduceExactlyOneAuditEntry();
+  await testD2_ConcurrentPaidDeletesProduceExactlyOneAuditEntry();
   await testF_RowLockPrecedesAuditInsertInDeleteTransaction();
   await testE_AuditInsertIsInsideDeleteTransaction();
 
