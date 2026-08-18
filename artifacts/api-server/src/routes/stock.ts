@@ -130,12 +130,22 @@ router.delete("/stock/purchases/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  // DELETE ... RETURNING inside one transaction: the reversal is applied only
-  // when this request actually removed the row, so concurrent deletes of the
-  // same purchase cannot double-reverse the stock.
+  let consumedConflict = false;
+  // Lock the batch row first so a concurrent sale cannot consume it while we
+  // decide; reject deletion if any weight has already been sold — reversing a
+  // partially/fully consumed batch would corrupt live stock and FIFO history.
   const deleted = await db.transaction(async (tx) => {
-    const [row] = await tx.delete(stockPurchasesTable).where(eq(stockPurchasesTable.id, id)).returning();
+    const [row] = await tx
+      .select()
+      .from(stockPurchasesTable)
+      .where(eq(stockPurchasesTable.id, id))
+      .for("update");
     if (!row) return null;
+    if (Number(row.remainingWeightGrams) < Number(row.weightGrams)) {
+      consumedConflict = true;
+      return null;
+    }
+    await tx.delete(stockPurchasesTable).where(eq(stockPurchasesTable.id, id));
     await applyStockDelta(
       tx as unknown as typeof db,
       row.category,
@@ -147,6 +157,10 @@ router.delete("/stock/purchases/:id", async (req, res): Promise<void> => {
     );
     return row;
   });
+  if (consumedConflict) {
+    res.status(409).json({ error: "This stock batch has already been partially or fully sold. Delete the related invoices first, or keep the batch for record integrity." });
+    return;
+  }
   if (!deleted) {
     res.status(404).json({ error: "Purchase not found" });
     return;
