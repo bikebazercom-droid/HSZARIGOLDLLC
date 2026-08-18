@@ -26,7 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { AlertTriangle, CheckCircle2, FileDown, Lock, LockOpen, Plus, ShieldAlert, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, FilePlus2, Lock, LockOpen, Plus, ShieldAlert, Trash2, X } from "lucide-react";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "@/pages/products/stock";
 
 function fmtG(n: number | undefined | null): string {
@@ -612,8 +612,9 @@ export default function PurchaseBillsPage() {
             <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <p>
-                This log records all significant actions — including invoice deletions, purchase bill deletions, and
-                payment-status changes. Entries are permanent and cannot be edited.
+                This log records all significant actions — including invoice creations (and backdated invoices),
+                invoice deletions, purchase bill deletions, and payment-status changes. Entries are permanent and
+                cannot be edited.
               </p>
             </div>
 
@@ -637,7 +638,7 @@ export default function PurchaseBillsPage() {
                         <TableHead>Party</TableHead>
                         <TableHead>Details</TableHead>
                         <TableHead className="text-right">Total (AED)</TableHead>
-                        <TableHead className="text-right pr-4">Deleted by</TableHead>
+                        <TableHead className="text-right pr-4">Actor</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -645,18 +646,30 @@ export default function PurchaseBillsPage() {
                         const d = entry.details as Record<string, unknown>;
                         const isInvoice = entry.entityType === "invoice";
                         const isStatusChange = entry.action === "update_payment_status";
-                        // For invoice deletions, the actor name is stored in details;
-                        // for purchase bill entries it falls back to the numeric actor ID.
-                        const actorLabel = isInvoice
-                          ? (typeof d.deletedByUserName === "string" ? d.deletedByUserName : null)
-                            ?? (entry.actorId != null ? `#${entry.actorId}` : "unknown")
-                          : (entry.actorId != null ? `#${entry.actorId}` : "unknown");
+                        const isCreate = entry.action === "create";
+                        const isDelete = entry.action === "delete";
+                        // Actor name: create events store createdByUserName, delete events store deletedByUserName.
+                        const actorNameFromDetails = isCreate
+                          ? (typeof d.createdByUserName === "string" ? d.createdByUserName : null)
+                          : isDelete
+                            ? (typeof d.deletedByUserName === "string" ? d.deletedByUserName : null)
+                            : null;
+                        const actorLabel = actorNameFromDetails
+                          ?? (entry.actorId != null ? `#${entry.actorId}` : "unknown");
                         // "Party" is supplier for bill events, customer for invoice events.
                         const partyLabel = isInvoice
                           ? (typeof d.customerName === "string" ? d.customerName : "—")
                           : (typeof d.supplierName === "string" ? d.supplierName : "—");
                         // Total: invoices store numeric `total`, bills store `totalAed`.
                         const totalRaw = isInvoice ? d.total : d.totalAed;
+                        // Backdated metadata (invoice create events only).
+                        const isBackdated = isInvoice && isCreate && d.backdated === true;
+                        const suppliedDateStr = isBackdated && typeof d.suppliedCreatedAt === "string"
+                          ? (() => {
+                              try { return format(new Date(d.suppliedCreatedAt), "dd MMM yyyy"); }
+                              catch { return null; }
+                            })()
+                          : null;
                         return (
                           <TableRow key={entry.id}>
                             <TableCell className="pl-4 whitespace-nowrap text-xs text-muted-foreground">
@@ -667,7 +680,19 @@ export default function PurchaseBillsPage() {
                                 <Badge className="uppercase text-xs tracking-wide bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100">
                                   Status Changed
                                 </Badge>
-                              ) : isInvoice ? (
+                              ) : isInvoice && isCreate ? (
+                                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                                  <Badge className="uppercase text-xs tracking-wide bg-green-100 text-green-800 border-green-300 hover:bg-green-100">
+                                    <FilePlus2 className="mr-1 h-3 w-3" />
+                                    Invoice Created
+                                  </Badge>
+                                  {isBackdated && (
+                                    <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-100">
+                                      Backdated{suppliedDateStr ? ` · ${suppliedDateStr}` : ""}
+                                    </Badge>
+                                  )}
+                                </span>
+                              ) : isInvoice && isDelete ? (
                                 <Badge variant="destructive" className="uppercase text-xs tracking-wide bg-red-700 hover:bg-red-700">
                                   Invoice Deleted
                                 </Badge>
@@ -688,7 +713,11 @@ export default function PurchaseBillsPage() {
                                     <span className="font-medium">{PAYMENT_LABEL[d.to] ?? d.to}</span>
                                   </span>
                                 ) : "—"
-                              ) : isInvoice ? (
+                              ) : isInvoice && isCreate ? (
+                                typeof d.paymentMethod === "string"
+                                  ? `Payment: ${d.paymentMethod}`
+                                  : "—"
+                              ) : isInvoice && isDelete ? (
                                 typeof d.paymentMethod === "string"
                                   ? `Payment: ${d.paymentMethod}`
                                   : "Deleted"
