@@ -371,8 +371,29 @@ router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => 
 router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const allowPaidDelete = req.headers["x-allow-paid-delete"] === "true";
+
   let consumedConflict = false;
+  let paidGuardRejected = false;
+  let rejectedBillNo = "";
   const deleted = await db.transaction(async (tx) => {
+    // Lock the bill row first to prevent a concurrent payment-status update from
+    // racing between our status check and the actual delete.
+    const [lockedBill] = await tx.select()
+      .from(purchaseBillsTable)
+      .where(eq(purchaseBillsTable.id, id))
+      .for("update");
+    if (!lockedBill) return null;
+
+    // Hard guard (enforced inside the transaction with the row lock held):
+    // paid bills cannot be deleted unless the caller explicitly opts in.
+    if (lockedBill.paymentStatus === "paid" && !allowPaidDelete) {
+      paidGuardRejected = true;
+      rejectedBillNo = lockedBill.billNo;
+      return null;
+    }
+
     const items = await tx.select().from(purchaseBillItemsTable).where(eq(purchaseBillItemsTable.billId, id));
     const batchIds = items.map((it) => it.stockPurchaseId).filter((v): v is number => v != null);
     // Lock the linked batches so a concurrent sale cannot consume them while
@@ -403,6 +424,12 @@ router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<voi
     }
     return bill;
   });
+  if (paidGuardRejected) {
+    res.status(403).json({
+      error: `Bill ${rejectedBillNo} is marked Paid in Cash. Paid bills are protected from deletion. Unlock deletion in the UI before attempting this action.`,
+    });
+    return;
+  }
   if (consumedConflict) {
     res.status(409).json({ error: "This bill's stock has already been partially or fully sold. Delete the related invoices first, or keep the bill for record integrity." });
     return;

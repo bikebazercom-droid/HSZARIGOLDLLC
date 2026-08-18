@@ -22,9 +22,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { AlertTriangle, CheckCircle2, FileDown, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, Lock, LockOpen, Plus, Trash2, X } from "lucide-react";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "@/pages/products/stock";
 
 function fmtG(n: number | undefined | null): string {
@@ -71,6 +73,10 @@ export default function PurchaseBillsPage() {
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
   const [deleteConfirmBill, setDeleteConfirmBill] = useState<{ id: number; ref: string } | null>(null);
+  // Session-level unlock: paid bills are protected by default; user must explicitly
+  // toggle this on to enable deletion (hard guard — server also enforces it).
+  const [paidDeleteUnlocked, setPaidDeleteUnlocked] = useState(false);
+  const [deleteChallenge, setDeleteChallenge] = useState("");
 
   // Client-side accumulator: tracks supplier names that received an unpaid/unfixed
   // bill in this session. Lets the warning fire instantly when the drawer reopens
@@ -186,7 +192,16 @@ export default function PurchaseBillsPage() {
 
   const handleDelete = (id: number, ref: string, paymentStatus: string) => {
     if (paymentStatus === "paid") {
-      // Paid bills get a richer AlertDialog warning (set below)
+      if (!paidDeleteUnlocked) {
+        toast({
+          title: "Paid bill is protected",
+          description: "Enable the 'Unlock paid bill deletion' toggle above the table before deleting a settled bill.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Paid + unlocked → open the challenge dialog
+      setDeleteChallenge("");
       setDeleteConfirmBill({ id, ref });
       return;
     }
@@ -197,13 +212,37 @@ export default function PurchaseBillsPage() {
     });
   };
 
-  const confirmDeletePaidBill = () => {
+  const confirmDeletePaidBill = async () => {
     if (!deleteConfirmBill) return;
-    deleteBill.mutate({ id: deleteConfirmBill.id }, {
-      onSuccess: () => { toast({ title: "Bill deleted" }); invalidate(); },
-      onError: () => toast({ title: "Failed to delete bill", variant: "destructive" }),
-    });
+    if (deleteChallenge.trim() !== deleteConfirmBill.ref) {
+      toast({ title: "Bill number does not match", description: "Type the exact bill number to confirm deletion.", variant: "destructive" });
+      return;
+    }
+    const billRef = deleteConfirmBill.ref;
+    const billId = deleteConfirmBill.id;
+    // Close the dialog immediately so the user isn't left waiting with it open.
     setDeleteConfirmBill(null);
+    setDeleteChallenge("");
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/purchase-bills/${billId}`, {
+        method: "DELETE",
+        headers: { "X-Allow-Paid-Delete": "true" },
+        credentials: "include",
+      });
+      if (!response.ok) {
+        let errorMsg = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (typeof body?.error === "string") errorMsg = body.error;
+        } catch { /* ignore parse errors */ }
+        toast({ title: "Failed to delete bill", description: errorMsg, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Paid bill deleted", description: `Bill ${billRef} has been permanently removed.` });
+      invalidate();
+    } catch (err: any) {
+      toast({ title: "Failed to delete bill", description: err?.message ?? "Network error", variant: "destructive" });
+    }
   };
 
   const openSettle = (id: number, currentStatus: string) => {
@@ -305,6 +344,40 @@ export default function PurchaseBillsPage() {
 
         {/* ─── All Bills tab ─── */}
         <TabsContent value="bills">
+          {/* Paid-bill deletion lock toggle */}
+          <div className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 mb-3 text-sm ${paidDeleteUnlocked ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
+            <div className="flex items-center gap-2">
+              {paidDeleteUnlocked
+                ? <LockOpen className="h-4 w-4 text-destructive shrink-0" />
+                : <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+              }
+              <div>
+                <span className="font-medium">Paid bill deletion</span>
+                {paidDeleteUnlocked
+                  ? <span className="ml-2 text-destructive font-semibold">UNLOCKED — deletion is enabled for this session</span>
+                  : <span className="ml-2 text-muted-foreground">Locked — paid bills are protected from accidental deletion</span>
+                }
+              </div>
+            </div>
+            <Switch
+              checked={paidDeleteUnlocked}
+              onCheckedChange={(checked) => {
+                setPaidDeleteUnlocked(checked);
+                if (!checked) setDeleteConfirmBill(null);
+              }}
+              aria-label="Unlock paid bill deletion"
+            />
+          </div>
+          {paidDeleteUnlocked && (
+            <div className="flex gap-2.5 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 mb-3 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                <strong>Deletion unlocked.</strong> Deleting a paid bill permanently removes settled financial records
+                and reverses stock batches. A bill-number confirmation is required for each deletion.
+                Turn off the toggle when done.
+              </p>
+            </div>
+          )}
           <div className="bg-card rounded-md border overflow-hidden">
             <div className="overflow-x-auto">
               <Table>
@@ -361,12 +434,27 @@ export default function PurchaseBillsPage() {
                           >
                             <FileDown className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(b.id, b.billNo, b.paymentStatus)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {b.paymentStatus === "paid" && !paidDeleteUnlocked ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground/40 cursor-not-allowed">
+                                    <Lock className="h-4 w-4" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[220px] text-center">
+                                  Paid bills are protected. Enable "Unlock paid bill deletion" above the table to allow deletion.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <Button
+                              variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(b.id, b.billNo, b.paymentStatus)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -568,33 +656,49 @@ export default function PurchaseBillsPage() {
       </AlertDialog>
 
       {/* ─── Delete paid bill confirmation dialog ─── */}
-      <AlertDialog open={deleteConfirmBill != null} onOpenChange={(o) => { if (!o) setDeleteConfirmBill(null); }}>
+      <AlertDialog open={deleteConfirmBill != null} onOpenChange={(o) => { if (!o) { setDeleteConfirmBill(null); setDeleteChallenge(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Delete a paid bill?
+              Delete a settled bill — this cannot be undone
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="space-y-3 text-sm text-muted-foreground">
                 <p>
-                  Bill <strong className="text-foreground">{deleteConfirmBill?.ref}</strong> is already marked{" "}
-                  <strong className="text-foreground">Paid in Cash</strong>.
+                  Bill <strong className="text-foreground">{deleteConfirmBill?.ref}</strong> is marked{" "}
+                  <strong className="text-foreground">Paid in Cash</strong>. Deleting it will:
                 </p>
-                <p>
-                  Deleting it will remove it from financial history, reverse its stock batches,
-                  and permanently erase the settled payment record. This cannot be undone.
-                </p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Permanently erase this settled payment record from financial history</li>
+                  <li>Reverse the linked stock batches and reduce inventory accordingly</li>
+                  <li>Remove any FIFO cost data associated with this purchase</li>
+                </ul>
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-medium text-foreground">
+                    Type the bill number <strong>{deleteConfirmBill?.ref}</strong> to confirm:
+                  </label>
+                  <Input
+                    value={deleteChallenge}
+                    onChange={(e) => setDeleteChallenge(e.target.value)}
+                    placeholder={deleteConfirmBill?.ref}
+                    className="h-9 font-mono"
+                    autoFocus
+                  />
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => { setDeleteConfirmBill(null); setDeleteChallenge(""); }}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={confirmDeletePaidBill}
+              disabled={deleteChallenge.trim() !== deleteConfirmBill?.ref}
+              onClick={(e) => { e.preventDefault(); confirmDeletePaidBill(); }}
             >
-              Yes, delete bill
+              Permanently delete bill
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
