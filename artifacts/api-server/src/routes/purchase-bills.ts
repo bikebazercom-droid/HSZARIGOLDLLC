@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import PDFDocument from "pdfkit";
 import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
-import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable } from "@workspace/db";
+import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable, auditLogTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { applyStockDelta } from "./stock.js";
@@ -257,6 +257,27 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
   doc.end();
 });
 
+// Audit log: recent destructive actions on purchase bills (most recent first).
+router.get("/purchase-bills/audit-log", requireAdmin, async (_req, res): Promise<void> => {
+  const entries = await db
+    .select()
+    .from(auditLogTable)
+    .where(eq(auditLogTable.entityType, "purchase_bill"))
+    .orderBy(desc(auditLogTable.createdAt))
+    .limit(200);
+  res.json(
+    entries.map((e) => ({
+      id: e.id,
+      actorId: e.actorId,
+      entityId: e.entityId,
+      action: e.action,
+      billNo: e.billNo,
+      details: (() => { try { return JSON.parse(e.details); } catch { return {}; } })(),
+      createdAt: e.createdAt.toISOString(),
+    })),
+  );
+});
+
 router.get("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {
   const query = ListPurchaseBillsQueryParams.safeParse(req.query);
   const { supplier, startDate, endDate } = query.success ? query.data : {} as Record<string, string | undefined>;
@@ -422,6 +443,26 @@ router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<voi
         );
       }
     }
+    // Write an immutable audit log entry so the deletion is traceable after the fact.
+    await tx.insert(auditLogTable).values({
+      actorId: req.session?.userId ?? null,
+      entityType: "purchase_bill",
+      entityId: id,
+      action: "delete",
+      billNo: bill.billNo,
+      details: JSON.stringify({
+        billNo: bill.billNo,
+        billDate: bill.billDate,
+        supplierName: bill.supplierName,
+        purchaseType: bill.purchaseType,
+        paymentStatus: bill.paymentStatus,
+        totalGrossGrams: bill.totalGrossGrams,
+        totalPureGrams: bill.totalPureGrams,
+        totalAed: bill.totalAed,
+        notes: bill.notes,
+        itemCount: items.length,
+      }),
+    });
     return bill;
   });
   if (paidGuardRejected) {

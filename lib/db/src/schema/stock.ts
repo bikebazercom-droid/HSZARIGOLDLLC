@@ -87,9 +87,23 @@ export const stockMovementsTable = pgTable("stock_movements", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Immutable audit log for destructive admin actions (bill deletions, etc.).
+// Stores who did what and when; details JSON captures a snapshot of the entity.
+export const auditLogTable = pgTable("audit_log", {
+  id: serial("id").primaryKey(),
+  actorId: integer("actor_id"), // session userId; null if indeterminate
+  entityType: text("entity_type").notNull(), // e.g. "purchase_bill"
+  entityId: integer("entity_id").notNull(),
+  action: text("action").notNull(), // e.g. "delete"
+  billNo: text("bill_no"), // denormalised for quick display without joins
+  details: text("details").notNull(), // JSON snapshot of the deleted entity
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertStockPurchaseSchema = createInsertSchema(stockPurchasesTable).omit({ id: true, createdAt: true });
 export type InsertStockPurchase = z.infer<typeof insertStockPurchaseSchema>;
 export type StockPurchase = typeof stockPurchasesTable.$inferSelect;
 export type StockLevel = typeof stockLevelsTable.$inferSelect;
 export type StockMovement = typeof stockMovementsTable.$inferSelect;
 export type InventoryConsumption = typeof inventoryConsumptionsTable.$inferSelect;
+export type AuditLogEntry = typeof auditLogTable.$inferSelect;

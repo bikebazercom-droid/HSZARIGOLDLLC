@@ -8,7 +8,7 @@ import {
   useGetSupplierLiability, getGetSupplierLiabilityQueryKey,
   useUpdatePurchaseBillPaymentStatus,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { AlertTriangle, CheckCircle2, FileDown, Lock, LockOpen, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, Lock, LockOpen, Plus, ShieldAlert, Trash2, X } from "lucide-react";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "@/pages/products/stock";
 
 function fmtG(n: number | undefined | null): string {
@@ -55,6 +55,24 @@ function lineCalc(l: LineDraft) {
   return { gross, purity, rate, making, pure, total };
 }
 
+interface AuditLogEntry {
+  id: number;
+  actorId: number | null;
+  entityId: number;
+  action: string;
+  billNo: string | null;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+async function fetchAuditLog(baseUrl: string): Promise<AuditLogEntry[]> {
+  const res = await fetch(`${baseUrl}api/purchase-bills/audit-log`, { credentials: "include" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+const AUDIT_LOG_QUERY_KEY = ["purchase-bills-audit-log"] as const;
+
 const PAYMENT_LABEL: Record<string, string> = {
   paid: "Paid in Cash", unpaid: "Unpaid / Liability", unfixed: "Unfixed Balance",
 };
@@ -68,6 +86,7 @@ const PAYMENT_OPTIONS = [
 export default function PurchaseBillsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const baseUrl = import.meta.env.BASE_URL as string;
   const [open, setOpen] = useState(false);
   const [settleId, setSettleId] = useState<number | null>(null);
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
@@ -85,6 +104,13 @@ export default function PurchaseBillsPage() {
 
   const { data: bills, isLoading } = useListPurchaseBills(undefined, {
     query: { queryKey: getListPurchaseBillsQueryKey(undefined), refetchOnWindowFocus: true, staleTime: 0 },
+  });
+
+  const { data: auditLog, isLoading: auditLogLoading, refetch: refetchAuditLog } = useQuery<AuditLogEntry[]>({
+    queryKey: AUDIT_LOG_QUERY_KEY,
+    queryFn: () => fetchAuditLog(baseUrl),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
     query: { queryKey: getGetSupplierLiabilityQueryKey(), refetchOnWindowFocus: true, staleTime: 0 },
@@ -140,12 +166,13 @@ export default function PurchaseBillsPage() {
     setLines([emptyLine()]);
   };
 
-  const invalidate = () => {
+  const invalidate = (includeAuditLog = false) => {
     queryClient.invalidateQueries({ queryKey: getListPurchaseBillsQueryKey(undefined) });
     queryClient.invalidateQueries({ queryKey: getGetSupplierLiabilityQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockLevelsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockPurchasesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockSuppliersQueryKey() });
+    if (includeAuditLog) refetchAuditLog();
   };
 
   const handleSave = () => {
@@ -207,7 +234,7 @@ export default function PurchaseBillsPage() {
     }
     if (!confirm(`Delete bill ${ref}? Its stock batches will be removed and stock reduced accordingly.`)) return;
     deleteBill.mutate({ id }, {
-      onSuccess: () => { toast({ title: "Bill deleted" }); invalidate(); },
+      onSuccess: () => { toast({ title: "Bill deleted" }); invalidate(true); },
       onError: () => toast({ title: "Failed to delete bill", variant: "destructive" }),
     });
   };
@@ -239,7 +266,7 @@ export default function PurchaseBillsPage() {
         return;
       }
       toast({ title: "Paid bill deleted", description: `Bill ${billRef} has been permanently removed.` });
-      invalidate();
+      invalidate(true);
     } catch (err: any) {
       toast({ title: "Failed to delete bill", description: err?.message ?? "Network error", variant: "destructive" });
     }
@@ -339,6 +366,10 @@ export default function PurchaseBillsPage() {
             {hasOutstanding && (
               <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive w-2 h-2" />
             )}
+          </TabsTrigger>
+          <TabsTrigger value="audit-log" className="relative" onClick={() => refetchAuditLog()}>
+            <ShieldAlert className="w-3.5 h-3.5 mr-1.5" />
+            Audit Log
           </TabsTrigger>
         </TabsList>
 
@@ -571,6 +602,79 @@ export default function PurchaseBillsPage() {
               </p>
             </div>
           )}
+        </TabsContent>
+
+        {/* ─── Audit Log tab ─── */}
+        <TabsContent value="audit-log">
+          <div className="space-y-3">
+            <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <p>
+                This log records all destructive actions on purchase bills — including deletions of paid (settled) bills.
+                Entries are permanent and cannot be edited.
+              </p>
+            </div>
+
+            {auditLogLoading ? (
+              <div className="h-32 flex items-center justify-center text-muted-foreground">Loading…</div>
+            ) : !auditLog || auditLog.length === 0 ? (
+              <div className="rounded-md border bg-card p-8 text-center space-y-2">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-green-500" />
+                <p className="font-semibold">No audit events yet.</p>
+                <p className="text-sm text-muted-foreground">Deletions of purchase bills will appear here.</p>
+              </div>
+            ) : (
+              <div className="bg-card rounded-md border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="pl-4">Timestamp</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Bill No</TableHead>
+                        <TableHead>Supplier</TableHead>
+                        <TableHead>Payment Status (at deletion)</TableHead>
+                        <TableHead className="text-right">Total (AED)</TableHead>
+                        <TableHead className="text-right pr-4">Actor (User ID)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {auditLog.map((entry) => {
+                        const d = entry.details as Record<string, unknown>;
+                        return (
+                          <TableRow key={entry.id}>
+                            <TableCell className="pl-4 whitespace-nowrap text-xs text-muted-foreground">
+                              {new Date(entry.createdAt).toLocaleString("en-AE")}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="destructive" className="uppercase text-xs tracking-wide">
+                                {entry.action}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">{entry.billNo ?? "—"}</TableCell>
+                            <TableCell>{typeof d.supplierName === "string" ? d.supplierName : "—"}</TableCell>
+                            <TableCell>
+                              {typeof d.paymentStatus === "string"
+                                ? (PAYMENT_LABEL[d.paymentStatus] ?? d.paymentStatus)
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {typeof d.totalAed === "string" || typeof d.totalAed === "number"
+                                ? fmtAED(Number(d.totalAed))
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-right pr-4 text-xs text-muted-foreground">
+                              {entry.actorId != null ? `#${entry.actorId}` : "unknown"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
