@@ -1897,6 +1897,13 @@ components:
         paymentStatus:
           type: string
           enum: [paid, unpaid, unfixed]
+        fixingRateAedPerG:
+          type: number
+          exclusiveMinimum: 0
+          description: >
+            Optional fixing rate applied when settling an unfixed bill.
+            When provided, each line's total is recomputed as pure weight x rate,
+            and bill totals plus linked stock batch pricing are updated atomically.
 
     PurchaseBillInput:
       type: object

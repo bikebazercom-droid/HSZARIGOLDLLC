@@ -1067,8 +1067,13 @@ export const UpdatePurchaseBillPaymentStatusParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const updatePurchaseBillPaymentStatusBodyFixingRateAedPerGExclusiveMin = 0;
+
+
+
 export const UpdatePurchaseBillPaymentStatusBody = zod.object({
-  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed'])
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
+  "fixingRateAedPerG": zod.number().gt(updatePurchaseBillPaymentStatusBodyFixingRateAedPerGExclusiveMin).optional().describe('Optional fixing rate applied when settling an unfixed bill. When provided, each line\'s total is recomputed as pure weight x rate, and bill totals plus linked stock batch pricing are updated atomically.\n')
 })
 
 export const UpdatePurchaseBillPaymentStatusResponse = zod.object({

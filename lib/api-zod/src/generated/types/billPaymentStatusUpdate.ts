@@ -9,4 +9,9 @@ import type { BillPaymentStatusUpdatePaymentStatus } from './billPaymentStatusUp
 
 export interface BillPaymentStatusUpdate {
   paymentStatus: BillPaymentStatusUpdatePaymentStatus;
+  /**
+     * Optional fixing rate applied when settling an unfixed bill. When provided, each line's total is recomputed as pure weight x rate, and bill totals plus linked stock batch pricing are updated atomically.
+     * @exclusiveMinimum 0
+     */
+  fixingRateAedPerG?: number;
 }

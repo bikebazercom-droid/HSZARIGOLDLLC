@@ -99,6 +99,7 @@ export default function PurchaseBillsPage() {
   const [open, setOpen] = useState(false);
   const [settleId, setSettleId] = useState<number | null>(null);
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
+  const [fixingRate, setFixingRate] = useState("");
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
   const [deleteConfirmBill, setDeleteConfirmBill] = useState<{ id: number; ref: string } | null>(null);
   const [deleteAuditEntry, setDeleteAuditEntry] = useState<{ id: number; ref: string } | null>(null);
@@ -184,7 +185,10 @@ export default function PurchaseBillsPage() {
   const setLine = (i: number, patch: Partial<LineDraft>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
-  const calc = lines.map(lineCalc);
+  // Unfixed purchases are created without pricing: rate/making/total stay 0
+  // and only the weights are captured. Pricing is fixed later at settlement.
+  const isUnfixedForm = purchaseType === "unfixed";
+  const calc = lines.map(lineCalc).map((c) => (isUnfixedForm ? { ...c, rate: 0, making: 0, total: 0 } : c));
   const totals = {
     gross: calc.reduce((s, c) => s + c.gross, 0),
     pure: calc.reduce((s, c) => s + c.pure, 0),
@@ -213,7 +217,7 @@ export default function PurchaseBillsPage() {
       const c = calc[i];
       if (!(c.gross > 0)) { toast({ title: `Line ${i + 1}: enter a valid gross weight`, variant: "destructive" }); return; }
       if (!(c.purity > 0 && c.purity <= 100)) { toast({ title: `Line ${i + 1}: purity must be between 0 and 100`, variant: "destructive" }); return; }
-      if (!(c.rate >= 0) || lines[i].rate === "") { toast({ title: `Line ${i + 1}: enter the purchase rate`, variant: "destructive" }); return; }
+      if (!isUnfixedForm && (!(c.rate >= 0) || lines[i].rate === "")) { toast({ title: `Line ${i + 1}: enter the purchase rate`, variant: "destructive" }); return; }
     }
     createBill.mutate({
       data: {
@@ -306,11 +310,27 @@ export default function PurchaseBillsPage() {
   const openSettle = (id: number, currentStatus: string) => {
     setSettleId(id);
     setSettleStatus(currentStatus === "paid" ? "paid" : currentStatus === "unfixed" ? "unfixed" : "unpaid");
+    setFixingRate("");
   };
 
   const handleSettle = () => {
     if (settleId == null) return;
-    updatePaymentStatus.mutate({ id: settleId, data: { paymentStatus: settleStatus } }, {
+    // Settling an unfixed bill to paid can carry a fixing rate: server reprices
+    // every line (pure weight x rate) and updates bill/stock/ledger atomically.
+    const isFixingSettlement =
+      settlingBill?.paymentStatus === "unfixed" && settleStatus === "paid";
+    const rateNum = parseFloat(fixingRate);
+    if (isFixingSettlement && !(rateNum > 0)) {
+      toast({ title: "Enter the fixing rate (AED/g)", description: "The rate is required to settle an unfixed bill.", variant: "destructive" });
+      return;
+    }
+    updatePaymentStatus.mutate({
+      id: settleId,
+      data: {
+        paymentStatus: settleStatus,
+        ...(isFixingSettlement ? { fixingRateAedPerG: rateNum } : {}),
+      },
+    }, {
       onSuccess: (bill) => {
         toast({ title: `Bill ${bill.billNo} updated to "${PAYMENT_LABEL[bill.paymentStatus]}"` });
 
@@ -882,6 +902,37 @@ export default function PurchaseBillsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Fixing-rate input: only when settling an unfixed bill to paid */}
+            {settlingBill?.paymentStatus === "unfixed" && settleStatus === "paid" && (
+              <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+                <Label className="text-amber-900">Fixing Rate (AED/g)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={fixingRate}
+                  onChange={(e) => setFixingRate(e.target.value)}
+                  placeholder="e.g. 470.00"
+                  className="bg-white"
+                />
+                <div className="text-xs text-amber-800 space-y-0.5">
+                  <p>
+                    Net Pure Weight: <span className="font-semibold">{fmtG(settlingBill.totalPureGrams)} g</span>
+                  </p>
+                  <p>
+                    Total Settled Amount:{" "}
+                    <span className="font-bold">
+                      AED {fmtAED(parseFloat(fixingRate) > 0 ? settlingBill.totalPureGrams * parseFloat(fixingRate) : 0)}
+                    </span>
+                  </p>
+                  <p className="text-amber-700">
+                    On save, the bill's rate and totals are fixed at this rate and the cash debit posts to the supplier ledger.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <Button
               className="w-full"
               onClick={() => {
@@ -1015,7 +1066,11 @@ export default function PurchaseBillsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Purchase Type</Label>
-                <Select value={purchaseType} onValueChange={(v) => setPurchaseType(v as any)}>
+                <Select value={purchaseType} onValueChange={(v) => {
+                  setPurchaseType(v as any);
+                  // Unfixed purchases start as an unfixed metal liability by default.
+                  if (v === "unfixed") setPaymentStatus("unfixed");
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="fixed">Fixed Purchase</SelectItem>
@@ -1103,16 +1158,20 @@ export default function PurchaseBillsPage() {
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Rate (AED/g)</Label>
-                          <Input className="h-9" type="number" min="0" step="any" value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} placeholder="470" />
+                          <Input className="h-9" type="number" min="0" step="any" value={isUnfixedForm ? "" : l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} placeholder={isUnfixedForm ? "Fixed later" : "470"} disabled={isUnfixedForm} />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Making / Premium (AED)</Label>
-                          <Input className="h-9" type="number" min="0" step="any" value={l.making} onChange={(e) => setLine(i, { making: e.target.value })} placeholder="0" />
+                          <Input className="h-9" type="number" min="0" step="any" value={isUnfixedForm ? "" : l.making} onChange={(e) => setLine(i, { making: e.target.value })} placeholder={isUnfixedForm ? "Fixed later" : "0"} disabled={isUnfixedForm} />
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                         <span>Net Pure Weight: <span className="font-semibold text-foreground">{fmtG(c.pure)} g</span></span>
-                        <span>Line Total: <span className="font-semibold text-foreground">AED {fmtAED(c.total)}</span></span>
+                        {isUnfixedForm ? (
+                          <span>Line Total: <span className="font-semibold text-foreground">AED 0.00 (unfixed — rate set at settlement)</span></span>
+                        ) : (
+                          <span>Line Total: <span className="font-semibold text-foreground">AED {fmtAED(c.total)}</span></span>
+                        )}
                       </div>
                     </div>
                   );

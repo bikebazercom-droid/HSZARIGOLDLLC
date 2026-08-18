@@ -550,6 +550,14 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const toStatus = body.data.paymentStatus;
+  // Normalize the fixing rate to the DB's numeric scale (4dp) so the stored
+  // rate exactly reproduces the stored totals, and bound it to sane magnitude.
+  const rawFixingRate = body.data.fixingRateAedPerG;
+  if (rawFixingRate != null && (!Number.isFinite(rawFixingRate) || rawFixingRate <= 0 || rawFixingRate > 1_000_000)) {
+    res.status(400).json({ error: "fixingRateAedPerG must be a positive number up to 1,000,000" });
+    return;
+  }
+  const fixingRate = rawFixingRate != null ? Math.round(rawFixingRate * 10000) / 10000 : undefined;
 
   // Run the read, update, and audit insert atomically so:
   //   • concurrent requests cannot both read the same old status and produce a
@@ -557,7 +565,9 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
   //   • if the audit insert fails the status update is rolled back, preventing
   //     an untracked change (mirrors the deletion path's transaction pattern)
   let notFound = false;
-  const updated = await db.transaction(async (tx) => {
+  let updated;
+  try {
+    updated = await db.transaction(async (tx) => {
     // Lock the row first so the "from" snapshot is stable for the whole transaction.
     const [locked] = await tx
       .select()
@@ -568,9 +578,70 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
 
     const fromStatus = locked.paymentStatus;
 
+    // Fixing-rate settlement: when settling an unfixed bill, an optional fixing
+    // rate reprices every line as pure weight x rate. Bill totals, item rows,
+    // and the linked FIFO stock batches are all updated in this transaction so
+    // COGS and the dual-ledger cash debit stay consistent.
+    let newTotalAed: number | null = null;
+    // Financial invariant: an unfixed bill cannot be marked paid without a
+    // fixing rate — the settled amount would otherwise silently stay 0.
+    if (fromStatus === "unfixed" && toStatus === "paid" && fixingRate == null) {
+      throw Object.assign(new Error("A fixing rate is required to settle an unfixed bill to Paid"), { statusCode: 400 });
+    }
+    if (fixingRate != null) {
+      if (fromStatus !== "unfixed") {
+        throw Object.assign(new Error("Fixing rate can only be applied to a bill that is currently Unfixed"), { statusCode: 409 });
+      }
+      if (toStatus !== "paid") {
+        throw Object.assign(new Error("Fixing rate requires the new status to be Paid"), { statusCode: 400 });
+      }
+      const items = await tx.select().from(purchaseBillItemsTable)
+        .where(eq(purchaseBillItemsTable.billId, id))
+        .orderBy(purchaseBillItemsTable.id)
+        .for("update");
+      // Lock the linked stock batches and refuse to reprice any batch that has
+      // already been (partially) consumed by a sale: past FIFO consumptions
+      // persisted their cost at sale time and cannot be revalued retroactively.
+      const batchIds = items.map((it) => it.stockPurchaseId).filter((v): v is number => v != null);
+      if (batchIds.length > 0) {
+        const batches = await tx.select().from(stockPurchasesTable)
+          .where(inArray(stockPurchasesTable.id, batchIds))
+          .for("update");
+        const consumed = batches.filter((b) => Number(b.remainingWeightGrams) < Number(b.weightGrams));
+        if (consumed.length > 0) {
+          throw Object.assign(
+            new Error("Some of this bill's stock has already been sold at the unfixed (zero) cost. Delete the related invoices first, then apply the fixing rate."),
+            { statusCode: 409 },
+          );
+        }
+      }
+      let sum = 0;
+      for (const item of items) {
+        const pure = Number(item.pureWeightGrams);
+        const gross = Number(item.grossWeightGrams);
+        const lineTotal = Math.round(pure * fixingRate * 100) / 100;
+        sum += lineTotal;
+        await tx.update(purchaseBillItemsTable)
+          .set({ rateAedPerG: String(fixingRate), lineTotalAed: String(lineTotal) })
+          .where(eq(purchaseBillItemsTable.id, item.id));
+        if (item.stockPurchaseId != null) {
+          await tx.update(stockPurchasesTable)
+            .set({
+              totalPriceAed: String(lineTotal),
+              pricePerGram: String(gross > 0 ? Math.round((lineTotal / gross) * 10000) / 10000 : 0),
+            })
+            .where(eq(stockPurchasesTable.id, item.stockPurchaseId));
+        }
+      }
+      newTotalAed = Math.round(sum * 100) / 100;
+    }
+
     const [upd] = await tx
       .update(purchaseBillsTable)
-      .set({ paymentStatus: toStatus })
+      .set({
+        paymentStatus: toStatus,
+        ...(newTotalAed != null ? { totalAed: String(newTotalAed) } : {}),
+      })
       .where(eq(purchaseBillsTable.id, id))
       .returning();
     if (!upd) { notFound = true; return null; }
@@ -589,12 +660,20 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
           to: toStatus,
           billNo: upd.billNo,
           supplierName: upd.supplierName,
+          ...(fixingRate != null ? { fixingRateAedPerG: fixingRate, settledTotalAed: newTotalAed } : {}),
         }),
       });
     }
 
     return upd;
-  });
+    });
+  } catch (err: any) {
+    if (typeof err?.statusCode === "number") {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 
   if (notFound || !updated) { res.status(404).json({ error: "Bill not found" }); return; }
 
