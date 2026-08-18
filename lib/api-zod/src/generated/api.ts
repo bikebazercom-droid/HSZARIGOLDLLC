@@ -903,6 +903,147 @@ export const DeleteStockPurchaseResponse = zod.void()
 
 
 /**
+ * @summary List purchase bills (supplier inflow documents)
+ */
+export const ListPurchaseBillsQueryParams = zod.object({
+  "supplier": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
+export const ListPurchaseBillsResponseItem = zod.object({
+  "id": zod.number(),
+  "billNo": zod.string(),
+  "billDate": zod.string(),
+  "supplierName": zod.string(),
+  "purchaseType": zod.enum(['fixed', 'unfixed']),
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalAed": zod.number(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "stockPurchaseId": zod.number().nullish(),
+  "category": zod.string(),
+  "grossWeightGrams": zod.number(),
+  "purityPercent": zod.number(),
+  "pureWeightGrams": zod.number(),
+  "rateAedPerG": zod.number(),
+  "makingChargeAed": zod.number(),
+  "lineTotalAed": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
+export const ListPurchaseBillsResponse = zod.array(ListPurchaseBillsResponseItem)
+
+
+/**
+ * @summary Record a purchase bill; each line item creates a stock batch and posts to the ledgers
+ */
+
+
+export const createPurchaseBillBodyItemsItemGrossWeightGramsExclusiveMin = 0;
+
+export const createPurchaseBillBodyItemsItemPurityPercentExclusiveMin = 0;
+export const createPurchaseBillBodyItemsItemPurityPercentMax = 100;
+
+export const createPurchaseBillBodyItemsItemRateAedPerGMin = 0;
+
+export const createPurchaseBillBodyItemsItemMakingChargeAedMin = 0;
+
+export const createPurchaseBillBodyItemsItemLineTotalAedMin = 0;
+
+
+
+
+export const CreatePurchaseBillBody = zod.object({
+  "billNo": zod.string().min(1),
+  "billDate": zod.string(),
+  "supplierName": zod.string().min(1),
+  "purchaseType": zod.enum(['fixed', 'unfixed']),
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
+  "grossWeightGrams": zod.number().gt(createPurchaseBillBodyItemsItemGrossWeightGramsExclusiveMin),
+  "purityPercent": zod.number().gt(createPurchaseBillBodyItemsItemPurityPercentExclusiveMin).max(createPurchaseBillBodyItemsItemPurityPercentMax),
+  "rateAedPerG": zod.number().min(createPurchaseBillBodyItemsItemRateAedPerGMin),
+  "makingChargeAed": zod.number().min(createPurchaseBillBodyItemsItemMakingChargeAedMin).optional(),
+  "lineTotalAed": zod.number().min(createPurchaseBillBodyItemsItemLineTotalAedMin)
+})).min(1)
+})
+
+export const CreatePurchaseBillResponse = zod.object({
+  "id": zod.number(),
+  "billNo": zod.string(),
+  "billDate": zod.string(),
+  "supplierName": zod.string(),
+  "purchaseType": zod.enum(['fixed', 'unfixed']),
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalAed": zod.number(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "stockPurchaseId": zod.number().nullish(),
+  "category": zod.string(),
+  "grossWeightGrams": zod.number(),
+  "purityPercent": zod.number(),
+  "pureWeightGrams": zod.number(),
+  "rateAedPerG": zod.number(),
+  "makingChargeAed": zod.number(),
+  "lineTotalAed": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a purchase bill with its line items
+ */
+export const GetPurchaseBillParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPurchaseBillResponse = zod.object({
+  "id": zod.number(),
+  "billNo": zod.string(),
+  "billDate": zod.string(),
+  "supplierName": zod.string(),
+  "purchaseType": zod.enum(['fixed', 'unfixed']),
+  "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalAed": zod.number(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "stockPurchaseId": zod.number().nullish(),
+  "category": zod.string(),
+  "grossWeightGrams": zod.number(),
+  "purityPercent": zod.number(),
+  "pureWeightGrams": zod.number(),
+  "rateAedPerG": zod.number(),
+  "makingChargeAed": zod.number(),
+  "lineTotalAed": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a purchase bill and reverse its stock batches
+ */
+export const DeletePurchaseBillParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePurchaseBillResponse = zod.void()
+
+
+/**
  * @summary Distinct supplier names
  */
 export const ListStockSuppliersResponseItem = zod.string()

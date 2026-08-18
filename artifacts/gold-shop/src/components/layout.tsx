@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Package,
-  Settings, LogOut, Menu, X, FilePlus,
+  Settings, LogOut, Menu, X, FilePlus, ReceiptText,
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import { useGetSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
@@ -15,6 +15,7 @@ const ADMIN_SETTINGS_SUB = [
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
+  { href: "/purchase-bills", label: "Purchase Bills", icon: ReceiptText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

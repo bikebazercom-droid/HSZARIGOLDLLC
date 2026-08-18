@@ -22,6 +22,37 @@ export const stockPurchasesTable = pgTable("stock_purchases", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Purchase bills: a supplier bill groups multiple line items. Each line item
+// materializes as its own stock_purchases batch (so FIFO, ledgers, and
+// statements keep working unchanged); the bill is the supplier-facing document.
+export const purchaseBillsTable = pgTable("purchase_bills", {
+  id: serial("id").primaryKey(),
+  billNo: text("bill_no").notNull(),
+  billDate: text("bill_date").notNull(), // yyyy-MM-dd
+  supplierName: text("supplier_name").notNull(),
+  purchaseType: text("purchase_type").notNull(), // fixed | unfixed
+  paymentStatus: text("payment_status").notNull(), // paid | unpaid | unfixed
+  totalGrossGrams: numeric("total_gross_grams", { precision: 14, scale: 4 }).notNull(),
+  totalPureGrams: numeric("total_pure_grams", { precision: 14, scale: 4 }).notNull(),
+  totalAed: numeric("total_aed", { precision: 14, scale: 2 }).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const purchaseBillItemsTable = pgTable("purchase_bill_items", {
+  id: serial("id").primaryKey(),
+  billId: integer("bill_id").notNull().references(() => purchaseBillsTable.id, { onDelete: "cascade" }),
+  // The stock batch this line created; set null if the batch is deleted directly.
+  stockPurchaseId: integer("stock_purchase_id").references(() => stockPurchasesTable.id, { onDelete: "set null" }),
+  category: text("category").notNull(),
+  grossWeightGrams: numeric("gross_weight_grams", { precision: 14, scale: 4 }).notNull(),
+  purityPercent: numeric("purity_percent", { precision: 7, scale: 3 }).notNull(), // e.g. 91.6
+  pureWeightGrams: numeric("pure_weight_grams", { precision: 14, scale: 4 }).notNull(),
+  rateAedPerG: numeric("rate_aed_per_g", { precision: 14, scale: 4 }).notNull(),
+  makingChargeAed: numeric("making_charge_aed", { precision: 14, scale: 2 }).notNull().default("0"),
+  lineTotalAed: numeric("line_total_aed", { precision: 14, scale: 2 }).notNull(),
+});
+
 // FIFO consumption ledger: one row per (invoice item × purchase batch) slice.
 // purchaseId is null when the sale exceeded available batches (shortfall costed
 // at the category's average purchase rate) or the source batch was deleted.

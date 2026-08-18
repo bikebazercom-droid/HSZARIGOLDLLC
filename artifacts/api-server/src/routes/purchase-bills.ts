@@ -1,0 +1,324 @@
+import { Router, type IRouter } from "express";
+import PDFDocument from "pdfkit";
+import { and, desc, eq, gte, ilike, inArray, lte } from "drizzle-orm";
+import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable } from "@workspace/db";
+import { broadcast } from "../lib/socket.js";
+import { requireAdmin } from "../middlewares/auth.js";
+import { applyStockDelta } from "./stock.js";
+import {
+  CreatePurchaseBillBody,
+  CreatePurchaseBillResponse,
+  GetPurchaseBillResponse,
+  ListPurchaseBillsQueryParams,
+  ListPurchaseBillsResponse,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+const CAT_LABEL: Record<string, string> = {
+  gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
+  gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
+};
+
+function parseItem(row: typeof purchaseBillItemsTable.$inferSelect) {
+  return {
+    id: row.id,
+    stockPurchaseId: row.stockPurchaseId,
+    category: row.category,
+    grossWeightGrams: Number(row.grossWeightGrams),
+    purityPercent: Number(row.purityPercent),
+    pureWeightGrams: Number(row.pureWeightGrams),
+    rateAedPerG: Number(row.rateAedPerG),
+    makingChargeAed: Number(row.makingChargeAed),
+    lineTotalAed: Number(row.lineTotalAed),
+  };
+}
+
+function parseBill(
+  row: typeof purchaseBillsTable.$inferSelect,
+  items: (typeof purchaseBillItemsTable.$inferSelect)[],
+) {
+  return {
+    id: row.id,
+    billNo: row.billNo,
+    billDate: row.billDate,
+    supplierName: row.supplierName,
+    purchaseType: row.purchaseType,
+    paymentStatus: row.paymentStatus,
+    totalGrossGrams: Number(row.totalGrossGrams),
+    totalPureGrams: Number(row.totalPureGrams),
+    totalAed: Number(row.totalAed),
+    notes: row.notes,
+    items: items.map(parseItem),
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function loadBill(id: number) {
+  const [bill] = await db.select().from(purchaseBillsTable).where(eq(purchaseBillsTable.id, id));
+  if (!bill) return null;
+  const items = await db.select().from(purchaseBillItemsTable)
+    .where(eq(purchaseBillItemsTable.billId, id)).orderBy(purchaseBillItemsTable.id);
+  return { bill, items };
+}
+
+router.get("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {
+  const query = ListPurchaseBillsQueryParams.safeParse(req.query);
+  const { supplier, startDate, endDate } = query.success ? query.data : {} as Record<string, string | undefined>;
+  const conditions = [];
+  if (supplier) conditions.push(ilike(purchaseBillsTable.supplierName, `%${supplier}%`));
+  if (startDate) conditions.push(gte(purchaseBillsTable.billDate, startDate));
+  if (endDate) conditions.push(lte(purchaseBillsTable.billDate, endDate));
+
+  const bills = await db.select().from(purchaseBillsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(purchaseBillsTable.billDate), desc(purchaseBillsTable.id));
+  const items = bills.length
+    ? await db.select().from(purchaseBillItemsTable)
+        .where(inArray(purchaseBillItemsTable.billId, bills.map((b) => b.id)))
+        .orderBy(purchaseBillItemsTable.id)
+    : [];
+  res.json(ListPurchaseBillsResponse.parse(
+    bills.map((b) => parseBill(b, items.filter((i) => i.billId === b.id))),
+  ));
+});
+
+router.get("/purchase-bills/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const loaded = await loadBill(id);
+  if (!loaded) { res.status(404).json({ error: "Bill not found" }); return; }
+  res.json(GetPurchaseBillResponse.parse(parseBill(loaded.bill, loaded.items)));
+});
+
+router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {
+  const parsed = CreatePurchaseBillBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const input = parsed.data;
+  // The server is authoritative for money math: line total = gross x rate +
+  // making. The client-sent value is only accepted as a cross-check (rounding
+  // tolerance); a bigger mismatch is rejected as a tampered/buggy payload.
+  const withPure: ((typeof input.items)[number] & {
+    makingChargeAed: number;
+    lineTotalAed: number;
+    pureWeightGrams: number;
+  })[] = [];
+  for (let i = 0; i < input.items.length; i++) {
+    const it = input.items[i];
+    const making = it.makingChargeAed ?? 0;
+    const computedTotal = Math.round((it.grossWeightGrams * it.rateAedPerG + making) * 100) / 100;
+    if (Math.abs(computedTotal - it.lineTotalAed) > 0.05) {
+      res.status(400).json({ error: `Line ${i + 1}: lineTotalAed ${it.lineTotalAed} does not match gross x rate + making = ${computedTotal}` });
+      return;
+    }
+    withPure.push({
+      ...it,
+      makingChargeAed: making,
+      lineTotalAed: computedTotal,
+      pureWeightGrams: it.grossWeightGrams * (it.purityPercent / 100),
+    });
+  }
+  const totalGross = withPure.reduce((s, it) => s + it.grossWeightGrams, 0);
+  const totalPure = withPure.reduce((s, it) => s + it.pureWeightGrams, 0);
+  const totalAed = withPure.reduce((s, it) => s + it.lineTotalAed, 0);
+
+  const created = await db.transaction(async (tx) => {
+    const [bill] = await tx.insert(purchaseBillsTable).values({
+      billNo: input.billNo.trim(),
+      billDate: input.billDate,
+      supplierName: input.supplierName.trim(),
+      purchaseType: input.purchaseType,
+      paymentStatus: input.paymentStatus,
+      totalGrossGrams: String(totalGross),
+      totalPureGrams: String(totalPure),
+      totalAed: String(totalAed),
+      notes: input.notes?.trim() || null,
+    }).returning();
+
+    const itemRows = [];
+    for (const it of withPure) {
+      // Each bill line becomes its own FIFO stock batch so inventory,
+      // dual-ledger, and statement outputs keep working unchanged.
+      const [sp] = await tx.insert(stockPurchasesTable).values({
+        category: it.category,
+        supplierName: input.supplierName.trim(),
+        purchaseDate: input.billDate,
+        weightGrams: String(it.grossWeightGrams),
+        totalPriceAed: String(it.lineTotalAed),
+        pricePerGram: String(it.grossWeightGrams > 0 ? Math.round((it.lineTotalAed / it.grossWeightGrams) * 10000) / 10000 : 0),
+        remainingWeightGrams: String(it.grossWeightGrams),
+        narrative: `Bill ${input.billNo.trim()} · ${it.purityPercent}% purity (${input.purchaseType})`,
+      }).returning();
+      await applyStockDelta(tx as unknown as typeof db, it.category, it.grossWeightGrams, "purchase", "purchase_bill", bill.id);
+      const [row] = await tx.insert(purchaseBillItemsTable).values({
+        billId: bill.id,
+        stockPurchaseId: sp.id,
+        category: it.category,
+        grossWeightGrams: String(it.grossWeightGrams),
+        purityPercent: String(it.purityPercent),
+        pureWeightGrams: String(Math.round(it.pureWeightGrams * 10000) / 10000),
+        rateAedPerG: String(it.rateAedPerG),
+        makingChargeAed: String(it.makingChargeAed),
+        lineTotalAed: String(it.lineTotalAed),
+      }).returning();
+      itemRows.push(row);
+    }
+    return { bill, itemRows };
+  });
+
+  res.status(201).json(CreatePurchaseBillResponse.parse(parseBill(created.bill, created.itemRows)));
+  broadcast("STOCK_MUTATION");
+});
+
+router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  let consumedConflict = false;
+  const deleted = await db.transaction(async (tx) => {
+    const items = await tx.select().from(purchaseBillItemsTable).where(eq(purchaseBillItemsTable.billId, id));
+    const batchIds = items.map((it) => it.stockPurchaseId).filter((v): v is number => v != null);
+    // Lock the linked batches so a concurrent sale cannot consume them while
+    // we decide; reject deletion if any batch is already (partially) sold —
+    // reversing a consumed batch would corrupt live stock and FIFO history.
+    if (batchIds.length) {
+      const batches = await tx.select().from(stockPurchasesTable)
+        .where(inArray(stockPurchasesTable.id, batchIds)).for("update");
+      if (batches.some((b) => Number(b.remainingWeightGrams) < Number(b.weightGrams))) {
+        consumedConflict = true;
+        return null;
+      }
+    }
+    const [bill] = await tx.delete(purchaseBillsTable).where(eq(purchaseBillsTable.id, id)).returning();
+    if (!bill) return null;
+    // Reverse each linked stock batch (same semantics as deleting a purchase).
+    for (const it of items) {
+      if (it.stockPurchaseId == null) continue;
+      const [sp] = await tx.delete(stockPurchasesTable)
+        .where(eq(stockPurchasesTable.id, it.stockPurchaseId)).returning();
+      if (sp) {
+        await applyStockDelta(
+          tx as unknown as typeof db, sp.category, -Number(sp.weightGrams),
+          "purchase_reversal", "purchase_bill", id,
+          `Deleted bill ${bill.billNo} (${bill.supplierName})`,
+        );
+      }
+    }
+    return bill;
+  });
+  if (consumedConflict) {
+    res.status(409).json({ error: "This bill's stock has already been partially or fully sold. Delete the related invoices first, or keep the bill for record integrity." });
+    return;
+  }
+  if (!deleted) { res.status(404).json({ error: "Bill not found" }); return; }
+  res.status(204).end();
+  broadcast("STOCK_MUTATION");
+});
+
+// Raw PDF route (outside the OpenAPI spec, like other document downloads):
+// formal "Purchase Receipt / Bill Confirmation" for record-keeping.
+router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const loaded = await loadBill(id);
+  if (!loaded) { res.status(404).json({ error: "Bill not found" }); return; }
+  const { bill, items } = loaded;
+
+  const NAVY = "#1e3a5f";
+  const GOLD = "#c8a43a";
+  const GRID = "#d1d5db";
+  const LIGHT = "#f5f3ee";
+  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="purchase-bill-${bill.billNo.replace(/[^A-Za-z0-9-_]/g, "_")}.pdf"`);
+  doc.pipe(res);
+
+  const W = doc.page.width - 80; // 515 for A4 portrait
+  const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+  doc.rect(0, 0, doc.page.width, 96).fill(NAVY);
+  doc.fillColor(GOLD).fontSize(20).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
+  doc.fillColor("#aac4e8").fontSize(11).font("Helvetica-Bold").text("PURCHASE RECEIPT / BILL CONFIRMATION", 40, 48);
+  doc.fillColor("white").fontSize(9).font("Helvetica").text(`Generated: ${new Date().toLocaleString("en-AE")}`, 40, 66);
+
+  // Bill meta box
+  const meta: [string, string][] = [
+    ["Bill No / Ref:", bill.billNo],
+    ["Bill Date:", bill.billDate],
+    ["Supplier:", bill.supplierName],
+    ["Purchase Type:", bill.purchaseType === "fixed" ? "Fixed Purchase" : "Unfixed Purchase"],
+    ["Payment Status:", bill.paymentStatus === "paid" ? "Paid in Cash" : bill.paymentStatus === "unpaid" ? "Unpaid / Liability" : "Unfixed Balance"],
+  ];
+  doc.rect(40, 110, W, 20 + meta.length * 16).fillAndStroke(LIGHT, GRID);
+  let my = 120;
+  for (const [k, v] of meta) {
+    doc.fillColor("#666").font("Helvetica").fontSize(9).text(k, 52, my, { lineBreak: false });
+    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9).text(v, 160, my);
+    my += 16;
+  }
+
+  // Items table — widths sum to 515.
+  let y = 110 + 20 + meta.length * 16 + 18;
+  const header: [string, number, boolean?][] = [
+    ["Category", 95], ["Gross Wt (g)", 70, true], ["Purity %", 55, true],
+    ["Pure Wt (g)", 70, true], ["Rate (AED/g)", 70, true],
+    ["Making (AED)", 70, true], ["Line Total (AED)", 85, true],
+  ];
+  const drawRow = (cells: [string, number, boolean?][], bg: string, color: string, bold: boolean, h = 18) => {
+    if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
+    let x = 40;
+    doc.lineWidth(0.5);
+    for (const [text, width, right] of cells) {
+      doc.rect(x, y, width, h).fillAndStroke(bg, GRID);
+      doc.fillColor(color).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
+      doc.text(text, x + 5, y + (h - 9) / 2, { width: width - 10, align: right ? "right" : "left", lineBreak: false });
+      x += width;
+    }
+    y += h;
+  };
+  drawRow(header, "#1e293b", "white", true);
+  items.forEach((raw, i) => {
+    const it = parseItem(raw);
+    drawRow([
+      [CAT_LABEL[it.category] ?? it.category, 95],
+      [num3(it.grossWeightGrams), 70, true],
+      [num2(it.purityPercent), 55, true],
+      [num3(it.pureWeightGrams), 70, true],
+      [num2(it.rateAedPerG), 70, true],
+      [num2(it.makingChargeAed), 70, true],
+      [num2(it.lineTotalAed), 85, true],
+    ], i % 2 === 0 ? "white" : "#f8fafc", "#1a1a1a", false);
+  });
+  drawRow([
+    ["TOTAL", 95],
+    [num3(Number(bill.totalGrossGrams)), 70, true],
+    ["", 55],
+    [num3(Number(bill.totalPureGrams)), 70, true],
+    ["", 70],
+    ["", 70],
+    [`AED ${num2(Number(bill.totalAed))}`, 85, true],
+  ], "#eee6cf", NAVY, true, 20);
+
+  y += 14;
+  doc.rect(40, y, W, 44).fillAndStroke("#fdf9ee", GOLD);
+  doc.fillColor("#666").font("Helvetica").fontSize(8.5)
+    .text("Ledger posting: Metal Credit (+ weight) to supplier & master ledger; Cash Debit (+ cost) to supplier account.", 52, y + 8, { width: W - 24 });
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
+    .text(`Total Metal Credit: ${num3(Number(bill.totalGrossGrams))} g     ·     Total Cash Debit: AED ${num2(Number(bill.totalAed))}`, 52, y + 24, { width: W - 24 });
+  y += 58;
+  if (bill.notes) {
+    doc.fillColor("#444").font("Helvetica-Oblique").fontSize(8.5).text(`Notes: ${bill.notes}`, 40, y, { width: W });
+    y += 20;
+  }
+
+  doc.fillColor("#777").font("Helvetica").fontSize(8)
+    .text("Supplier Signature: ______________________", 40, y + 30)
+    .text("Authorized Signature: ______________________", 320, y + 30);
+
+  doc.end();
+});
+
+export default router;

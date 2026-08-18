@@ -8,6 +8,7 @@ import productsRouter from "./products";
 import priceItemsRouter, { publicPriceItemsRouter } from "./price-items";
 import invoicesRouter from "./invoices";
 import stockRouter from "./stock";
+import purchaseBillsRouter from "./purchase-bills";
 import settingsRouter from "./settings";
 import { requireAuth } from "../middlewares/auth";
 
@@ -26,6 +27,7 @@ router.use(productsRouter);
 router.use(priceItemsRouter);
 router.use(invoicesRouter);
 router.use(stockRouter);
+router.use(purchaseBillsRouter);
 router.use(settingsRouter);
 
 export default router;

@@ -7,4 +7,5 @@
 - [Gold-shop per-item live rate injection](gold-shop-per-item-live-rate.md) — each invoice row derives its own metal rate; never reintroduce a single shared page-level rate driving heterogeneous rows.
 - [Gold-shop inventory ledger](gold-shop-inventory-ledger.md) — stock changes only via applyStockDelta in transactions; sales never blocked (warnings instead); "995" is its own stock bucket despite tt_bar pricing.
 - [Gold-shop FIFO batch COGS](gold-shop-fifo-cogs.md) — exact FIFO consumption ledger (ordered purchase_date ASC, not created_at) replaces weighted-avg COGS; reversal must run BEFORE invoice delete (cascade FK).
+- [Gold-shop purchase bills](gold-shop-purchase-bills.md) — bill lines become FIFO stock batches; delete 409s if consumed; server recomputes line totals (never trust client math).
 - [Gold-shop TV board fully removed](gold-shop-tv-removed.md) — TV board and entire ExternalSync system permanently deleted; no /tv route, no sync service, no sync DB columns, no sync settings tab.

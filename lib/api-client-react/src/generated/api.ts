@@ -40,6 +40,7 @@ import type {
   ListCustomersParams,
   ListInvoicesParams,
   ListProductsParams,
+  ListPurchaseBillsParams,
   ListStockMovementsParams,
   ListStockPurchasesParams,
   MonthlySale,
@@ -49,6 +50,8 @@ import type {
   PricesInput,
   Product,
   ProductInput,
+  PurchaseBill,
+  PurchaseBillInput,
   SalesReport,
   StockLevel,
   StockMovement,
@@ -2324,6 +2327,307 @@ export const useDeleteStockPurchase = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteStockPurchaseMutationOptions(options));
+    }
+
+export const getListPurchaseBillsUrl = (params?: ListPurchaseBillsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/purchase-bills?${stringifiedParams}` : `/api/purchase-bills`
+}
+
+/**
+ * @summary List purchase bills (supplier inflow documents)
+ */
+export const listPurchaseBills = async (params?: ListPurchaseBillsParams, options?: RequestInit): Promise<PurchaseBill[]> => {
+
+  return customFetch<PurchaseBill[]>(getListPurchaseBillsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPurchaseBillsQueryKey = (params?: ListPurchaseBillsParams,) => {
+    return [
+    `/api/purchase-bills`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPurchaseBillsQueryOptions = <TData = Awaited<ReturnType<typeof listPurchaseBills>>, TError = ErrorType<unknown>>(params?: ListPurchaseBillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPurchaseBills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPurchaseBillsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPurchaseBills>>> = ({ signal }) => listPurchaseBills(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPurchaseBills>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPurchaseBillsQueryResult = NonNullable<Awaited<ReturnType<typeof listPurchaseBills>>>
+export type ListPurchaseBillsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List purchase bills (supplier inflow documents)
+ */
+
+export function useListPurchaseBills<TData = Awaited<ReturnType<typeof listPurchaseBills>>, TError = ErrorType<unknown>>(
+ params?: ListPurchaseBillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPurchaseBills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPurchaseBillsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePurchaseBillUrl = () => {
+
+
+
+
+  return `/api/purchase-bills`
+}
+
+/**
+ * @summary Record a purchase bill; each line item creates a stock batch and posts to the ledgers
+ */
+export const createPurchaseBill = async (purchaseBillInput: PurchaseBillInput, options?: RequestInit): Promise<PurchaseBill> => {
+
+  return customFetch<PurchaseBill>(getCreatePurchaseBillUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(purchaseBillInput)
+  }
+);}
+
+
+
+
+export const getCreatePurchaseBillMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPurchaseBill>>, TError,{data: BodyType<PurchaseBillInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPurchaseBill>>, TError,{data: BodyType<PurchaseBillInput>}, TContext> => {
+
+const mutationKey = ['createPurchaseBill'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPurchaseBill>>, {data: BodyType<PurchaseBillInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPurchaseBill(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePurchaseBillMutationResult = NonNullable<Awaited<ReturnType<typeof createPurchaseBill>>>
+    export type CreatePurchaseBillMutationBody = BodyType<PurchaseBillInput>
+    export type CreatePurchaseBillMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a purchase bill; each line item creates a stock batch and posts to the ledgers
+ */
+export const useCreatePurchaseBill = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPurchaseBill>>, TError,{data: BodyType<PurchaseBillInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPurchaseBill>>,
+        TError,
+        {data: BodyType<PurchaseBillInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePurchaseBillMutationOptions(options));
+    }
+
+export const getGetPurchaseBillUrl = (id: number,) => {
+
+
+
+
+  return `/api/purchase-bills/${id}`
+}
+
+/**
+ * @summary Get a purchase bill with its line items
+ */
+export const getPurchaseBill = async (id: number, options?: RequestInit): Promise<PurchaseBill> => {
+
+  return customFetch<PurchaseBill>(getGetPurchaseBillUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPurchaseBillQueryKey = (id: number,) => {
+    return [
+    `/api/purchase-bills/${id}`
+    ] as const;
+    }
+
+
+export const getGetPurchaseBillQueryOptions = <TData = Awaited<ReturnType<typeof getPurchaseBill>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPurchaseBill>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPurchaseBillQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPurchaseBill>>> = ({ signal }) => getPurchaseBill(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPurchaseBill>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPurchaseBillQueryResult = NonNullable<Awaited<ReturnType<typeof getPurchaseBill>>>
+export type GetPurchaseBillQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a purchase bill with its line items
+ */
+
+export function useGetPurchaseBill<TData = Awaited<ReturnType<typeof getPurchaseBill>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPurchaseBill>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPurchaseBillQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeletePurchaseBillUrl = (id: number,) => {
+
+
+
+
+  return `/api/purchase-bills/${id}`
+}
+
+/**
+ * @summary Delete a purchase bill and reverse its stock batches
+ */
+export const deletePurchaseBill = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePurchaseBillUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePurchaseBillMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePurchaseBill>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePurchaseBill>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePurchaseBill'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePurchaseBill>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePurchaseBill(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePurchaseBillMutationResult = NonNullable<Awaited<ReturnType<typeof deletePurchaseBill>>>
+
+    export type DeletePurchaseBillMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a purchase bill and reverse its stock batches
+ */
+export const useDeletePurchaseBill = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePurchaseBill>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePurchaseBill>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePurchaseBillMutationOptions(options));
     }
 
 export const getListStockSuppliersUrl = () => {

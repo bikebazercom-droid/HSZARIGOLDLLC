@@ -587,6 +587,111 @@ export interface StockPurchaseInput {
   narrative?: string;
 }
 
+export interface PurchaseBillItem {
+  id: number;
+  /** @nullable */
+  stockPurchaseId?: number | null;
+  category: string;
+  grossWeightGrams: number;
+  purityPercent: number;
+  pureWeightGrams: number;
+  rateAedPerG: number;
+  makingChargeAed: number;
+  lineTotalAed: number;
+}
+
+export type PurchaseBillPurchaseType = typeof PurchaseBillPurchaseType[keyof typeof PurchaseBillPurchaseType];
+
+
+export const PurchaseBillPurchaseType = {
+  fixed: 'fixed',
+  unfixed: 'unfixed',
+} as const;
+
+export type PurchaseBillPaymentStatus = typeof PurchaseBillPaymentStatus[keyof typeof PurchaseBillPaymentStatus];
+
+
+export const PurchaseBillPaymentStatus = {
+  paid: 'paid',
+  unpaid: 'unpaid',
+  unfixed: 'unfixed',
+} as const;
+
+export interface PurchaseBill {
+  id: number;
+  billNo: string;
+  billDate: string;
+  supplierName: string;
+  purchaseType: PurchaseBillPurchaseType;
+  paymentStatus: PurchaseBillPaymentStatus;
+  totalGrossGrams: number;
+  totalPureGrams: number;
+  totalAed: number;
+  /** @nullable */
+  notes?: string | null;
+  items: PurchaseBillItem[];
+  createdAt: string;
+}
+
+export type PurchaseBillItemInputCategory = typeof PurchaseBillItemInputCategory[keyof typeof PurchaseBillItemInputCategory];
+
+
+export const PurchaseBillItemInputCategory = {
+  gold: 'gold',
+  tt_bar: 'tt_bar',
+  kg_bar: 'kg_bar',
+  NUMBER_995: '995',
+  gold_jewelry_22k: 'gold_jewelry_22k',
+  silver: 'silver',
+} as const;
+
+export interface PurchaseBillItemInput {
+  category: PurchaseBillItemInputCategory;
+  /** @exclusiveMinimum 0 */
+  grossWeightGrams: number;
+  /**
+     * @maximum 100
+     * @exclusiveMinimum 0
+     */
+  purityPercent: number;
+  /** @minimum 0 */
+  rateAedPerG: number;
+  /** @minimum 0 */
+  makingChargeAed?: number;
+  /** @minimum 0 */
+  lineTotalAed: number;
+}
+
+export type PurchaseBillInputPurchaseType = typeof PurchaseBillInputPurchaseType[keyof typeof PurchaseBillInputPurchaseType];
+
+
+export const PurchaseBillInputPurchaseType = {
+  fixed: 'fixed',
+  unfixed: 'unfixed',
+} as const;
+
+export type PurchaseBillInputPaymentStatus = typeof PurchaseBillInputPaymentStatus[keyof typeof PurchaseBillInputPaymentStatus];
+
+
+export const PurchaseBillInputPaymentStatus = {
+  paid: 'paid',
+  unpaid: 'unpaid',
+  unfixed: 'unfixed',
+} as const;
+
+export interface PurchaseBillInput {
+  /** @minLength 1 */
+  billNo: string;
+  billDate: string;
+  /** @minLength 1 */
+  supplierName: string;
+  purchaseType: PurchaseBillInputPurchaseType;
+  paymentStatus: PurchaseBillInputPaymentStatus;
+  notes?: string;
+  /** @minItems 1 */
+  items: PurchaseBillItemInput[];
+}
+
 export interface StockMovement {
   id: number;
   category: string;
@@ -651,6 +756,12 @@ export const ListInvoicesCategory = {
 export type ListStockPurchasesParams = {
 supplier?: string;
 category?: string;
+startDate?: string;
+endDate?: string;
+};
+
+export type ListPurchaseBillsParams = {
+supplier?: string;
 startDate?: string;
 endDate?: string;
 };

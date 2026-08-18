@@ -607,6 +607,83 @@ paths:
         "204":
           description: Deleted
 
+  /purchase-bills:
+    get:
+      operationId: listPurchaseBills
+      tags: [stock]
+      summary: List purchase bills (supplier inflow documents)
+      parameters:
+        - name: supplier
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Purchase bills
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseBill"
+    post:
+      operationId: createPurchaseBill
+      tags: [stock]
+      summary: Record a purchase bill; each line item creates a stock batch and posts to the ledgers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseBillInput"
+      responses:
+        "201":
+          description: Created purchase bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseBill"
+
+  /purchase-bills/{id}:
+    get:
+      operationId: getPurchaseBill
+      tags: [stock]
+      summary: Get a purchase bill with its line items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseBill"
+    delete:
+      operationId: deletePurchaseBill
+      tags: [stock]
+      summary: Delete a purchase bill and reverse its stock batches
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   /stock/suppliers:
     get:
       operationId: listStockSuppliers
@@ -1648,6 +1725,113 @@ components:
           minimum: 0
         narrative:
           type: string
+
+    PurchaseBillItem:
+      type: object
+      required: [id, category, grossWeightGrams, purityPercent, pureWeightGrams, rateAedPerG, makingChargeAed, lineTotalAed]
+      properties:
+        id:
+          type: integer
+        stockPurchaseId:
+          type: ["integer", "null"]
+        category:
+          type: string
+        grossWeightGrams:
+          type: number
+        purityPercent:
+          type: number
+        pureWeightGrams:
+          type: number
+        rateAedPerG:
+          type: number
+        makingChargeAed:
+          type: number
+        lineTotalAed:
+          type: number
+
+    PurchaseBill:
+      type: object
+      required: [id, billNo, billDate, supplierName, purchaseType, paymentStatus, totalGrossGrams, totalPureGrams, totalAed, items, createdAt]
+      properties:
+        id:
+          type: integer
+        billNo:
+          type: string
+        billDate:
+          type: string
+        supplierName:
+          type: string
+        purchaseType:
+          type: string
+          enum: [fixed, unfixed]
+        paymentStatus:
+          type: string
+          enum: [paid, unpaid, unfixed]
+        totalGrossGrams:
+          type: number
+        totalPureGrams:
+          type: number
+        totalAed:
+          type: number
+        notes:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseBillItem"
+        createdAt:
+          type: string
+          format: date-time
+
+    PurchaseBillItemInput:
+      type: object
+      required: [category, grossWeightGrams, purityPercent, rateAedPerG, lineTotalAed]
+      properties:
+        category:
+          type: string
+          enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+        grossWeightGrams:
+          type: number
+          exclusiveMinimum: 0
+        purityPercent:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
+        rateAedPerG:
+          type: number
+          minimum: 0
+        makingChargeAed:
+          type: number
+          minimum: 0
+        lineTotalAed:
+          type: number
+          minimum: 0
+
+    PurchaseBillInput:
+      type: object
+      required: [billNo, billDate, supplierName, purchaseType, paymentStatus, items]
+      properties:
+        billNo:
+          type: string
+          minLength: 1
+        billDate:
+          type: string
+        supplierName:
+          type: string
+          minLength: 1
+        purchaseType:
+          type: string
+          enum: [fixed, unfixed]
+        paymentStatus:
+          type: string
+          enum: [paid, unpaid, unfixed]
+        notes:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PurchaseBillItemInput"
 
     StockMovement:
       type: object
