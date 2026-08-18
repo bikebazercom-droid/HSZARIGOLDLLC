@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:invoice-delete-guard": "tsx scripts/test-invoice-delete-guard.ts",
     "test:invoice-delete-audit": "tsx scripts/test-invoice-delete-audit.ts",
-    "test:bill-delete-role-guard": "tsx scripts/test-bill-delete-role-guard.ts"
+    "test:bill-delete-role-guard": "tsx scripts/test-bill-delete-role-guard.ts",
+    "test:invoice-create-audit": "tsx scripts/test-invoice-create-audit.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
