@@ -314,7 +314,7 @@ export default function PurchaseBillsPage() {
                         <TableCell className="text-right">{fmtG(b.totalPureGrams)}</TableCell>
                         <TableCell className="text-right font-semibold">{fmtAED(b.totalAed)}</TableCell>
                         <TableCell className="text-right pr-4 whitespace-nowrap">
-                          {b.paymentStatus !== "paid" && (
+                          {(b.paymentStatus !== "paid" || b.id === settleId) && (
                             <Button
                               variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700"
                               title="Update payment status"
