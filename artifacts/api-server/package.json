@@ -12,7 +12,8 @@
     "test:invoice-delete-audit": "tsx scripts/test-invoice-delete-audit.ts",
     "test:bill-delete-role-guard": "tsx scripts/test-bill-delete-role-guard.ts",
     "test:invoice-create-audit": "tsx scripts/test-invoice-create-audit.ts",
-    "test:all-audit-guards": "pnpm run test:invoice-delete-guard && pnpm run test:invoice-delete-audit && pnpm run test:invoice-create-audit && pnpm run test:bill-delete-role-guard"
+    "test:bill-delete-audit": "tsx scripts/test-bill-delete-audit.ts",
+    "test:all-audit-guards": "pnpm run test:invoice-delete-guard && pnpm run test:invoice-delete-audit && pnpm run test:invoice-create-audit && pnpm run test:bill-delete-role-guard && pnpm run test:bill-delete-audit"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
