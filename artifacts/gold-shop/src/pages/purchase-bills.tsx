@@ -71,7 +71,7 @@ export default function PurchaseBillsPage() {
   const [sessionLiableSuppliers, setSessionLiableSuppliers] = useState<Set<string>>(new Set());
 
   const { data: bills, isLoading } = useListPurchaseBills(undefined, {
-    query: { queryKey: getListPurchaseBillsQueryKey(undefined) },
+    query: { queryKey: getListPurchaseBillsQueryKey(undefined), refetchOnWindowFocus: true, staleTime: 0 },
   });
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
     query: { queryKey: getGetSupplierLiabilityQueryKey(), refetchOnWindowFocus: true, staleTime: 0 },
