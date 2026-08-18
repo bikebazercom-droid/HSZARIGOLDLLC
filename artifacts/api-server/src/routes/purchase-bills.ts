@@ -486,12 +486,56 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
   const { id } = params.data;
   const body = UpdatePurchaseBillPaymentStatusBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
-  const [updated] = await db
-    .update(purchaseBillsTable)
-    .set({ paymentStatus: body.data.paymentStatus })
-    .where(eq(purchaseBillsTable.id, id))
-    .returning();
-  if (!updated) { res.status(404).json({ error: "Bill not found" }); return; }
+
+  const toStatus = body.data.paymentStatus;
+
+  // Run the read, update, and audit insert atomically so:
+  //   • concurrent requests cannot both read the same old status and produce a
+  //     spurious or duplicate audit event
+  //   • if the audit insert fails the status update is rolled back, preventing
+  //     an untracked change (mirrors the deletion path's transaction pattern)
+  let notFound = false;
+  const updated = await db.transaction(async (tx) => {
+    // Lock the row first so the "from" snapshot is stable for the whole transaction.
+    const [locked] = await tx
+      .select()
+      .from(purchaseBillsTable)
+      .where(eq(purchaseBillsTable.id, id))
+      .for("update");
+    if (!locked) { notFound = true; return null; }
+
+    const fromStatus = locked.paymentStatus;
+
+    const [upd] = await tx
+      .update(purchaseBillsTable)
+      .set({ paymentStatus: toStatus })
+      .where(eq(purchaseBillsTable.id, id))
+      .returning();
+    if (!upd) { notFound = true; return null; }
+
+    // Only write an audit entry when the status actually changes; no-op requests
+    // (from === to) from direct API callers are not logged.
+    if (fromStatus !== toStatus) {
+      await tx.insert(auditLogTable).values({
+        actorId: req.session?.userId ?? null,
+        entityType: "purchase_bill",
+        entityId: id,
+        action: "update_payment_status",
+        billNo: upd.billNo,
+        details: JSON.stringify({
+          from: fromStatus,
+          to: toStatus,
+          billNo: upd.billNo,
+          supplierName: upd.supplierName,
+        }),
+      });
+    }
+
+    return upd;
+  });
+
+  if (notFound || !updated) { res.status(404).json({ error: "Bill not found" }); return; }
+
   const items = await db.select().from(purchaseBillItemsTable)
     .where(eq(purchaseBillItemsTable.billId, id)).orderBy(purchaseBillItemsTable.id);
   res.json(UpdatePurchaseBillPaymentStatusResponse.parse(parseBill(updated, items)));

@@ -311,7 +311,8 @@ export default function PurchaseBillsPage() {
             }
           }
         }
-        invalidate();
+        // includeAuditLog=true so the Audit Log tab immediately reflects the change.
+        invalidate(true);
         setSettleId(null);
       },
       onError: (e: any) => {
@@ -610,8 +611,8 @@ export default function PurchaseBillsPage() {
             <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <p>
-                This log records all destructive actions on purchase bills — including deletions of paid (settled) bills.
-                Entries are permanent and cannot be edited.
+                This log records all significant actions on purchase bills — including payment-status changes and
+                deletions of paid (settled) bills. Entries are permanent and cannot be edited.
               </p>
             </div>
 
@@ -621,7 +622,7 @@ export default function PurchaseBillsPage() {
               <div className="rounded-md border bg-card p-8 text-center space-y-2">
                 <CheckCircle2 className="mx-auto h-8 w-8 text-green-500" />
                 <p className="font-semibold">No audit events yet.</p>
-                <p className="text-sm text-muted-foreground">Deletions of purchase bills will appear here.</p>
+                <p className="text-sm text-muted-foreground">Payment-status changes and bill deletions will appear here.</p>
               </div>
             ) : (
               <div className="bg-card rounded-md border overflow-hidden">
@@ -633,7 +634,7 @@ export default function PurchaseBillsPage() {
                         <TableHead>Action</TableHead>
                         <TableHead>Bill No</TableHead>
                         <TableHead>Supplier</TableHead>
-                        <TableHead>Payment Status (at deletion)</TableHead>
+                        <TableHead>Details</TableHead>
                         <TableHead className="text-right">Total (AED)</TableHead>
                         <TableHead className="text-right pr-4">Actor (User ID)</TableHead>
                       </TableRow>
@@ -641,22 +642,39 @@ export default function PurchaseBillsPage() {
                     <TableBody>
                       {auditLog.map((entry) => {
                         const d = entry.details as Record<string, unknown>;
+                        const isStatusChange = entry.action === "update_payment_status";
                         return (
                           <TableRow key={entry.id}>
                             <TableCell className="pl-4 whitespace-nowrap text-xs text-muted-foreground">
                               {new Date(entry.createdAt).toLocaleString("en-AE")}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="destructive" className="uppercase text-xs tracking-wide">
-                                {entry.action}
-                              </Badge>
+                              {isStatusChange ? (
+                                <Badge className="uppercase text-xs tracking-wide bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100">
+                                  Status Changed
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive" className="uppercase text-xs tracking-wide">
+                                  {entry.action}
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell className="font-medium">{entry.billNo ?? "—"}</TableCell>
                             <TableCell>{typeof d.supplierName === "string" ? d.supplierName : "—"}</TableCell>
-                            <TableCell>
-                              {typeof d.paymentStatus === "string"
-                                ? (PAYMENT_LABEL[d.paymentStatus] ?? d.paymentStatus)
-                                : "—"}
+                            <TableCell className="text-sm">
+                              {isStatusChange ? (
+                                typeof d.from === "string" && typeof d.to === "string" ? (
+                                  <span>
+                                    <span className="text-muted-foreground">{PAYMENT_LABEL[d.from] ?? d.from}</span>
+                                    {" → "}
+                                    <span className="font-medium">{PAYMENT_LABEL[d.to] ?? d.to}</span>
+                                  </span>
+                                ) : "—"
+                              ) : (
+                                typeof d.paymentStatus === "string"
+                                  ? `Was: ${PAYMENT_LABEL[d.paymentStatus] ?? d.paymentStatus}`
+                                  : "—"
+                              )}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
                               {typeof d.totalAed === "string" || typeof d.totalAed === "number"
