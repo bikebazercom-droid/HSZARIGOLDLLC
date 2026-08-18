@@ -69,25 +69,36 @@ async function createTestInvoice(
   isPending: boolean,
   label: string,
 ): Promise<{ id: number; invoiceNumber: string }> {
-  const res = await apiReq("/invoices", {
-    method: "POST",
-    body: JSON.stringify({
-      customerName: `TEST-DELETE-AUDIT-${label}`,
-      paymentMethod: "cash",
-      subtotal: 100,
-      discount: 0,
-      total: 100,
-      vatRate: 5,
-      vatAmount: 0,
-      totalBeforeVat: 100,
-      totalIncludingVat: 100,
-      roundOffDiscount: 0,
-      isPending,
-      items: [],
-    }),
-  });
-  if (!res.ok) throw new Error(`createTestInvoice(${label}) failed (${res.status}): ${await res.text()}`);
-  return res.json() as Promise<{ id: number; invoiceNumber: string }>;
+  // Retry once on transient 5xx errors (e.g. concurrent-test DB stress or
+  // momentary connection blip) before failing the whole suite.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const res = await apiReq("/invoices", {
+      method: "POST",
+      body: JSON.stringify({
+        customerName: `TEST-DELETE-AUDIT-${label}`,
+        paymentMethod: "cash",
+        subtotal: 100,
+        discount: 0,
+        total: 100,
+        vatRate: 5,
+        vatAmount: 0,
+        totalBeforeVat: 100,
+        totalIncludingVat: 100,
+        roundOffDiscount: 0,
+        isPending,
+        items: [],
+      }),
+    });
+    if (res.ok) return res.json() as Promise<{ id: number; invoiceNumber: string }>;
+    const body = await res.text();
+    if (res.status >= 500 && attempt < 2) {
+      console.log(`  ⚠ createTestInvoice(${label}) got ${res.status} on attempt ${attempt}, retrying in 500ms…`);
+      await new Promise<void>((r) => setTimeout(r, 500));
+      continue;
+    }
+    throw new Error(`createTestInvoice(${label}) failed (${res.status}): ${body}`);
+  }
+  throw new Error(`createTestInvoice(${label}) exhausted retries`);
 }
 
 async function deleteInvoice(
@@ -650,6 +661,303 @@ async function testE_AuditInsertIsInsideDeleteTransaction(): Promise<void> {
   );
 }
 
+/**
+ * Test G: DELETE an invoice when source stock batches are absent (purchase_id = NULL).
+ *
+ * Background: reverseInvoiceConsumption (inventoryEngine.ts) restores FIFO batch
+ * balances by querying inventory_consumptions WHERE purchase_id IS NOT NULL. When
+ * the source batches have been deleted the FK `ON DELETE SET NULL` fires, leaving
+ * consumption rows with purchase_id = NULL. The reversal UPDATE subquery then
+ * returns no rows — a silent no-op — and the DELETE handler must still succeed.
+ *
+ * The handler must:
+ *   (a) return 204  — no error from the reversal no-op,
+ *   (b) write exactly one audit "delete" entry,
+ *   (c) leave the batch's remaining_weight_grams UNCHANGED at the post-sale
+ *       value — the FIFO reversal correctly skipped null-purchase_id rows,
+ *       meaning the batch shows the deducted balance and is NOT double-restored,
+ *   (d) restore stock_levels.weight_grams via the sale_reversal stock movement
+ *       (driven by stock_movements, which is independent of inventory_consumptions),
+ *   (e) remove all consumption rows for the invoice (including null-purchase_id
+ *       rows) so no orphan ledger entries remain.
+ *
+ * Isolation strategy:
+ *   • A dedicated stock batch (200g gold, purchaseDate "2000-01-01") is created
+ *     via the API so FIFO always picks it first (ORDER BY purchase_date ASC).
+ *   • After invoice creation, purchase_id on the consumption rows is set to NULL
+ *     via SQL — exactly what ON DELETE SET NULL does when a batch is removed —
+ *     without touching the batch itself or its remaining_weight_grams.
+ *   • A try/finally block cleans up the fixture batch unconditionally, preserving
+ *     the original error if any intermediate step throws.
+ */
+async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promise<void> {
+  console.log(
+    "\nTest G: DELETE invoice with null-purchase_id consumptions (absent source batches) — " +
+    "FIFO reversal is a silent no-op, 204 returned, audit written, batch not double-restored",
+  );
+
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+
+  // ── 1. Create a dedicated fixture batch ───────────────────────────────────
+  // purchaseDate "2000-01-01" ensures FIFO always picks this lot before any
+  // real batches in the DB (ordered purchase_date ASC).
+  const purchaseRes = await apiReq("/stock/purchases", {
+    method: "POST",
+    body: JSON.stringify({
+      category: "gold",
+      supplierName: "TEST-G-FIXTURE",
+      purchaseDate: "2000-01-01",
+      weightGrams: 200,
+      totalPriceAed: 10000,
+    }),
+  });
+  if (!purchaseRes.ok) {
+    throw new Error(`Test G: create stock purchase failed (${purchaseRes.status}): ${await purchaseRes.text()}`);
+  }
+  const purchase = (await purchaseRes.json()) as { id: number };
+  console.log(`  Created fixture batch id=${purchase.id} (200g gold, 2000-01-01)`);
+
+  // Capture gold level right after purchase (before invoice) for the
+  // surface-level restoration check later.
+  const levelsAfterPurchaseRes = await apiReq("/stock/levels");
+  if (!levelsAfterPurchaseRes.ok) {
+    throw new Error(`stock/levels fetch failed: ${levelsAfterPurchaseRes.status}`);
+  }
+  const goldAfterPurchase =
+    ((await levelsAfterPurchaseRes.json()) as { category: string; weightGrams: number }[])
+      .find((l) => l.category === "gold")?.weightGrams ?? 0;
+  console.log(`  Gold level after purchase, before invoice: ${goldAfterPurchase}g`);
+
+  // Track invoice id so finally block can attempt emergency cleanup if needed.
+  let invId = 0;
+
+  try {
+    // ── 2. Create a pending invoice with a 10g gold item ──────────────────
+    const createRes = await apiReq("/invoices", {
+      method: "POST",
+      body: JSON.stringify({
+        customerName: "TEST-DELETE-AUDIT-NULL-PURCHASE",
+        paymentMethod: "cash",
+        subtotal: 500,
+        discount: 0,
+        total: 500,
+        vatRate: 5,
+        vatAmount: 0,
+        totalBeforeVat: 500,
+        totalIncludingVat: 500,
+        roundOffDiscount: 0,
+        isPending: true,
+        items: [
+          {
+            description: "Test gold item",
+            category: "gold",
+            quantity: 1,
+            grossWeight: 10,
+            weight: 10,
+            unitPrice: 50,
+            totalPrice: 500,
+          },
+        ],
+      }),
+    });
+    if (!createRes.ok) {
+      throw new Error(`Test G: create invoice failed (${createRes.status}): ${await createRes.text()}`);
+    }
+    const inv = (await createRes.json()) as { id: number; invoiceNumber: string };
+    invId = inv.id;
+    console.log(`  Created ${inv.invoiceNumber} (id=${inv.id}) with a 10g gold item`);
+
+    // ── 3. Assert FIFO wrote at least one consumption row pointing to our batch
+    const consumptionCheck = await db.execute<{ total: string; linked: string }>(sql`
+      SELECT COUNT(*)::text AS total,
+             COUNT(*) FILTER (WHERE purchase_id = ${purchase.id})::text AS linked
+      FROM inventory_consumptions WHERE invoice_id = ${inv.id}
+    `);
+    const totalConsumptions = Number(consumptionCheck.rows[0]?.total ?? 0);
+    const linkedConsumptions = Number(consumptionCheck.rows[0]?.linked ?? 0);
+    assert(
+      totalConsumptions >= 1,
+      `FIFO created at least one consumption row at invoice creation (got ${totalConsumptions})`,
+    );
+    assert(
+      linkedConsumptions >= 1,
+      `At least one consumption row references the fixture batch (purchase_id=${purchase.id}) (got ${linkedConsumptions})`,
+    );
+    console.log(
+      `  Consumption rows: total=${totalConsumptions}, linked to fixture batch=${linkedConsumptions}`,
+    );
+
+    // ── 4. Record batch remaining_weight_grams after the FIFO sale ────────
+    const batchAfterSaleRes = await db.execute<{ remaining: string }>(
+      sql`SELECT remaining_weight_grams::text AS remaining FROM stock_purchases WHERE id = ${purchase.id}`,
+    );
+    const remainingAfterSale = Number(batchAfterSaleRes.rows[0]?.remaining ?? 0);
+    console.log(`  Batch remaining after sale: ${remainingAfterSale}g (original: 200g)`);
+    assert(
+      remainingAfterSale < 200,
+      `Batch remaining reduced by FIFO consumption (expected <200g, got ${remainingAfterSale}g)`,
+    );
+
+    // ── 5. Simulate absent source batch: set purchase_id = NULL ───────────
+    // This mirrors exactly what the FK `ON DELETE SET NULL` clause on
+    // inventory_consumptions.purchase_id does when a stock_purchases row is
+    // deleted. Doing it via SQL keeps the batch intact (remaining stays at
+    // remainingAfterSale), so the assertion in step 8 is unambiguous.
+    const nullifyRes = await db.execute<{ count: string }>(sql`
+      WITH upd AS (
+        UPDATE inventory_consumptions
+        SET purchase_id = NULL
+        WHERE invoice_id = ${inv.id} AND purchase_id = ${purchase.id}
+        RETURNING id
+      ) SELECT COUNT(*)::text AS count FROM upd
+    `);
+    const nullifiedCount = Number(nullifyRes.rows[0]?.count ?? 0);
+    assert(
+      nullifiedCount >= 1,
+      `At least one consumption row had purchase_id set to NULL (simulating absent batch) — got ${nullifiedCount}`,
+    );
+    console.log(`  Set purchase_id = NULL on ${nullifiedCount} row(s) — absent-batch simulation`);
+
+    // Verify consumption rows still exist (with null purchase_id) so the
+    // reversal encounters them but correctly skips them (WHERE IS NOT NULL).
+    const afterNullifyRes = await db.execute<{ count: string }>(
+      sql`SELECT COUNT(*)::text AS count FROM inventory_consumptions WHERE invoice_id = ${inv.id}`,
+    );
+    const consumptionsPresent = Number(afterNullifyRes.rows[0]?.count ?? 0);
+    assert(
+      consumptionsPresent >= 1,
+      `Consumption rows still present before delete (purchase_id now NULL) — got ${consumptionsPresent}`,
+    );
+
+    // ── 6. No delete audit entries yet ────────────────────────────────────
+    const before = await deleteAuditEntriesForInvoice(inv.id);
+    assert(before.length === 0, `No delete audit entries before HTTP DELETE (got ${before.length})`);
+
+    // ── 7. HTTP DELETE ────────────────────────────────────────────────────
+    const { status } = await deleteInvoice(inv.id);
+    assert(
+      status === 204,
+      `DELETE returned 204 even though all consumption purchase_ids were NULL (got ${status})`,
+    );
+    invId = 0; // Invoice is gone — no cleanup needed.
+
+    // ── (b) Exactly one audit entry ───────────────────────────────────────
+    const after = await deleteAuditEntriesForInvoice(inv.id);
+    assert(
+      after.length === 1,
+      `Exactly one delete audit entry written despite null-purchase_id consumptions (got ${after.length})`,
+    );
+    if (after.length >= 1) {
+      const e = after[0]!;
+      assert(e.entityType === "invoice", `entityType is "invoice" (got "${e.entityType}")`);
+      assert(e.action === "delete", `action is "delete" (got "${e.action}")`);
+      assert(e.entityId === inv.id, `entityId matches invoice id ${inv.id} (got ${e.entityId})`);
+      assert(e.billNo === inv.invoiceNumber, `billNo matches ${inv.invoiceNumber} (got "${e.billNo}")`);
+    }
+
+    // ── (c) FIFO batch balance NOT double-restored ────────────────────────
+    // reverseInvoiceConsumption skipped the null-purchase_id rows so the
+    // batch must still show remainingAfterSale (≤190g), NOT 200g.
+    const batchAfterDeleteRes = await db.execute<{ remaining: string }>(
+      sql`SELECT remaining_weight_grams::text AS remaining FROM stock_purchases WHERE id = ${purchase.id}`,
+    );
+    const remainingAfterDelete = Number(batchAfterDeleteRes.rows[0]?.remaining ?? 0);
+    console.log(
+      `  Batch remaining: after sale=${remainingAfterSale}g, after delete=${remainingAfterDelete}g ` +
+      `(must be unchanged — FIFO reversal was a no-op)`,
+    );
+    assert(
+      Math.abs(remainingAfterDelete - remainingAfterSale) < 0.001,
+      `Batch remaining_weight_grams unchanged after delete — FIFO reversal was a no-op for null-purchase_id rows: ` +
+      `expected ${remainingAfterSale}g, got ${remainingAfterDelete}g`,
+    );
+
+    // ── (d) Surface stock_levels restored by sale_reversal ────────────────
+    // The DELETE handler reads stock_movements (not inventory_consumptions) to
+    // apply the sale_reversal, so stock_levels is restored even when all
+    // consumption rows had null purchase_id.
+    const levelsAfterDeleteRes = await apiReq("/stock/levels");
+    if (!levelsAfterDeleteRes.ok) throw new Error(`stock/levels fetch after delete failed`);
+    const goldAfterDelete =
+      ((await levelsAfterDeleteRes.json()) as { category: string; weightGrams: number }[])
+        .find((l) => l.category === "gold")?.weightGrams ?? 0;
+    console.log(
+      `  Surface gold: before invoice=${goldAfterPurchase}g, after delete=${goldAfterDelete}g`,
+    );
+    assert(
+      Math.abs(goldAfterDelete - goldAfterPurchase) < 0.001,
+      `Surface gold restored to pre-invoice level ${goldAfterPurchase}g — sale_reversal ran exactly once: got ${goldAfterDelete}g`,
+    );
+
+    // Cross-check via stock_movements: a sale_reversal entry must exist and
+    // its absolute weight must match the original sale (column name is "type").
+    const [saleMov, reversalMov] = await Promise.all([
+      db.execute<{ weight_grams: string }>(sql`
+        SELECT weight_grams::text FROM stock_movements
+        WHERE category = 'gold' AND ref_type = 'invoice' AND ref_id = ${inv.id} AND type = 'sale'
+        ORDER BY id DESC LIMIT 1
+      `),
+      db.execute<{ weight_grams: string }>(sql`
+        SELECT weight_grams::text FROM stock_movements
+        WHERE category = 'gold' AND ref_type = 'invoice' AND ref_id = ${inv.id} AND type = 'sale_reversal'
+        ORDER BY id DESC LIMIT 1
+      `),
+    ]);
+    const saleGrams = Math.abs(Number(saleMov.rows[0]?.weight_grams ?? 0));
+    const reversalGrams = Number(reversalMov.rows[0]?.weight_grams ?? 0);
+    console.log(`  stock_movements: sale=${saleGrams}g, sale_reversal=${reversalGrams}g`);
+    assert(
+      reversalGrams > 0,
+      `A sale_reversal stock_movement was recorded (got ${reversalGrams}g)`,
+    );
+    assert(
+      Math.abs(reversalGrams - saleGrams) < 0.001,
+      `sale_reversal restores exactly the same grams as the original sale (${saleGrams}g) — got ${reversalGrams}g`,
+    );
+
+    // ── (e) Consumption rows cleaned up ───────────────────────────────────
+    // The DELETE handler's reverseInvoiceConsumption always issues
+    // DELETE FROM inventory_consumptions WHERE invoice_id = ?
+    // which removes ALL rows for the invoice, including null-purchase_id ones.
+    const orphanCheck = await db.execute<{ count: string }>(
+      sql`SELECT COUNT(*)::text AS count FROM inventory_consumptions WHERE invoice_id = ${inv.id}`,
+    );
+    const orphanCount = Number(orphanCheck.rows[0]?.count ?? 0);
+    assert(
+      orphanCount === 0,
+      `All consumption rows (including null-purchase_id ones) removed after delete — got ${orphanCount}`,
+    );
+  } finally {
+    // ── Unconditional fixture cleanup ─────────────────────────────────────
+    // If the invoice was not deleted (invId > 0), attempt best-effort cleanup.
+    // Always restore the batch and remove it via API, which applies the
+    // purchase_reversal to stock_levels and leaves the DB in its pre-test state.
+    try {
+      if (invId > 0) {
+        // Invoice was not deleted (test failed before or after the HTTP DELETE).
+        // Clean up consumption rows then delete the invoice directly via DB.
+        await db.execute(sql`DELETE FROM inventory_consumptions WHERE invoice_id = ${invId}`);
+        await db.execute(sql`DELETE FROM invoices WHERE id = ${invId}`);
+        console.log(`  Cleanup: removed orphan invoice id=${invId} from DB`);
+      }
+      // Restore remaining_weight_grams so the API guard (remaining < weight → 409)
+      // does not block the batch deletion.
+      await db.execute(
+        sql`UPDATE stock_purchases SET remaining_weight_grams = weight_grams WHERE id = ${purchase.id}`,
+      );
+      const cleanupRes = await apiReq(`/stock/purchases/${purchase.id}`, { method: "DELETE" });
+      if (cleanupRes.status === 204) {
+        console.log(`  Cleanup: fixture batch id=${purchase.id} removed, stock_levels restored`);
+      } else {
+        console.log(`  Cleanup warning: batch delete returned ${cleanupRes.status}`);
+      }
+    } catch (cleanupErr) {
+      console.error(`  Cleanup error (non-fatal):`, cleanupErr);
+    }
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -665,6 +973,7 @@ async function main(): Promise<void> {
   await testD2_ConcurrentPaidDeletesProduceExactlyOneAuditEntry();
   await testF_RowLockPrecedesAuditInsertInDeleteTransaction();
   await testE_AuditInsertIsInsideDeleteTransaction();
+  await testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry();
 
   console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
   if (failed > 0) process.exit(1);
