@@ -101,6 +101,8 @@ export default function PurchaseBillsPage() {
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
   const [deleteConfirmBill, setDeleteConfirmBill] = useState<{ id: number; ref: string } | null>(null);
+  const [deleteAuditEntry, setDeleteAuditEntry] = useState<{ id: number; ref: string } | null>(null);
+  const [auditDeletePendingId, setAuditDeletePendingId] = useState<number | null>(null);
   // Session-level unlock: paid bills are protected by default; user must explicitly
   // toggle this on to enable deletion (hard guard — server also enforces it).
   const [paidDeleteUnlocked, setPaidDeleteUnlocked] = useState(false);
@@ -122,6 +124,25 @@ export default function PurchaseBillsPage() {
     refetchOnWindowFocus: false,
   });
   const auditLog = auditLogData?.entries;
+
+  // Permanently remove one audit-log entry (no trace kept anywhere).
+  const handleDeleteAuditEntry = async (id: number) => {
+    setAuditDeletePendingId(id);
+    try {
+      const res = await fetch(`${baseUrl}api/purchase-bills/audit-log/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Audit entry permanently deleted" });
+      await queryClient.invalidateQueries({ queryKey: AUDIT_LOG_QUERY_KEY });
+    } catch {
+      toast({ title: "Failed to delete audit entry", variant: "destructive" });
+    } finally {
+      setAuditDeletePendingId(null);
+      setDeleteAuditEntry(null);
+    }
+  };
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
     query: { queryKey: getGetSupplierLiabilityQueryKey(), refetchOnWindowFocus: true, staleTime: 0 },
   });
@@ -622,8 +643,8 @@ export default function PurchaseBillsPage() {
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <p>
                 This log records all significant actions — including invoice creations (and backdated invoices),
-                invoice deletions, purchase bill deletions, and payment-status changes. Entries are permanent and
-                cannot be edited.{" "}
+                invoice deletions, purchase bill deletions, and payment-status changes. Entries cannot be edited,
+                but an admin can permanently delete an entry.{" "}
                 {auditLogData && (
                   <span>
                     Entries older than {auditLogData.retentionMonths} months are automatically pruned daily.
@@ -672,7 +693,8 @@ export default function PurchaseBillsPage() {
                         <TableHead>Party</TableHead>
                         <TableHead>Details</TableHead>
                         <TableHead className="text-right">Total (AED)</TableHead>
-                        <TableHead className="text-right pr-4">Actor</TableHead>
+                        <TableHead className="text-right">Actor</TableHead>
+                        <TableHead className="text-right pr-4 w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -781,8 +803,20 @@ export default function PurchaseBillsPage() {
                                   : "—"
                               )}
                             </TableCell>
-                            <TableCell className="text-right pr-4 text-xs text-muted-foreground">
+                            <TableCell className="text-right text-xs text-muted-foreground">
                               {actorLabel}
+                            </TableCell>
+                            <TableCell className="text-right pr-4">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                                title="Permanently delete this entry"
+                                disabled={auditDeletePendingId === entry.id}
+                                onClick={() => setDeleteAuditEntry({ id: entry.id, ref: entry.billNo ?? `#${entry.id}` })}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         );
@@ -795,6 +829,35 @@ export default function PurchaseBillsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* ─── Permanently delete audit entry confirm ─── */}
+      <AlertDialog open={deleteAuditEntry != null} onOpenChange={(o) => { if (!o && auditDeletePendingId == null) setDeleteAuditEntry(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Permanently delete audit entry?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Entry for <strong>{deleteAuditEntry?.ref}</strong> will be removed forever. No record of this
+              entry — or of its deletion — will remain anywhere. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={auditDeletePendingId != null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={auditDeletePendingId != null}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteAuditEntry) void handleDeleteAuditEntry(deleteAuditEntry.id);
+              }}
+            >
+              {auditDeletePendingId != null ? "Deleting..." : "Delete Forever"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ─── Settle / update payment status sheet ─── */}
       <Sheet open={settleId != null} onOpenChange={(o) => { if (!o) setSettleId(null); }}>

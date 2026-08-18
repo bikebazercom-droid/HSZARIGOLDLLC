@@ -310,6 +310,36 @@ router.get("/purchase-bills/audit-log", requireAdmin, async (_req, res): Promise
   });
 });
 
+// Permanently delete a single audit-log entry. This is an explicit admin
+// action: the row is removed outright and — by design — no trace of the
+// deletion is recorded anywhere (no audit entry about the audit deletion).
+router.delete("/purchase-bills/audit-log/:id", requireAdmin, async (req, res): Promise<void> => {
+  // CSRF hardening: this deletion is irrecoverable and intentionally traceless,
+  // so require that any browser-sent Origin matches the request host. Non-browser
+  // clients (curl) send no Origin and are already gated by the admin session.
+  const origin = req.headers.origin;
+  if (origin) {
+    const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+    let originHost: string | null = null;
+    try { originHost = new URL(origin).host; } catch { /* malformed origin */ }
+    if (!originHost || originHost !== host) {
+      res.status(403).json({ error: "Cross-origin request rejected" });
+      return;
+    }
+  }
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid audit entry id" });
+    return;
+  }
+  const deleted = await db.delete(auditLogTable).where(eq(auditLogTable.id, id)).returning({ id: auditLogTable.id });
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "Audit entry not found" });
+    return;
+  }
+  res.status(204).end();
+});
+
 router.get("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {
   const query = ListPurchaseBillsQueryParams.safeParse(req.query);
   const { supplier, startDate, endDate } = query.success ? query.data : {} as Record<string, string | undefined>;

@@ -50,6 +50,9 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
+      // Lax blocks cross-site cookie sends on non-GET requests (CSRF baseline);
+      // the app is served same-origin behind the Replit proxy, so this is safe.
+      sameSite: "lax",
       secure: false,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
