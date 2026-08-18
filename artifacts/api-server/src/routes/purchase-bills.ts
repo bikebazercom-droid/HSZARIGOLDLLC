@@ -112,6 +112,151 @@ router.get("/purchase-bills/supplier-liability", requireAdmin, async (_req, res)
   res.json(GetSupplierLiabilityResponse.parse({ rows, totalUnpaidAed, totalUnfixedPureGrams }));
 });
 
+// Raw PDF route (outside the OpenAPI spec): printable supplier liability statement.
+router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, res): Promise<void> => {
+  const outstandingBills = await db
+    .select()
+    .from(purchaseBillsTable)
+    .where(sql`${purchaseBillsTable.paymentStatus} IN ('unpaid', 'unfixed')`)
+    .orderBy(purchaseBillsTable.supplierName, purchaseBillsTable.billDate);
+
+  const bySupplier = new Map<string, {
+    unpaidCount: number;
+    unpaidTotalAed: number;
+    unfixedCount: number;
+    unfixedPureGrams: number;
+  }>();
+
+  for (const bill of outstandingBills) {
+    if (!bySupplier.has(bill.supplierName)) {
+      bySupplier.set(bill.supplierName, { unpaidCount: 0, unpaidTotalAed: 0, unfixedCount: 0, unfixedPureGrams: 0 });
+    }
+    const entry = bySupplier.get(bill.supplierName)!;
+    if (bill.paymentStatus === "unpaid") {
+      entry.unpaidCount += 1;
+      entry.unpaidTotalAed += Number(bill.totalAed);
+    } else if (bill.paymentStatus === "unfixed") {
+      entry.unfixedCount += 1;
+      entry.unfixedPureGrams += Number(bill.totalPureGrams);
+    }
+  }
+
+  const rows = Array.from(bySupplier.entries()).map(([supplierName, data]) => ({ supplierName, ...data }));
+  const totalUnpaidAed = rows.reduce((s, r) => s + r.unpaidTotalAed, 0);
+  const totalUnfixedPureGrams = rows.reduce((s, r) => s + r.unfixedPureGrams, 0);
+
+  const NAVY = "#1e3a5f";
+  const GOLD = "#c8a43a";
+  const GRID = "#d1d5db";
+  const LIGHT = "#f5f3ee";
+
+  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="supplier-liability-${new Date().toISOString().slice(0, 10)}.pdf"`,
+  );
+  doc.pipe(res);
+
+  const W = doc.page.width - 80;
+  const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+  // ── Header banner ──
+  doc.rect(0, 0, doc.page.width, 96).fill(NAVY);
+  doc.fillColor(GOLD).fontSize(20).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
+  doc.fillColor("#aac4e8").fontSize(11).font("Helvetica-Bold").text("SUPPLIER LIABILITY STATEMENT", 40, 48);
+  doc.fillColor("white").fontSize(9).font("Helvetica").text(`Generated: ${new Date().toLocaleString("en-AE")}`, 40, 66);
+
+  // ── Grand total summary box ──
+  const summaryY = 110;
+  doc.rect(40, summaryY, W, 52).fillAndStroke(LIGHT, GRID);
+  doc.fillColor("#666").font("Helvetica").fontSize(9).text("Outstanding Summary", 52, summaryY + 8);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11)
+    .text(`Total Unpaid (Cash):  AED ${num2(totalUnpaidAed)}`, 52, summaryY + 22, { lineBreak: false });
+  doc.fillColor("#b45309").font("Helvetica-Bold").fontSize(11)
+    .text(`Total Unfixed (Metal):  ${num3(totalUnfixedPureGrams)} g`, 52, summaryY + 36, { lineBreak: false });
+
+  // ── Per-supplier table ──
+  let y = summaryY + 66;
+
+  // Column definitions: [label, width, right-align?]
+  const cols: [string, number, boolean?][] = [
+    ["Supplier", 175],
+    ["Unpaid Bills", 65, true],
+    ["Unpaid (AED)", 90, true],
+    ["Unfixed Bills", 65, true],
+    ["Unfixed (Pure g)", 120, true],
+  ];
+
+  const drawRow = (
+    cells: [string, number, boolean?][],
+    bg: string,
+    color: string,
+    bold: boolean,
+    h = 18,
+  ) => {
+    if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
+    let x = 40;
+    doc.lineWidth(0.5);
+    for (const [text, width, right] of cells) {
+      doc.rect(x, y, width, h).fillAndStroke(bg, GRID);
+      doc.fillColor(color).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
+      doc.text(text, x + 5, y + (h - 9) / 2, {
+        width: width - 10,
+        align: right ? "right" : "left",
+        lineBreak: false,
+      });
+      x += width;
+    }
+    y += h;
+  };
+
+  // Header row
+  drawRow(cols, "#1e293b", "white", true);
+
+  if (rows.length === 0) {
+    if (y + 24 > doc.page.height - 60) { doc.addPage(); y = 40; }
+    doc.rect(40, y, W, 24).fillAndStroke("white", GRID);
+    doc.fillColor("#888").font("Helvetica-Oblique").fontSize(9)
+      .text("No outstanding liabilities.", 52, y + 7, { lineBreak: false });
+    y += 24;
+  } else {
+    rows.forEach((row, i) => {
+      drawRow([
+        [row.supplierName, 175],
+        [row.unpaidCount > 0 ? String(row.unpaidCount) : "—", 65, true],
+        [row.unpaidCount > 0 ? `AED ${num2(row.unpaidTotalAed)}` : "—", 90, true],
+        [row.unfixedCount > 0 ? String(row.unfixedCount) : "—", 65, true],
+        [row.unfixedCount > 0 ? `${num3(row.unfixedPureGrams)} g` : "—", 120, true],
+      ], i % 2 === 0 ? "white" : "#f8fafc", "#1a1a1a", false);
+    });
+
+    // Totals row
+    drawRow([
+      ["TOTAL", 175],
+      [String(rows.reduce((s, r) => s + r.unpaidCount, 0)), 65, true],
+      [`AED ${num2(totalUnpaidAed)}`, 90, true],
+      [String(rows.reduce((s, r) => s + r.unfixedCount, 0)), 65, true],
+      [`${num3(totalUnfixedPureGrams)} g`, 120, true],
+    ], "#eee6cf", NAVY, true, 20);
+  }
+
+  // ── Footer note ──
+  y += 14;
+  if (y + 38 > doc.page.height - 40) { doc.addPage(); y = 40; }
+  doc.rect(40, y, W, 38).fillAndStroke("#fdf9ee", GOLD);
+  doc.fillColor("#666").font("Helvetica").fontSize(8.5)
+    .text(
+      "This statement reflects all purchase bills currently marked as Unpaid / Liability or Unfixed Balance. " +
+      "Settle individual bills via the Purchase Bills screen to remove them from this report.",
+      52, y + 8,
+      { width: W - 24 },
+    );
+
+  doc.end();
+});
+
 router.get("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {
   const query = ListPurchaseBillsQueryParams.safeParse(req.query);
   const { supplier, startDate, endDate } = query.success ? query.data : {} as Record<string, string | undefined>;

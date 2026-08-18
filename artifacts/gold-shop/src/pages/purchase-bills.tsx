@@ -284,6 +284,17 @@ export default function PurchaseBillsPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Toolbar */}
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(`${import.meta.env.BASE_URL}api/purchase-bills/supplier-liability/pdf`, "_blank")}
+                >
+                  <FileDown className="w-4 h-4 mr-1.5" /> Download PDF
+                </Button>
+              </div>
+
               {/* Summary cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="rounded-md border bg-card p-4 space-y-1">
