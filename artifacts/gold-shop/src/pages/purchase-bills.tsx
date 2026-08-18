@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   useListPurchaseBills, getListPurchaseBillsQueryKey,
   useCreatePurchaseBill, useDeletePurchaseBill,
@@ -80,6 +80,27 @@ export default function PurchaseBillsPage() {
   const createBill = useCreatePurchaseBill();
   const deleteBill = useDeletePurchaseBill();
   const updatePaymentStatus = useUpdatePurchaseBillPaymentStatus();
+
+  // Reconcile session accumulator against fresh server liability data.
+  // Runs whenever the liability query result changes (e.g. after a refetch
+  // triggered by page-focus, a cross-tab settle, or an explicit invalidation).
+  // Any supplier that the server no longer considers liable is pruned from the
+  // accumulator so stale warnings never linger after the liability is gone.
+  useEffect(() => {
+    if (!liability) return;
+    setSessionLiableSuppliers((prev) => {
+      if (prev.size === 0) return prev;
+      const stillLiable = new Set(
+        liability.rows
+          .filter((r) => r.unpaidCount > 0 || r.unfixedCount > 0)
+          .map((r) => r.supplierName.toLowerCase())
+      );
+      const next = new Set([...prev].filter((key) => stillLiable.has(key)));
+      // Avoid a re-render if nothing actually changed.
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [liability]);
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [billNo, setBillNo] = useState("");
