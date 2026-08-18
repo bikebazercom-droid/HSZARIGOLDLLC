@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:invoice-delete-guard": "tsx scripts/test-invoice-delete-guard.ts"
+    "test:invoice-delete-guard": "tsx scripts/test-invoice-delete-guard.ts",
+    "test:invoice-delete-audit": "tsx scripts/test-invoice-delete-audit.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
