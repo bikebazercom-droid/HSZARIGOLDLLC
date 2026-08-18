@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "test:invoice-delete-audit"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "audit-guards"
+
 [[workflows.workflow]]
 name = "test:invoice-delete-audit"
 author = "agent"
@@ -27,6 +31,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm --filter @workspace/api-server run test:invoice-delete-audit"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "audit-guards"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run test:all-audit-guards"
 
 [workflows.workflow.metadata]
 isValidation = true
