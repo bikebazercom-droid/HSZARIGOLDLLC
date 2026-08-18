@@ -352,6 +352,124 @@ async function testD_ConcurrentDeletesProduceExactlyOneAuditEntry(): Promise<voi
   }
 }
 
+/**
+ * Test E: Static source-code verification — audit insert is inside the DB transaction.
+ *
+ * Motivation: the existing runtime tests (A–D) all run against a live server and
+ * confirm the audit entry is written *after* a successful delete.  What they
+ * cannot catch is the case where someone refactors the handler and moves the
+ * audit insert OUTSIDE the db.transaction(...) callback.  If that happens:
+ *
+ *   • During normal operation, the audit entry still appears (the db.insert runs
+ *     a moment after the transaction commits) — the runtime tests still pass.
+ *   • On a server restart or crash between the COMMIT and the db.insert, the
+ *     transaction is committed (invoice gone) but the audit write never executes
+ *     → the deletion is silently untracked.
+ *
+ * This test reads the actual source file, extracts the transaction callback body,
+ * and asserts:
+ *   1. tx.insert(auditLogTable) appears inside the transaction body.
+ *   2. db.insert(auditLogTable) does NOT appear inside the transaction body
+ *      (that would use the outer connection handle, bypassing tx isolation).
+ *   3. db.insert(auditLogTable) does NOT appear in the DELETE handler after the
+ *      transaction block (outside = lost on crash/restart).
+ *
+ * If any of these fail the test suite exits with code 1, giving CI a clear
+ * signal before the regression ships.
+ */
+async function testE_AuditInsertIsInsideDeleteTransaction(): Promise<void> {
+  console.log("\nTest E: Source-code verification — audit insert is inside the DB transaction");
+  console.log("  (Catches the server-restart data-loss scenario: if the audit insert were");
+  console.log("   outside the transaction, a crash between COMMIT and the insert would");
+  console.log("   leave the invoice deleted but unrecorded in the audit log.)");
+
+  // The test script is run from artifacts/api-server/ by pnpm --filter.
+  // The route lives at src/routes/invoices.ts relative to that working directory.
+  const { readFile } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+
+  const routeFile = resolve(process.cwd(), "src/routes/invoices.ts");
+  let source: string;
+  try {
+    source = await readFile(routeFile, "utf-8");
+  } catch (err) {
+    assert(false, `Could not read invoices.ts route file (${routeFile}): ${err}`);
+    return;
+  }
+
+  // ── Locate the DELETE /invoices/:id handler ───────────────────────────────
+
+  const deleteHandlerStart = source.indexOf('router.delete("/invoices/:id"');
+  assert(
+    deleteHandlerStart !== -1,
+    'DELETE /invoices/:id handler exists in invoices.ts',
+  );
+  if (deleteHandlerStart === -1) return;
+
+  // ── Locate the db.transaction call within the handler ────────────────────
+
+  const txCallStart = source.indexOf("db.transaction(async (tx) =>", deleteHandlerStart);
+  assert(
+    txCallStart !== -1,
+    'DELETE handler wraps its work in db.transaction(async (tx) => ...)',
+  );
+  if (txCallStart === -1) return;
+
+  // ── Extract the transaction callback body by tracking brace depth ─────────
+
+  const openBrace = source.indexOf("{", txCallStart);
+  assert(openBrace !== -1, 'Transaction block has an opening brace');
+  if (openBrace === -1) return;
+
+  let depth = 0;
+  let closeBrace = -1;
+  for (let i = openBrace; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) { closeBrace = i; break; }
+    }
+  }
+  assert(closeBrace !== -1, 'Transaction block has a matching closing brace');
+  if (closeBrace === -1) return;
+
+  const transactionBody = source.slice(openBrace, closeBrace + 1);
+  const afterTransaction  = source.slice(closeBrace + 1);
+
+  // ── Core assertions ───────────────────────────────────────────────────────
+
+  // 1. The audit insert must use `tx.insert` inside the transaction body.
+  assert(
+    transactionBody.includes("tx.insert(auditLogTable)"),
+    'audit insert uses tx.insert(auditLogTable) inside the transaction body — atomicity guaranteed',
+  );
+
+  // 2. No `db.insert(auditLogTable)` inside the transaction body.
+  //    That would use the outer connection handle, bypassing tx isolation and
+  //    committing the audit row independently of the surrounding transaction.
+  assert(
+    !transactionBody.includes("db.insert(auditLogTable)"),
+    'No db.insert(auditLogTable) inside the transaction body (would bypass tx isolation)',
+  );
+
+  // 3. No `db.insert(auditLogTable)` in the DELETE handler AFTER the transaction.
+  //    Anything after the transaction block runs outside the implicit BEGIN/COMMIT,
+  //    so a server crash between the tx commit and this db.insert would lose the
+  //    audit entry permanently.
+  const nextHandlerIdx = afterTransaction.search(
+    /router\.(get|post|put|patch|delete|use)\s*\(/,
+  );
+  const handlerTail = nextHandlerIdx === -1
+    ? afterTransaction
+    : afterTransaction.slice(0, nextHandlerIdx);
+
+  assert(
+    !handlerTail.includes("db.insert(auditLogTable)"),
+    'No db.insert(auditLogTable) after the transaction block in the DELETE handler — crash-safe',
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -364,6 +482,7 @@ async function main(): Promise<void> {
   await testB_PaidInvoiceDeleteWritesAuditEntry();
   await testC_FailedDeletionLeavesNoOrphanAuditEntry();
   await testD_ConcurrentDeletesProduceExactlyOneAuditEntry();
+  await testE_AuditInsertIsInsideDeleteTransaction();
 
   console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
   if (failed > 0) process.exit(1);
