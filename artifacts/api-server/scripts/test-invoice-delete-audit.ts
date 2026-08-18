@@ -288,6 +288,70 @@ async function testC_FailedDeletionLeavesNoOrphanAuditEntry(): Promise<void> {
   );
 }
 
+/**
+ * Test D: Two concurrent DELETE requests for the same PENDING invoice.
+ *
+ * The DELETE handler acquires a SELECT … FOR UPDATE lock inside the
+ * transaction, which serializes concurrent deletes at the DB level:
+ *  - The first transaction to acquire the lock deletes the row, writes one
+ *    audit entry, and commits → must return 204.
+ *  - The second transaction acquires the lock after the first commits, finds
+ *    no row (locked === null), and returns null → must return 404.
+ *
+ * Invariants checked:
+ *  1. The pair of status codes is {204, 404} (one each, in any order).
+ *  2. The audit log for that invoice ID has exactly ONE "delete" entry
+ *     afterward — the concurrent loser must not write an orphan row.
+ */
+async function testD_ConcurrentDeletesProduceExactlyOneAuditEntry(): Promise<void> {
+  console.log(
+    "\nTest D: Two concurrent DELETEs race for the same invoice — only one audit entry is written",
+  );
+
+  const inv = await createTestInvoice(true, "CONCURRENT");
+  console.log(`  Created ${inv.invoiceNumber} (isPending=true, id=${inv.id})`);
+
+  // Confirm no pre-existing delete entries.
+  const before = await deleteAuditEntriesForInvoice(inv.id);
+  assert(
+    before.length === 0,
+    `No delete audit entries before the race (got ${before.length})`,
+  );
+
+  // Fire both requests at the same time.
+  const [r1, r2] = await Promise.all([
+    deleteInvoice(inv.id),
+    deleteInvoice(inv.id),
+  ]);
+
+  const statuses = [r1.status, r2.status].sort();
+  assert(
+    statuses[0] === 204 && statuses[1] === 404,
+    `One 204 and one 404 (got ${r1.status} and ${r2.status})`,
+  );
+
+  // Allow a brief moment for both DB transactions to fully commit before
+  // reading the audit log (prevents a rare read-before-commit false failure).
+  await new Promise<void>((resolve) => setTimeout(resolve, 200));
+
+  const after = await deleteAuditEntriesForInvoice(inv.id);
+  assert(
+    after.length === 1,
+    `Exactly one delete audit entry written after the race (got ${after.length}) — concurrent loser must not produce an orphan row`,
+  );
+
+  if (after.length >= 1) {
+    const entry = after[0]!;
+    assert(entry.entityType === "invoice", `entityType is "invoice" (got "${entry.entityType}")`);
+    assert(entry.action === "delete", `action is "delete" (got "${entry.action}")`);
+    assert(entry.entityId === inv.id, `entityId matches invoice id ${inv.id} (got ${entry.entityId})`);
+    assert(
+      entry.billNo === inv.invoiceNumber,
+      `billNo matches invoice number ${inv.invoiceNumber} (got "${entry.billNo}")`,
+    );
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -299,6 +363,7 @@ async function main(): Promise<void> {
   await testA_PendingInvoiceDeleteWritesAuditEntry();
   await testB_PaidInvoiceDeleteWritesAuditEntry();
   await testC_FailedDeletionLeavesNoOrphanAuditEntry();
+  await testD_ConcurrentDeletesProduceExactlyOneAuditEntry();
 
   console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
   if (failed > 0) process.exit(1);
