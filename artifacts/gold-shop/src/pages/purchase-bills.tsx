@@ -65,6 +65,11 @@ export default function PurchaseBillsPage() {
   const [settleId, setSettleId] = useState<number | null>(null);
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
 
+  // Client-side accumulator: tracks supplier names that received an unpaid/unfixed
+  // bill in this session. Lets the warning fire instantly when the drawer reopens
+  // for the same supplier, without waiting for the React Query cache to refresh.
+  const [sessionLiableSuppliers, setSessionLiableSuppliers] = useState<Set<string>>(new Set());
+
   const { data: bills, isLoading } = useListPurchaseBills(undefined, {
     query: { queryKey: getListPurchaseBillsQueryKey(undefined) },
   });
@@ -138,6 +143,11 @@ export default function PurchaseBillsPage() {
     }, {
       onSuccess: (bill) => {
         toast({ title: `Purchase bill ${bill.billNo} saved`, description: `${fmtG(bill.totalGrossGrams)} g · AED ${fmtAED(bill.totalAed)} posted to stock & ledgers` });
+        // Track this supplier immediately in the session accumulator so the warning
+        // fires the next time the drawer opens for them — before the server query refreshes.
+        if (bill.paymentStatus === "unpaid" || bill.paymentStatus === "unfixed") {
+          setSessionLiableSuppliers((prev) => new Set(prev).add(bill.supplierName.toLowerCase()));
+        }
         invalidate();
         resetForm();
         setOpen(false);
@@ -176,12 +186,17 @@ export default function PurchaseBillsPage() {
   const hasOutstanding = liability != null && (liability.totalUnpaidAed > 0 || liability.totalUnfixedPureGrams > 0);
 
   // Warning: does the supplier typed in the new-bill form already have open liabilities?
-  const supplierLiabilityRow = supplierName.trim()
-    ? liability?.rows.find((r) => r.supplierName.toLowerCase() === supplierName.trim().toLowerCase())
+  // We check both the server-side liability data (React Query cache) AND the client-side
+  // session accumulator so the warning fires immediately after saving a bill in the same
+  // session, even before the cache has refreshed.
+  const trimmedSupplier = supplierName.trim();
+  const supplierLiabilityRow = trimmedSupplier
+    ? liability?.rows.find((r) => r.supplierName.toLowerCase() === trimmedSupplier.toLowerCase())
     : undefined;
   const supplierHasLiability =
-    supplierLiabilityRow != null &&
-    (supplierLiabilityRow.unpaidCount > 0 || supplierLiabilityRow.unfixedCount > 0);
+    (supplierLiabilityRow != null &&
+      (supplierLiabilityRow.unpaidCount > 0 || supplierLiabilityRow.unfixedCount > 0)) ||
+    (trimmedSupplier !== "" && sessionLiableSuppliers.has(trimmedSupplier.toLowerCase()));
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -474,20 +489,24 @@ export default function PurchaseBillsPage() {
               </div>
             </div>
 
-            {supplierHasLiability && supplierLiabilityRow && (
+            {supplierHasLiability && (
               <div className="flex gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <div className="space-y-0.5">
                   <p className="font-semibold">This supplier has outstanding liabilities</p>
-                  <p className="text-amber-800">
-                    {supplierLiabilityRow.unpaidCount > 0 && (
-                      <span>{supplierLiabilityRow.unpaidCount} unpaid bill{supplierLiabilityRow.unpaidCount > 1 ? "s" : ""} — AED {fmtAED(supplierLiabilityRow.unpaidTotalAed)}</span>
-                    )}
-                    {supplierLiabilityRow.unpaidCount > 0 && supplierLiabilityRow.unfixedCount > 0 && <span className="mx-1">·</span>}
-                    {supplierLiabilityRow.unfixedCount > 0 && (
-                      <span>{supplierLiabilityRow.unfixedCount} unfixed bill{supplierLiabilityRow.unfixedCount > 1 ? "s" : ""} — {fmtG(supplierLiabilityRow.unfixedPureGrams)} g pure</span>
-                    )}
-                  </p>
+                  {supplierLiabilityRow ? (
+                    <p className="text-amber-800">
+                      {supplierLiabilityRow.unpaidCount > 0 && (
+                        <span>{supplierLiabilityRow.unpaidCount} unpaid bill{supplierLiabilityRow.unpaidCount > 1 ? "s" : ""} — AED {fmtAED(supplierLiabilityRow.unpaidTotalAed)}</span>
+                      )}
+                      {supplierLiabilityRow.unpaidCount > 0 && supplierLiabilityRow.unfixedCount > 0 && <span className="mx-1">·</span>}
+                      {supplierLiabilityRow.unfixedCount > 0 && (
+                        <span>{supplierLiabilityRow.unfixedCount} unfixed bill{supplierLiabilityRow.unfixedCount > 1 ? "s" : ""} — {fmtG(supplierLiabilityRow.unfixedPureGrams)} g pure</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-amber-800">An unpaid or unfixed bill was added for this supplier earlier in this session.</p>
+                  )}
                   <p className="text-xs text-amber-700">Consider settling open balances before adding more.</p>
                 </div>
               </div>
