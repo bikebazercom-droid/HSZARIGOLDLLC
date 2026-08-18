@@ -66,7 +66,15 @@ interface AuditLogEntry {
   createdAt: string;
 }
 
-async function fetchAuditLog(baseUrl: string): Promise<AuditLogEntry[]> {
+interface AuditLogResponse {
+  entries: AuditLogEntry[];
+  totalCount: number;
+  warnThreshold: number;
+  capacityWarning: boolean;
+  retentionMonths: number;
+}
+
+async function fetchAuditLog(baseUrl: string): Promise<AuditLogResponse> {
   const res = await fetch(`${baseUrl}api/purchase-bills/audit-log`, { credentials: "include" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
@@ -107,12 +115,13 @@ export default function PurchaseBillsPage() {
     query: { queryKey: getListPurchaseBillsQueryKey(undefined), refetchOnWindowFocus: true, staleTime: 0 },
   });
 
-  const { data: auditLog, isLoading: auditLogLoading, refetch: refetchAuditLog } = useQuery<AuditLogEntry[]>({
+  const { data: auditLogData, isLoading: auditLogLoading, refetch: refetchAuditLog } = useQuery<AuditLogResponse>({
     queryKey: AUDIT_LOG_QUERY_KEY,
     queryFn: () => fetchAuditLog(baseUrl),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+  const auditLog = auditLogData?.entries;
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
     query: { queryKey: getGetSupplierLiabilityQueryKey(), refetchOnWindowFocus: true, staleTime: 0 },
   });
@@ -614,9 +623,34 @@ export default function PurchaseBillsPage() {
               <p>
                 This log records all significant actions — including invoice creations (and backdated invoices),
                 invoice deletions, purchase bill deletions, and payment-status changes. Entries are permanent and
-                cannot be edited.
+                cannot be edited.{" "}
+                {auditLogData && (
+                  <span>
+                    Entries older than {auditLogData.retentionMonths} months are automatically pruned daily.
+                    {auditLogData.totalCount > 0 && (
+                      <> {auditLogData.totalCount.toLocaleString("en-AE")} total entries stored.</>
+                    )}
+                  </span>
+                )}
               </p>
             </div>
+
+            {/* Capacity warning banner */}
+            {auditLogData?.capacityWarning && (
+              <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p>
+                  <strong>Audit log capacity warning:</strong> The log has{" "}
+                  {auditLogData.totalCount.toLocaleString("en-AE")} entries, which exceeds the{" "}
+                  {auditLogData.warnThreshold.toLocaleString("en-AE")}-entry warning threshold. The daily
+                  automatic cleanup removes entries older than {auditLogData.retentionMonths} months. If
+                  entries are accumulating faster than they are pruned, consider reducing{" "}
+                  <code className="font-mono text-xs">AUDIT_LOG_RETENTION_MONTHS</code> or{" "}
+                  <code className="font-mono text-xs">AUDIT_LOG_WARN_THRESHOLD</code> in your environment
+                  configuration.
+                </p>
+              </div>
+            )}
 
             {auditLogLoading ? (
               <div className="h-32 flex items-center justify-center text-muted-foreground">Loading…</div>
@@ -648,14 +682,16 @@ export default function PurchaseBillsPage() {
                         const isStatusChange = entry.action === "update_payment_status";
                         const isCreate = entry.action === "create";
                         const isDelete = entry.action === "delete";
+                        const isRetentionPrune = entry.action === "retention_prune";
                         // Actor name: create events store createdByUserName, delete events store deletedByUserName.
                         const actorNameFromDetails = isCreate
                           ? (typeof d.createdByUserName === "string" ? d.createdByUserName : null)
                           : isDelete
                             ? (typeof d.deletedByUserName === "string" ? d.deletedByUserName : null)
                             : null;
-                        const actorLabel = actorNameFromDetails
-                          ?? (entry.actorId != null ? `#${entry.actorId}` : "unknown");
+                        const actorLabel = isRetentionPrune
+                          ? "system"
+                          : actorNameFromDetails ?? (entry.actorId != null ? `#${entry.actorId}` : "unknown");
                         // "Party" is supplier for bill events, customer for invoice events.
                         const partyLabel = isInvoice
                           ? (typeof d.customerName === "string" ? d.customerName : "—")
@@ -671,12 +707,16 @@ export default function PurchaseBillsPage() {
                             })()
                           : null;
                         return (
-                          <TableRow key={entry.id}>
+                          <TableRow key={entry.id} className={isRetentionPrune ? "bg-slate-50/60" : undefined}>
                             <TableCell className="pl-4 whitespace-nowrap text-xs text-muted-foreground">
                               {new Date(entry.createdAt).toLocaleString("en-AE")}
                             </TableCell>
                             <TableCell>
-                              {isStatusChange ? (
+                              {isRetentionPrune ? (
+                                <Badge className="uppercase text-xs tracking-wide bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-100">
+                                  Auto-Pruned
+                                </Badge>
+                              ) : isStatusChange ? (
                                 <Badge className="uppercase text-xs tracking-wide bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100">
                                   Status Changed
                                 </Badge>
@@ -703,9 +743,16 @@ export default function PurchaseBillsPage() {
                               )}
                             </TableCell>
                             <TableCell className="font-medium">{entry.billNo ?? "—"}</TableCell>
-                            <TableCell>{partyLabel}</TableCell>
+                            <TableCell>{isRetentionPrune ? "—" : partyLabel}</TableCell>
                             <TableCell className="text-sm">
-                              {isStatusChange ? (
+                              {isRetentionPrune ? (
+                                typeof d.deletedCount === "number" ? (
+                                  <span className="text-muted-foreground">
+                                    {d.deletedCount.toLocaleString("en-AE")} entries removed
+                                    {typeof d.retentionMonths === "number" ? ` (older than ${d.retentionMonths} months)` : ""}
+                                  </span>
+                                ) : "Automatic retention cleanup"
+                              ) : isStatusChange ? (
                                 typeof d.from === "string" && typeof d.to === "string" ? (
                                   <span>
                                     <span className="text-muted-foreground">{PAYMENT_LABEL[d.from] ?? d.from}</span>
@@ -728,9 +775,11 @@ export default function PurchaseBillsPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              {typeof totalRaw === "string" || typeof totalRaw === "number"
-                                ? fmtAED(Number(totalRaw))
-                                : "—"}
+                              {isRetentionPrune ? "—" : (
+                                typeof totalRaw === "string" || typeof totalRaw === "number"
+                                  ? fmtAED(Number(totalRaw))
+                                  : "—"
+                              )}
                             </TableCell>
                             <TableCell className="text-right pr-4 text-xs text-muted-foreground">
                               {actorLabel}

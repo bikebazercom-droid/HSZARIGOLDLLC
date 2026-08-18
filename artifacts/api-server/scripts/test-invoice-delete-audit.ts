@@ -116,7 +116,8 @@ interface AuditEntry {
 async function deleteAuditEntriesForInvoice(invoiceId: number): Promise<AuditEntry[]> {
   const res = await apiReq("/purchase-bills/audit-log");
   if (!res.ok) throw new Error(`audit-log fetch failed (${res.status}): ${await res.text()}`);
-  const all = (await res.json()) as AuditEntry[];
+  const body = (await res.json()) as { entries: AuditEntry[] } | AuditEntry[];
+  const all = Array.isArray(body) ? body : body.entries;
   return all.filter(
     (e) => e.entityType === "invoice" && e.entityId === invoiceId && e.action === "delete",
   );

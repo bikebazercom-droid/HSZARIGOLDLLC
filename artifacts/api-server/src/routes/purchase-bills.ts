@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import PDFDocument from "pdfkit";
-import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable, auditLogTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
 import { requireAdmin } from "../middlewares/auth.js";
@@ -257,18 +257,47 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
   doc.end();
 });
 
+// Configurable capacity-warning threshold: emit a warning flag when the table
+// has more than this many rows so admins can prune before inserts start failing.
+const AUDIT_LOG_WARN_THRESHOLD = (() => {
+  const raw = process.env.AUDIT_LOG_WARN_THRESHOLD;
+  if (!raw) return 10_000;
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return 10_000;
+  return parsed;
+})();
+
+// Keep in sync with the cleanup service default.
+const AUDIT_LOG_RETENTION_MONTHS = (() => {
+  const raw = process.env.AUDIT_LOG_RETENTION_MONTHS;
+  if (!raw) return 24;
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return 24;
+  return parsed;
+})();
+
 // Audit log: recent destructive actions on purchase bills (most recent first).
+// Returns the 200 most-recent entries plus capacity metadata so the UI can
+// warn admins before the table grows large enough to cause silent failures.
 router.get("/purchase-bills/audit-log", requireAdmin, async (_req, res): Promise<void> => {
-  // Return audit events for all tracked entity types so admins see a single
-  // unified log: purchase_bill actions (delete, status change) and invoice
-  // deletions all appear together, ordered newest-first.
-  const entries = await db
-    .select()
-    .from(auditLogTable)
-    .orderBy(desc(auditLogTable.createdAt))
-    .limit(200);
-  res.json(
-    entries.map((e) => ({
+  // Run the count and the row fetch in parallel.
+  const [[{ totalCount }], entries] = await Promise.all([
+    db.select({ totalCount: count() }).from(auditLogTable),
+    db
+      .select()
+      .from(auditLogTable)
+      .orderBy(desc(auditLogTable.createdAt))
+      .limit(200),
+  ]);
+
+  const capacityWarning = totalCount >= AUDIT_LOG_WARN_THRESHOLD;
+
+  res.json({
+    totalCount,
+    warnThreshold: AUDIT_LOG_WARN_THRESHOLD,
+    capacityWarning,
+    retentionMonths: AUDIT_LOG_RETENTION_MONTHS,
+    entries: entries.map((e) => ({
       id: e.id,
       actorId: e.actorId,
       entityType: e.entityType,
@@ -278,7 +307,7 @@ router.get("/purchase-bills/audit-log", requireAdmin, async (_req, res): Promise
       details: (() => { try { return JSON.parse(e.details); } catch { return {}; } })(),
       createdAt: e.createdAt.toISOString(),
     })),
-  );
+  });
 });
 
 router.get("/purchase-bills", requireAdmin, async (req, res): Promise<void> => {

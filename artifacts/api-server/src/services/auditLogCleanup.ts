@@ -7,6 +7,9 @@
  *
  * The cutoff is intentionally generous — two years covers any realistic
  * accountability window while keeping the table at a manageable size.
+ *
+ * Each cleanup run that actually removes rows records a "retention_prune" entry
+ * in the audit log itself so admins can see when automated pruning occurred.
  */
 
 import { lt } from "drizzle-orm";
@@ -42,6 +45,28 @@ async function runCleanup(): Promise<void> {
         { count: deleted.length, retentionMonths: RETENTION_MONTHS, cutoff: cutoff.toISOString() },
         "audit_log cleanup: removed old entries",
       );
+
+      // Record the prune in the audit log so admins can see when automated
+      // cleanup occurred. Actor is null (system action, no human involved).
+      try {
+        await db.insert(auditLogTable).values({
+          actorId: null,
+          entityType: "audit_log",
+          entityId: 0,
+          action: "retention_prune",
+          billNo: null,
+          details: JSON.stringify({
+            deletedCount: deleted.length,
+            retentionMonths: RETENTION_MONTHS,
+            cutoff: cutoff.toISOString(),
+            triggeredBy: "automatic_daily_cleanup",
+          }),
+        });
+      } catch (auditErr) {
+        // Writing the prune record is best-effort — the actual cleanup succeeded,
+        // so only log and continue.
+        logger.warn({ auditErr }, "audit_log cleanup: could not write prune audit entry");
+      }
     } else {
       logger.debug(
         { retentionMonths: RETENTION_MONTHS, cutoff: cutoff.toISOString() },
