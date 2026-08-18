@@ -70,6 +70,7 @@ export default function PurchaseBillsPage() {
   const [settleId, setSettleId] = useState<number | null>(null);
   const [settleStatus, setSettleStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
+  const [deleteConfirmBill, setDeleteConfirmBill] = useState<{ id: number; ref: string } | null>(null);
 
   // Client-side accumulator: tracks supplier names that received an unpaid/unfixed
   // bill in this session. Lets the warning fire instantly when the drawer reopens
@@ -183,12 +184,26 @@ export default function PurchaseBillsPage() {
     });
   };
 
-  const handleDelete = (id: number, ref: string) => {
+  const handleDelete = (id: number, ref: string, paymentStatus: string) => {
+    if (paymentStatus === "paid") {
+      // Paid bills get a richer AlertDialog warning (set below)
+      setDeleteConfirmBill({ id, ref });
+      return;
+    }
     if (!confirm(`Delete bill ${ref}? Its stock batches will be removed and stock reduced accordingly.`)) return;
     deleteBill.mutate({ id }, {
       onSuccess: () => { toast({ title: "Bill deleted" }); invalidate(); },
       onError: () => toast({ title: "Failed to delete bill", variant: "destructive" }),
     });
+  };
+
+  const confirmDeletePaidBill = () => {
+    if (!deleteConfirmBill) return;
+    deleteBill.mutate({ id: deleteConfirmBill.id }, {
+      onSuccess: () => { toast({ title: "Bill deleted" }); invalidate(); },
+      onError: () => toast({ title: "Failed to delete bill", variant: "destructive" }),
+    });
+    setDeleteConfirmBill(null);
   };
 
   const openSettle = (id: number, currentStatus: string) => {
@@ -348,7 +363,7 @@ export default function PurchaseBillsPage() {
                           </Button>
                           <Button
                             variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(b.id, b.billNo)}
+                            onClick={() => handleDelete(b.id, b.billNo, b.paymentStatus)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -547,6 +562,39 @@ export default function PurchaseBillsPage() {
               }}
             >
               Yes, reopen bill
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ─── Delete paid bill confirmation dialog ─── */}
+      <AlertDialog open={deleteConfirmBill != null} onOpenChange={(o) => { if (!o) setDeleteConfirmBill(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete a paid bill?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Bill <strong className="text-foreground">{deleteConfirmBill?.ref}</strong> is already marked{" "}
+                  <strong className="text-foreground">Paid in Cash</strong>.
+                </p>
+                <p>
+                  Deleting it will remove it from financial history, reverse its stock batches,
+                  and permanently erase the settled payment record. This cannot be undone.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeletePaidBill}
+            >
+              Yes, delete bill
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
