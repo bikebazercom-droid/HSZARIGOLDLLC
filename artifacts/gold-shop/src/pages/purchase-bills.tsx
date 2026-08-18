@@ -175,6 +175,14 @@ export default function PurchaseBillsPage() {
 
   const hasOutstanding = liability != null && (liability.totalUnpaidAed > 0 || liability.totalUnfixedPureGrams > 0);
 
+  // Warning: does the supplier typed in the new-bill form already have open liabilities?
+  const supplierLiabilityRow = supplierName.trim()
+    ? liability?.rows.find((r) => r.supplierName.toLowerCase() === supplierName.trim().toLowerCase())
+    : undefined;
+  const supplierHasLiability =
+    supplierLiabilityRow != null &&
+    (supplierLiabilityRow.unpaidCount > 0 || supplierLiabilityRow.unfixedCount > 0);
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
@@ -465,6 +473,25 @@ export default function PurchaseBillsPage() {
                 <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" />
               </div>
             </div>
+
+            {supplierHasLiability && supplierLiabilityRow && (
+              <div className="flex gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold">This supplier has outstanding liabilities</p>
+                  <p className="text-amber-800">
+                    {supplierLiabilityRow.unpaidCount > 0 && (
+                      <span>{supplierLiabilityRow.unpaidCount} unpaid bill{supplierLiabilityRow.unpaidCount > 1 ? "s" : ""} — AED {fmtAED(supplierLiabilityRow.unpaidTotalAed)}</span>
+                    )}
+                    {supplierLiabilityRow.unpaidCount > 0 && supplierLiabilityRow.unfixedCount > 0 && <span className="mx-1">·</span>}
+                    {supplierLiabilityRow.unfixedCount > 0 && (
+                      <span>{supplierLiabilityRow.unfixedCount} unfixed bill{supplierLiabilityRow.unfixedCount > 1 ? "s" : ""} — {fmtG(supplierLiabilityRow.unfixedPureGrams)} g pure</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-amber-700">Consider settling open balances before adding more.</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
