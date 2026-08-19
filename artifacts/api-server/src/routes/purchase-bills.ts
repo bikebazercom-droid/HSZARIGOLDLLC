@@ -311,6 +311,39 @@ router.get("/purchase-bills/audit-log", requireAdmin, async (_req, res): Promise
   });
 });
 
+// Permanently delete selected audit-log entries in one request. Like the
+// single-entry route, this is intentionally traceless: an administrator has
+// explicitly chosen to remove these records forever.
+router.delete("/purchase-bills/audit-log/bulk", requireAdmin, async (req, res): Promise<void> => {
+  // Keep the same CSRF protection as the single-entry permanent deletion.
+  const origin = req.headers.origin;
+  if (origin) {
+    const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+    let originHost: string | null = null;
+    try { originHost = new URL(origin).host; } catch { /* malformed origin */ }
+    if (!originHost || originHost !== host) {
+      res.status(403).json({ error: "Cross-origin request rejected" });
+      return;
+    }
+  }
+
+  const rawIds = req.body?.ids;
+  if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 200) {
+    res.status(400).json({ error: "Provide between 1 and 200 audit entry ids" });
+    return;
+  }
+  const ids = [...new Set(rawIds)];
+  if (!ids.every((id) => Number.isInteger(id) && id > 0)) {
+    res.status(400).json({ error: "Audit entry ids must be positive integers" });
+    return;
+  }
+
+  const deleted = await db.delete(auditLogTable)
+    .where(inArray(auditLogTable.id, ids))
+    .returning({ id: auditLogTable.id });
+  res.json({ deletedCount: deleted.length });
+});
+
 // Permanently delete a single audit-log entry. This is an explicit admin
 // action: the row is removed outright and — by design — no trace of the
 // deletion is recorded anywhere (no audit entry about the audit deletion).

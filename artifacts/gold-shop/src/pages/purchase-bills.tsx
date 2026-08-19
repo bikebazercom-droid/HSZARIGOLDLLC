@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -104,6 +105,9 @@ export default function PurchaseBillsPage() {
   const [deleteConfirmBill, setDeleteConfirmBill] = useState<{ id: number; ref: string } | null>(null);
   const [deleteAuditEntry, setDeleteAuditEntry] = useState<{ id: number; ref: string } | null>(null);
   const [auditDeletePendingId, setAuditDeletePendingId] = useState<number | null>(null);
+  const [selectedAuditEntryIds, setSelectedAuditEntryIds] = useState<Set<number>>(new Set());
+  const [bulkAuditDeleteConfirm, setBulkAuditDeleteConfirm] = useState(false);
+  const [bulkAuditDeletePending, setBulkAuditDeletePending] = useState(false);
   // Session-level unlock: paid bills are protected by default; user must explicitly
   // toggle this on to enable deletion (hard guard — server also enforces it).
   const [paidDeleteUnlocked, setPaidDeleteUnlocked] = useState(false);
@@ -125,6 +129,7 @@ export default function PurchaseBillsPage() {
     refetchOnWindowFocus: false,
   });
   const auditLog = auditLogData?.entries;
+  const allAuditEntriesSelected = auditLog != null && auditLog.length > 0 && auditLog.every((entry) => selectedAuditEntryIds.has(entry.id));
 
   // Permanently remove one audit-log entry (no trace kept anywhere).
   const handleDeleteAuditEntry = async (id: number) => {
@@ -136,12 +141,51 @@ export default function PurchaseBillsPage() {
       });
       if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
       toast({ title: "Audit entry permanently deleted" });
+      setSelectedAuditEntryIds((selected) => {
+        const next = new Set(selected);
+        next.delete(id);
+        return next;
+      });
       await queryClient.invalidateQueries({ queryKey: AUDIT_LOG_QUERY_KEY });
     } catch {
       toast({ title: "Failed to delete audit entry", variant: "destructive" });
     } finally {
       setAuditDeletePendingId(null);
       setDeleteAuditEntry(null);
+    }
+  };
+  const toggleAuditEntrySelection = (id: number, checked: boolean) => {
+    setSelectedAuditEntryIds((selected) => {
+      const next = new Set(selected);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleSelectAllAuditEntries = (checked: boolean) => {
+    setSelectedAuditEntryIds(checked ? new Set((auditLog ?? []).map((entry) => entry.id)) : new Set());
+  };
+  const handleBulkDeleteAuditEntries = async () => {
+    const ids = [...selectedAuditEntryIds];
+    if (ids.length === 0) return;
+    setBulkAuditDeletePending(true);
+    try {
+      const res = await fetch(`${baseUrl}api/purchase-bills/audit-log/bulk`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { deletedCount } = await res.json() as { deletedCount: number };
+      toast({ title: `${deletedCount} audit ${deletedCount === 1 ? "entry" : "entries"} permanently deleted` });
+      setSelectedAuditEntryIds(new Set());
+      await queryClient.invalidateQueries({ queryKey: AUDIT_LOG_QUERY_KEY });
+    } catch {
+      toast({ title: "Failed to delete selected audit entries", variant: "destructive" });
+    } finally {
+      setBulkAuditDeletePending(false);
+      setBulkAuditDeleteConfirm(false);
     }
   };
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
@@ -172,6 +216,16 @@ export default function PurchaseBillsPage() {
       return next;
     });
   }, [liability]);
+
+  // Keep selection in sync when another tab/admin changes the audit log.
+  useEffect(() => {
+    if (!auditLog) return;
+    const visibleIds = new Set(auditLog.map((entry) => entry.id));
+    setSelectedAuditEntryIds((selected) => {
+      const next = new Set([...selected].filter((id) => visibleIds.has(id)));
+      return next.size === selected.size ? selected : next;
+    });
+  }, [auditLog]);
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [billNo, setBillNo] = useState("");
@@ -703,10 +757,46 @@ export default function PurchaseBillsPage() {
               </div>
             ) : (
               <div className="bg-card rounded-md border overflow-hidden">
+                <div className="flex flex-col gap-2 border-b bg-muted/20 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedAuditEntryIds.size > 0
+                      ? `${selectedAuditEntryIds.size} selected`
+                      : "Select entries to permanently remove them"}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {selectedAuditEntryIds.size > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedAuditEntryIds(new Set())}
+                        disabled={bulkAuditDeletePending}
+                      >
+                        Clear selection
+                      </Button>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={selectedAuditEntryIds.size === 0 || bulkAuditDeletePending}
+                      onClick={() => setBulkAuditDeleteConfirm(true)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete selected{selectedAuditEntryIds.size > 0 ? ` (${selectedAuditEntryIds.size})` : ""}
+                    </Button>
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
+                        <TableHead className="w-10 pl-4">
+                          <Checkbox
+                            aria-label="Select all audit log entries"
+                            checked={allAuditEntriesSelected}
+                            onCheckedChange={(checked) => toggleSelectAllAuditEntries(checked === true)}
+                          />
+                        </TableHead>
                         <TableHead className="pl-4">Timestamp</TableHead>
                         <TableHead>Action</TableHead>
                         <TableHead>Reference</TableHead>
@@ -750,6 +840,14 @@ export default function PurchaseBillsPage() {
                           : null;
                         return (
                           <TableRow key={entry.id} className={isRetentionPrune ? "bg-slate-50/60" : undefined}>
+                            <TableCell className="pl-4">
+                              <Checkbox
+                                aria-label={`Select audit entry ${entry.billNo ?? entry.id}`}
+                                checked={selectedAuditEntryIds.has(entry.id)}
+                                onCheckedChange={(checked) => toggleAuditEntrySelection(entry.id, checked === true)}
+                                disabled={bulkAuditDeletePending || auditDeletePendingId === entry.id}
+                              />
+                            </TableCell>
                             <TableCell className="pl-4 whitespace-nowrap text-xs text-muted-foreground">
                               {new Date(entry.createdAt).toLocaleString("en-AE")}
                             </TableCell>
@@ -849,6 +947,35 @@ export default function PurchaseBillsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* ─── Bulk permanently delete audit entries confirm ─── */}
+      <AlertDialog open={bulkAuditDeleteConfirm} onOpenChange={(o) => { if (!o && !bulkAuditDeletePending) setBulkAuditDeleteConfirm(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Permanently delete {selectedAuditEntryIds.size} audit {selectedAuditEntryIds.size === 1 ? "entry" : "entries"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The selected audit log entries will be removed forever. No record of these entries — or of
+              their deletion — will remain anywhere. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkAuditDeletePending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={bulkAuditDeletePending || selectedAuditEntryIds.size === 0}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleBulkDeleteAuditEntries();
+              }}
+            >
+              {bulkAuditDeletePending ? "Deleting..." : `Delete ${selectedAuditEntryIds.size} Forever`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ─── Permanently delete audit entry confirm ─── */}
       <AlertDialog open={deleteAuditEntry != null} onOpenChange={(o) => { if (!o && auditDeletePendingId == null) setDeleteAuditEntry(null); }}>
