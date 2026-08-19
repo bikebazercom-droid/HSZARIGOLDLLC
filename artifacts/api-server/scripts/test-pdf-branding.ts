@@ -18,6 +18,8 @@ import { createBrandedPdf, PDF_BRAND } from "../src/lib/pdfBranding.js";
 let passed = 0;
 let failed = 0;
 
+type Rgb = [number, number, number];
+
 function assert(condition: boolean, message: string): void {
   if (condition) {
     console.log(`  ✓ ${message}`);
@@ -28,7 +30,52 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-async function renderRepresentativePdf(layout: "portrait" | "landscape"): Promise<Buffer> {
+function imageDimensions(imagePath: string): { width: number; height: number } {
+  const [width, height] = execFileSync(
+    "magick",
+    [imagePath, "-format", "%w %h", "info:"],
+    { encoding: "utf8" },
+  ).trim().split(/\s+/).map(Number);
+  return { width, height };
+}
+
+function imagePixel(imagePath: string, x: number, y: number): Rgb {
+  const output = execFileSync(
+    "magick",
+    [imagePath, "-format", `%[pixel:p{${x},${y}}]`, "info:"],
+    { encoding: "utf8" },
+  );
+  const match = output.match(/srgba?\((\d+),(\d+),(\d+)/);
+  if (!match) throw new Error(`Could not read pixel color from ${imagePath}: ${output}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function isNearColor(actual: Rgb, expected: Rgb, tolerance = 18): boolean {
+  return actual.every((channel, index) => Math.abs(channel - expected[index]) <= tolerance);
+}
+
+function darkPixelFraction(
+  imagePath: string,
+  crop: { x: number; y: number; width: number; height: number },
+): number {
+  return Number(execFileSync(
+    "magick",
+    [
+      imagePath,
+      "-crop", `${crop.width}x${crop.height}+${crop.x}+${crop.y}`,
+      "+repage",
+      "-colorspace", "Gray",
+      "-threshold", "90%",
+      "-format", "%[fx:1-mean]",
+      "info:",
+    ],
+    { encoding: "utf8" },
+  ));
+}
+
+async function renderRepresentativePdf(
+  layout: "portrait" | "landscape",
+): Promise<{ bytes: Buffer; finalContentY: number }> {
   const pdf = createBrandedPdf({
     title: `${layout} regression report`,
     layout,
@@ -55,11 +102,11 @@ async function renderRepresentativePdf(layout: "portrait" | "landscape"): Promis
     y += 18;
   }
   pdf.finish(y);
-  return completed;
+  return { bytes: await completed, finalContentY: y };
 }
 
 async function inspectPdf(layout: "portrait" | "landscape"): Promise<void> {
-  const bytes = await renderRepresentativePdf(layout);
+  const { bytes, finalContentY } = await renderRepresentativePdf(layout);
   assert(bytes.subarray(0, 4).toString("utf8") === "%PDF", `${layout} output is a PDF download`);
 
   const dir = await mkdtemp(join(tmpdir(), "hazari-pdf-branding-"));
@@ -83,15 +130,30 @@ async function inspectPdf(layout: "portrait" | "landscape"): Promise<void> {
       `${layout} output retains complete A4 page geometry`,
     );
 
+    assert(pages[0]?.includes(PDF_BRAND.companyName) ?? false, `${layout} first page keeps the official identity`);
+    assert(
+      pages[0]?.includes(PDF_BRAND.phone) && pages[0]?.includes(PDF_BRAND.email),
+      `${layout} first page keeps contact details`,
+    );
+    assert(
+      pages.slice(1).every((page) => !page.includes(PDF_BRAND.companyName) && !page.includes(PDF_BRAND.phone)),
+      `${layout} continuation pages do not repeat the legal header`,
+    );
+    assert(
+      pages.slice(0, -1).every((page) => !page.includes("Thank you for your business!") && !page.includes("Page ")),
+      `${layout} intermediate pages do not repeat the closing footer`,
+    );
+    assert(
+      pages.at(-1)?.includes("Thank you for your business!")
+        && pages.at(-1)?.includes(`Page ${pages.length} of ${pages.length}`),
+      `${layout} final page keeps the single closing banner and page count`,
+    );
+
     for (const [index, page] of pages.entries()) {
       const number = index + 1;
-      assert(page.includes(PDF_BRAND.companyName), `${layout} page ${number} keeps the official identity`);
-      assert(page.includes(PDF_BRAND.phone) && page.includes(PDF_BRAND.email), `${layout} page ${number} keeps contact details`);
-      assert(page.includes("Thank you for your business!"), `${layout} page ${number} keeps the footer banner`);
-      assert(page.includes(`Page ${number} of ${pages.length}`), `${layout} page ${number} has the correct page number`);
       assert(
         new RegExp(`${layout} continuation row \\d+`).test(page),
-        `${layout} page ${number} contains report content inside its frame`,
+        `${layout} page ${number} contains continuous report content`,
       );
     }
 
@@ -104,6 +166,46 @@ async function inspectPdf(layout: "portrait" | "landscape"): Promise<void> {
       assert(pages.at(-1)?.includes(label) ?? false, `${layout} final page contains "${label}"`);
     }
     assert(pages.at(-1)?.includes(`${layout} continuation row 52`) ?? false, `${layout} final row is not cropped`);
+
+    const finalPageImage = join(dir, `${layout}-final.png`);
+    execFileSync("pdftoppm", [
+      "-png",
+      "-singlefile",
+      "-r", "144",
+      "-f", String(pages.length),
+      "-l", String(pages.length),
+      pdfPath,
+      finalPageImage.slice(0, -4),
+    ]);
+    const image = imageDimensions(finalPageImage);
+    assert(
+      isNearColor(imagePixel(finalPageImage, 12, image.height - 32), [30, 58, 95]),
+      `${layout} final thank-you banner is flush with the bottom edge`,
+    );
+    assert(
+      isNearColor(imagePixel(finalPageImage, 12, image.height - 3), [200, 164, 58]),
+      `${layout} final gold rule reaches the absolute bottom edge`,
+    );
+
+    const pageWidthPt = pageWidth;
+    const pageHeightPt = pageHeight;
+    const scaleX = image.width / pageWidthPt;
+    const scaleY = image.height / pageHeightPt;
+    const signatureGap = 12;
+    const availableWidth = pageWidthPt - 80;
+    const signatureBlockGap = 34;
+    const signatureBlockWidth = (availableWidth - signatureBlockGap * 2) / 3;
+    const authorisedX = 40 + 2 * (signatureBlockWidth + signatureBlockGap);
+    const stampCrop = {
+      x: Math.floor((authorisedX + signatureBlockWidth / 2 - 43) * scaleX),
+      y: Math.floor((finalContentY + signatureGap) * scaleY),
+      width: Math.ceil(86 * scaleX),
+      height: Math.ceil(68 * scaleY),
+    };
+    assert(
+      darkPixelFraction(finalPageImage, stampCrop) > 0.04,
+      `${layout} final authorised-signature block contains the round stamp`,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -1164,7 +1164,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   ];
   const boxRowH = 22;
   const boxH = 34 + summaryLines.length * boxRowH + 10;
-  ensureSpace(boxH + 20);
+  ensureSpace(boxH + 28);
   doc.rect(40, y, W, boxH).fillAndStroke("#fdf9ee", GOLD);
   doc.rect(40, y, W, 26).fill(NAVY);
   doc.fillColor(GOLD).font("Helvetica-Bold").fontSize(11).text("4. Financial Debit / Credit & Profit Summary", 52, y + 8);

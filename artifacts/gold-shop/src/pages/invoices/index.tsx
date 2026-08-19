@@ -24,7 +24,15 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/auth";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "../products/stock";
-import { decorateStatementPdf, NAVY, GOLD } from "@/components/pdf-branding";
+import {
+  decorateStatementPdf,
+  GOLD,
+  NAVY,
+  PdfSignatureBlock,
+  STATEMENT_FINAL_FOOTER_SPACER,
+  STATEMENT_FIRST_PAGE_SPACER,
+  STATEMENT_PDF_MARGIN,
+} from "@/components/pdf-branding";
 
 // For known stock buckets show the friendly label; for custom items show the
 // exact user-entered item name (never a generic "Custom" fallback).
@@ -170,7 +178,7 @@ export default function Invoices() {
 
       const worker: any = html2pdf()
         .set({
-          margin: [56, 10, 48, 10], // top, right, bottom, left
+          margin: [...STATEMENT_PDF_MARGIN],
           filename: `Sales-Statement_${catTag}_${format(new Date(), "yyyy-MM-dd")}.pdf`,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, logging: false },
@@ -445,6 +453,7 @@ export default function Invoices() {
       {/* Hidden printable A4 sales statement (html2pdf source) */}
       <div style={{ position: "fixed", top: 0, left: "-9999px", width: "190mm" }}>
         <div ref={reportRef} style={{ width: "190mm", fontFamily: "Arial, sans-serif", color: "#222", background: "#fff", boxSizing: "border-box" }}>
+          <div aria-hidden="true" style={{ height: STATEMENT_FIRST_PAGE_SPACER }} />
           <div style={{ display: "flex", gap: "8px", marginBottom: "12px", breakInside: "avoid" }}>
             <div style={{ flex: 1, border: `1.5px solid ${NAVY}`, borderRadius: "4px", padding: "8px 10px", background: "#f4f0e4" }}>
                 <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total Weight Sold</div>
@@ -481,7 +490,9 @@ export default function Invoices() {
                     <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(r.totalAed)}</td>
                   </tr>
                 ))}
-                <tr style={{ background: "#eee6cf", breakInside: "avoid" }}>
+              </tbody>
+              <tbody style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+                <tr style={{ background: "#eee6cf" }}>
                   <td colSpan={4} style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>
                     Grand Total ({summary?.invoiceCount ?? 0} invoices)
                   </td>
@@ -492,6 +503,14 @@ export default function Invoices() {
                   <td style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
                     AED {fmtAED(summary?.totalAed)}
                   </td>
+                </tr>
+                <tr>
+                  <td colSpan={7} style={{ padding: 0, border: 0 }}>
+                    <PdfSignatureBlock />
+                  </td>
+                </tr>
+                <tr aria-hidden="true">
+                  <td colSpan={7} style={{ height: STATEMENT_FINAL_FOOTER_SPACER, padding: 0, border: 0 }} />
                 </tr>
               </tbody>
             </table>

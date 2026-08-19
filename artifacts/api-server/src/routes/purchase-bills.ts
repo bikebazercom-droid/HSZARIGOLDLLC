@@ -842,7 +842,7 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
   ], "#eee6cf", NAVY, true, 20);
 
   y += 14;
-  y = pdf.ensureSpace(y, 44);
+  y = pdf.ensureSpace(y, 58);
   doc.rect(40, y, W, 44).fillAndStroke("#fdf9ee", GOLD);
   doc.fillColor("#666").font("Helvetica").fontSize(8.5)
     .text("Ledger posting: Metal Credit (+ weight) to supplier & master ledger; Cash Debit (+ cost) to supplier account.", 52, y + 8, { width: W - 24 });

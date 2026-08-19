@@ -18,7 +18,15 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { FileDown, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/auth";
-import { decorateStatementPdf, NAVY, GOLD } from "@/components/pdf-branding";
+import {
+  decorateStatementPdf,
+  GOLD,
+  NAVY,
+  PdfSignatureBlock,
+  STATEMENT_FINAL_FOOTER_SPACER,
+  STATEMENT_FIRST_PAGE_SPACER,
+  STATEMENT_PDF_MARGIN,
+} from "@/components/pdf-branding";
 
 export const STOCK_CATEGORIES = [
   { id: "gold", label: "GOLD" },
@@ -264,7 +272,7 @@ export function StockLedger() {
 
       const worker: any = html2pdf()
         .set({
-          margin: [56, 10, 48, 10], // top, right, bottom, left
+          margin: [...STATEMENT_PDF_MARGIN],
           filename: `Supplier-Statement_${supplierTag}_${format(new Date(), "yyyy-MM-dd")}.pdf`,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, logging: false },
@@ -430,6 +438,7 @@ export function StockLedger() {
       {/* Hidden printable A4 supplier statement (html2pdf source) */}
       <div style={{ position: "fixed", top: 0, left: "-9999px", width: "190mm" }}>
         <div ref={reportRef} style={{ width: "190mm", fontFamily: "Arial, sans-serif", color: "#222", background: "#fff", boxSizing: "border-box" }}>
+          <div aria-hidden="true" style={{ height: STATEMENT_FIRST_PAGE_SPACER }} />
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
             <thead>
                 <tr>
@@ -449,7 +458,9 @@ export function StockLedger() {
                     <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(p.totalPriceAed)}</td>
                   </tr>
                 ))}
-                <tr style={{ background: "#eee6cf", breakInside: "avoid" }}>
+              </tbody>
+              <tbody style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+                <tr style={{ background: "#eee6cf" }}>
                   <td colSpan={3} style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>
                     Grand Total ({filtered.length} purchases)
                   </td>
@@ -460,6 +471,14 @@ export function StockLedger() {
                   <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
                     AED {fmtAED(totals.aed)}
                   </td>
+                </tr>
+                <tr>
+                  <td colSpan={6} style={{ padding: 0, border: 0 }}>
+                    <PdfSignatureBlock />
+                  </td>
+                </tr>
+                <tr aria-hidden="true">
+                  <td colSpan={6} style={{ height: STATEMENT_FINAL_FOOTER_SPACER, padding: 0, border: 0 }} />
                 </tr>
               </tbody>
             </table>

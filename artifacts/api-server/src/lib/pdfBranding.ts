@@ -16,10 +16,13 @@ export const PDF_BRAND = {
 } as const;
 
 const SIDE_MARGIN = 40;
-const CONTENT_TOP = 136;
+const FIRST_PAGE_CONTENT_TOP = 136;
+const CONTINUATION_CONTENT_TOP = 40;
 const BANNER_HEIGHT = 30;
 const BANNER_GOLD_HEIGHT = 4;
-const CONTENT_BOTTOM_GAP = 10;
+const SIGNATURE_BLOCK_HEIGHT = 88;
+const SIGNATURE_GAP = 12;
+const FINAL_CONTENT_RESERVE = BANNER_HEIGHT + SIGNATURE_BLOCK_HEIGHT + SIGNATURE_GAP;
 
 function resolveBrandAsset(filename: string): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -119,7 +122,7 @@ function drawOfficialHeader(
   doc.rect(0, 122, pageWidth, 2).fill(PDF_BRAND.gold);
   doc.restore();
   doc.x = SIDE_MARGIN;
-  doc.y = CONTENT_TOP;
+  doc.y = FIRST_PAGE_CONTENT_TOP;
 }
 
 function drawPageBanner(doc: PDFKit.PDFDocument, pageNumber: number, totalPages: number): void {
@@ -156,9 +159,8 @@ function drawPageBanner(doc: PDFKit.PDFDocument, pageNumber: number, totalPages:
   }
 }
 
-function drawFinalSignatures(doc: PDFKit.PDFDocument): void {
-  const bannerY = doc.page.height - BANNER_HEIGHT;
-  const lineY = bannerY - 31;
+function drawFinalSignatures(doc: PDFKit.PDFDocument, topY: number): void {
+  const lineY = topY + 68;
   const availableWidth = doc.page.width - SIDE_MARGIN * 2;
   const gap = 34;
   const blockWidth = (availableWidth - gap * 2) / 3;
@@ -168,7 +170,7 @@ function drawFinalSignatures(doc: PDFKit.PDFDocument): void {
   labels.forEach((label, index) => {
     const x = SIDE_MARGIN + index * (blockWidth + gap);
     if (index === 2) {
-      doc.image(STAMP_PATH, x + blockWidth / 2 - 43, lineY - 72, {
+      doc.image(STAMP_PATH, x + blockWidth / 2 - 43, topY, {
         fit: [86, 68],
         align: "center",
         valign: "bottom",
@@ -197,48 +199,61 @@ export function createBrandedPdf(options: BrandedPdfOptions): BrandedPdfLayout {
     layout: options.layout ?? "portrait",
     bufferPages: true,
     margins: {
-      top: CONTENT_TOP,
+      top: FIRST_PAGE_CONTENT_TOP,
       left: SIDE_MARGIN,
       right: SIDE_MARGIN,
-      bottom: BANNER_HEIGHT + CONTENT_BOTTOM_GAP,
+      bottom: FINAL_CONTENT_RESERVE,
     },
   });
 
-  const drawHeader = () => drawOfficialHeader(doc, options.title, generatedAt);
-  doc.on("pageAdded", drawHeader);
-  drawHeader();
+  drawOfficialHeader(doc, options.title, generatedAt);
+
+  const addContinuationPage = (): number => {
+    doc.addPage({
+      size: "A4",
+      layout: options.layout ?? "portrait",
+      margins: {
+        top: CONTINUATION_CONTENT_TOP,
+        left: SIDE_MARGIN,
+        right: SIDE_MARGIN,
+        bottom: FINAL_CONTENT_RESERVE,
+      },
+    });
+    doc.x = SIDE_MARGIN;
+    doc.y = CONTINUATION_CONTENT_TOP;
+    return CONTINUATION_CONTENT_TOP;
+  };
+
+  const contentBottom = doc.page.height - FINAL_CONTENT_RESERVE;
 
   const layout: BrandedPdfLayout = {
     doc,
     left: SIDE_MARGIN,
     right: doc.page.width - SIDE_MARGIN,
     width: doc.page.width - SIDE_MARGIN * 2,
-    contentTop: CONTENT_TOP,
-    contentBottom: doc.page.height - BANNER_HEIGHT - CONTENT_BOTTOM_GAP,
-    addPage: () => {
-      doc.addPage();
-      return CONTENT_TOP;
-    },
+    contentTop: FIRST_PAGE_CONTENT_TOP,
+    contentBottom,
+    addPage: addContinuationPage,
     ensureSpace: (y, height) => {
-      if (y + height > doc.page.height - BANNER_HEIGHT - CONTENT_BOTTOM_GAP) {
-        doc.addPage();
-        return CONTENT_TOP;
+      if (y + height > contentBottom) {
+        return addContinuationPage();
       }
       return y;
     },
     finish: (currentY) => {
       const bannerY = doc.page.height - BANNER_HEIGHT;
-      const signatureTop = bannerY - 104;
-      if (currentY > signatureTop - 8) {
-        doc.addPage();
+      const signatureTop = currentY + SIGNATURE_GAP;
+      if (signatureTop + SIGNATURE_BLOCK_HEIGHT > bannerY) {
+        throw new Error(
+          `PDF final content exceeded the reserved signature area (${currentY.toFixed(1)} > ${contentBottom.toFixed(1)})`,
+        );
       }
-      drawFinalSignatures(doc);
+      drawFinalSignatures(doc, signatureTop);
 
       const range = doc.bufferedPageRange();
-      for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
-        doc.switchToPage(pageIndex);
-        drawPageBanner(doc, pageIndex - range.start + 1, range.count);
-      }
+      const finalPageIndex = range.start + range.count - 1;
+      doc.switchToPage(finalPageIndex);
+      drawPageBanner(doc, range.count, range.count);
       doc.flushPages();
       doc.end();
     },

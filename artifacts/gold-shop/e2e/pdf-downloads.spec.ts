@@ -17,6 +17,7 @@ const TEST_ADMIN = {
 };
 
 type CreatedRecord = { id: number };
+type Rgb = [number, number, number];
 
 function pdfPages(pdfPath: string): string[] {
   const text = execFileSync("pdftotext", ["-layout", pdfPath, "-"], {
@@ -34,7 +35,7 @@ function pdfInfo(pdfPath: string): { pages: number; width: number; height: numbe
   return { pages, width: Number(size[1]), height: Number(size[2]) };
 }
 
-function ocrPdf(pdfPath: string): string {
+function ocrPdfPages(pdfPath: string, pageSegmentationMode = 6): string[] {
   const dir = dirname(pdfPath);
   const prefix = join(dir, `${FIXTURE_PREFIX.toLowerCase()}-page`);
   execFileSync("pdftoppm", ["-png", "-r", "240", pdfPath, prefix], {
@@ -46,11 +47,79 @@ function ocrPdf(pdfPath: string): string {
   try {
     return pageImages.map((name) => execFileSync(
       "tesseract",
-      [join(dir, name), "stdout", "--psm", "6"],
+      [join(dir, name), "stdout", "--psm", String(pageSegmentationMode)],
       { encoding: "utf8", maxBuffer: 4_000_000 },
-    )).join("\n\f\n");
+    ));
   } finally {
     for (const name of pageImages) rmSync(join(dir, name), { force: true });
+  }
+}
+
+function ocrPdf(pdfPath: string): string {
+  return ocrPdfPages(pdfPath).join("\n\f\n");
+}
+
+function imagePixel(imagePath: string, x: number, y: number): Rgb {
+  const output = execFileSync(
+    "magick",
+    [imagePath, "-format", `%[pixel:p{${x},${y}}]`, "info:"],
+    { encoding: "utf8" },
+  );
+  const match = output.match(/srgba?\((\d+),(\d+),(\d+)/);
+  if (!match) throw new Error(`Could not read pixel color from ${imagePath}: ${output}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function isNearColor(actual: Rgb, expected: Rgb, tolerance = 20): boolean {
+  return actual.every((channel, index) => Math.abs(channel - expected[index]) <= tolerance);
+}
+
+function finalPageVisualMetrics(pdfPath: string): {
+  navyAtBottom: boolean;
+  goldAtBottom: boolean;
+  authorisedStampDarkFraction: number;
+} {
+  const dir = dirname(pdfPath);
+  const finalPage = pdfInfo(pdfPath).pages;
+  const prefix = join(dir, `${FIXTURE_PREFIX.toLowerCase()}-visual-final`);
+  const imagePath = `${prefix}.png`;
+  execFileSync(
+    "pdftoppm",
+    ["-png", "-singlefile", "-r", "144", "-f", String(finalPage), "-l", String(finalPage), pdfPath, prefix],
+    { maxBuffer: 4_000_000 },
+  );
+  try {
+    const [width, height] = execFileSync(
+      "magick",
+      [imagePath, "-format", "%w %h", "info:"],
+      { encoding: "utf8" },
+    ).trim().split(/\s+/).map(Number);
+    const stampCrop = {
+      x: Math.floor(width * 0.65),
+      y: Math.floor(height * 0.23),
+      width: Math.floor(width * 0.30),
+      height: Math.floor(height * 0.17),
+    };
+    const authorisedStampDarkFraction = Number(execFileSync(
+      "magick",
+      [
+        imagePath,
+        "-crop", `${stampCrop.width}x${stampCrop.height}+${stampCrop.x}+${stampCrop.y}`,
+        "+repage",
+        "-colorspace", "Gray",
+        "-threshold", "90%",
+        "-format", "%[fx:1-mean]",
+        "info:",
+      ],
+      { encoding: "utf8" },
+    ));
+    return {
+      navyAtBottom: isNearColor(imagePixel(imagePath, 12, height - 32), [30, 58, 95]),
+      goldAtBottom: isNearColor(imagePixel(imagePath, 12, height - 3), [200, 164, 58]),
+      authorisedStampDarkFraction,
+    };
+  } finally {
+    rmSync(imagePath, { force: true });
   }
 }
 
@@ -205,23 +274,33 @@ async function downloadPdf(
   return path;
 }
 
-function expectStatementBranding(pages: string[]): void {
+function expectStatementBranding(pages: string[], ocrPages: string[]): void {
   expect(pages.length).toBeGreaterThan(1);
-  for (const [index, page] of pages.entries()) {
-    expect(page).toContain("Hazari Gold L.L.C");
-    expect(page).toContain("+971509364193");
-    expect(page).toContain("hazarigoldllc@gmail.com");
-    expect(page).toContain("Thank you for your business!");
-    expect(page).toContain(`Page ${index + 1} of ${pages.length}`);
+  expect(ocrPages).toHaveLength(pages.length);
+  expect(pages[0]).toContain("Hazari Gold L.L.C");
+  expect(pages[0]).toContain("+971509364193");
+  expect(pages[0]).toContain("hazarigoldllc@gmail.com");
+  for (const page of pages.slice(1)) {
+    expect(page).not.toContain("Hazari Gold L.L.C");
+    expect(page).not.toContain("+971509364193");
+    expect(page).not.toContain("hazarigoldllc@gmail.com");
   }
+  for (const page of pages.slice(0, -1)) {
+    expect(page).not.toContain("Thank you for your business!");
+    expect(page).not.toContain("Page ");
+  }
+  expect(pages.at(-1)).toContain("Thank you for your business!");
+  expect(pages.at(-1)).toContain(`Page ${pages.length} of ${pages.length}`);
   for (const page of pages.slice(1)) {
     expect(page).toContain("Date");
     expect(page).toContain("Total (AED)");
   }
   for (const label of ["Customer's Signature", "Checked By", "Authorised Signature"]) {
-    expect(pages.slice(0, -1).every((page) => !page.includes(label))).toBe(true);
-    expect(pages.at(-1)).toContain(label);
+    const normalizedLabel = normalized(label);
+    expect(ocrPages.slice(0, -1).every((page) => !page.includes(normalizedLabel))).toBe(true);
+    expect(ocrPages.at(-1)).toContain(normalizedLabel);
   }
+  expect(ocrPages.at(-1)).toContain("GRANDTOTAL");
 }
 
 test("browser PDF downloads keep branding, frames, continuation headings, totals, and signatures", async ({ page }, testInfo) => {
@@ -315,13 +394,18 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(info.pages).toBeGreaterThan(1);
       expect(info.width).toBeLessThan(info.height);
       const pages = pdfPages(path);
-      expectStatementBranding(pages);
+      const ocrPages = ocrPdfPages(path, 3).map(normalized);
+      expectStatementBranding(pages, ocrPages);
+      const visual = finalPageVisualMetrics(path);
+      expect(visual.navyAtBottom, "final thank-you banner must be flush with the bottom edge").toBe(true);
+      expect(visual.goldAtBottom, "final gold rule must reach the absolute bottom edge").toBe(true);
+      expect(visual.authorisedStampDarkFraction, "round stamp must be visible above the authorised signature").toBeGreaterThan(0.08);
       for (const pageText of pages.slice(1)) {
         expect(pageText).toContain("Invoice #");
         expect(pageText).toContain("Customer");
       }
 
-      const ocr = normalized(ocrPdf(path));
+      const ocr = ocrPages.join("");
       expect(ocr).toContain(FIXTURE_PREFIX);
       expect(ocr).toContain("GRANDTOTAL");
     });
@@ -336,13 +420,18 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(info.pages).toBeGreaterThan(1);
       expect(info.width).toBeLessThan(info.height);
       const pages = pdfPages(path);
-      expectStatementBranding(pages);
+      const ocrPages = ocrPdfPages(path, 3).map(normalized);
+      expectStatementBranding(pages, ocrPages);
+      const visual = finalPageVisualMetrics(path);
+      expect(visual.navyAtBottom, "final thank-you banner must be flush with the bottom edge").toBe(true);
+      expect(visual.goldAtBottom, "final gold rule must reach the absolute bottom edge").toBe(true);
+      expect(visual.authorisedStampDarkFraction, "round stamp must be visible above the authorised signature").toBeGreaterThan(0.08);
       for (const pageText of pages.slice(1)) {
         expect(pageText).toContain("Supplier");
         expect(pageText).toContain("Category");
       }
 
-      const ocr = normalized(ocrPdf(path));
+      const ocr = ocrPages.join("");
       expect(ocr).toContain(FIXTURE_PREFIX);
       expect(ocr).toContain("GRANDTOTAL");
     });

@@ -1,5 +1,4 @@
 - [Raw PDF/file download routes](raw-download-routes.md) — Express routes for binary file downloads intentionally live outside the OpenAPI spec; frontend hits them directly via `window.open`.
-- [Gold-shop seeded admin login](gold-shop-admin-login.md) — seed script's default admin (0000000000/1234) only applies on empty DB; check `users` table for real credentials before e2e testing.
 - [Gold-shop invoice price-locking](gold-shop-price-locking.md) — invoices/invoice_items are frozen numeric snapshots (metalRate, unitPrice, purityMultiplier) written once at creation; no update route exists, and detail/PDF views must only ever read stored fields, never live prices.
 - [Gold-shop mobile responsive patterns](gold-shop-mobile-responsive.md) — print-fidelity documents (invoice PDF) stay fixed-width in their own overflow-x-auto wrapper rather than being reflowed; other pages use standard Tailwind stacking.
 - [Gold-shop core asset parity](gold-shop-asset-parity.md) — new metal/karat rate types must get full manual-editable parity (DB column, API, OpenAPI, AssetCard, invoice lookup) like existing assets.
