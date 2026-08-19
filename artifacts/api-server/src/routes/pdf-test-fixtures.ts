@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, notLike } from "drizzle-orm";
 import { db, pdfTestFixturesTable, pdfTestRunsTable, usersTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 
@@ -13,9 +13,17 @@ class RecoveryConflictError extends Error {
 const TEST_USERNAME_PREFIX = "__pdf_e2e_ephemeral__";
 export const PDF_TEST_RUN_HEADER = "x-pdf-e2e-run-id";
 
+// Suite runs belong to the destructive HTTP test suites (audit guards etc.).
+// They are namespaced with a "suite:" prefix so they can never collide with
+// the 32-hex browser-run IDs, and they are owned by the logged-in admin.
+const SUITE_RUN_ID_PATTERN = /^suite:[a-z0-9-]+:[a-f0-9]{32}$/;
+
+export type TestFixtureEntityType = "invoice" | "stock_purchase" | "purchase_bill" | "user";
+
 function runIdFromRequest(req: Request): string | null {
   const value = req.headers[PDF_TEST_RUN_HEADER];
-  return typeof value === "string" && /^[a-f0-9]{32}$/.test(value) ? value : null;
+  if (typeof value !== "string") return null;
+  return /^[a-f0-9]{32}$/.test(value) || SUITE_RUN_ID_PATTERN.test(value) ? value : null;
 }
 
 async function isEphemeralPdfAdmin(userId: number | undefined): Promise<boolean> {
@@ -42,16 +50,21 @@ export async function authorizePdfTestRun(req: Request): Promise<{
       eq(pdfTestRunsTable.ownerUserId, req.session.userId!),
       eq(pdfTestRunsTable.status, "active"),
     ));
+  if (!run) return { requested, runId: null };
+  // Suite runs are owned by the (seeded) admin that started them; requireAdmin
+  // already gates the route and ownership is enforced by the query above.
+  // Browser PDF runs additionally require the ephemeral test admin.
+  if (SUITE_RUN_ID_PATTERN.test(runId)) return { requested, runId };
   return {
     requested,
-    runId: run && await isEphemeralPdfAdmin(req.session.userId) ? runId : null,
+    runId: (await isEphemeralPdfAdmin(req.session.userId)) ? runId : null,
   };
 }
 
 export async function registerPdfTestFixture(
   tx: typeof db,
   runId: string | null,
-  entityType: "invoice" | "stock_purchase",
+  entityType: TestFixtureEntityType,
   entityId: number,
 ): Promise<void> {
   if (!runId) return;
@@ -66,7 +79,7 @@ export async function registerPdfTestFixture(
  */
 export async function unregisterPdfTestFixture(
   tx: typeof db,
-  entityType: "invoice" | "stock_purchase",
+  entityType: TestFixtureEntityType,
   entityId: number,
 ): Promise<void> {
   await tx.delete(pdfTestFixturesTable).where(and(
@@ -93,6 +106,8 @@ router.get("/test-fixtures/pdf/abandoned", requireAdmin, async (req, res): Promi
     return;
   }
 
+  // Suite runs (runId prefixed "suite:") belong to the HTTP test suites and
+  // are recovered by their own runner-side path — never by the browser flow.
   const [fixtures, runs] = await Promise.all([
     db.select({
       runId: pdfTestFixturesTable.runId,
@@ -103,11 +118,13 @@ router.get("/test-fixtures/pdf/abandoned", requireAdmin, async (req, res): Promi
       .where(and(
         ne(pdfTestFixturesTable.runId, currentRunId),
         eq(pdfTestRunsTable.status, "abandoned"),
+        notLike(pdfTestRunsTable.runId, "suite:%"),
       )),
     db.select({ runId: pdfTestRunsTable.runId }).from(pdfTestRunsTable)
       .where(and(
         ne(pdfTestRunsTable.runId, currentRunId),
         eq(pdfTestRunsTable.status, "abandoned"),
+        notLike(pdfTestRunsTable.runId, "suite:%"),
       )),
   ]);
   res.json({ fixtures, runIds: runs.map((run) => run.runId) });

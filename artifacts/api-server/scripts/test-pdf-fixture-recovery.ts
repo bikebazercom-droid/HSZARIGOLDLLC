@@ -29,34 +29,40 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`ASSERTION FAILED: ${message}`);
 }
 
-async function createTestAdmin(): Promise<number> {
+/**
+ * Creates the ephemeral admin and its owning run row in ONE transaction, so
+ * there is no crash window in which the admin exists without a registry
+ * record. A kill at any later point leaves a stale run whose owner ID the
+ * ordinary age-gated recovery deletes.
+ */
+async function createTestAdminWithRun(runId: string): Promise<number> {
   const suffix = randomBytes(16).toString("hex");
-  const [admin] = await db.insert(usersTable).values({
-    username: `${TEST_USERNAME_PREFIX}${suffix}`,
-    mobile: `${TEST_USERNAME_PREFIX}${suffix}`,
-    passwordHash: await bcrypt.hash(randomBytes(32).toString("base64url"), 10),
-    fullName: TEST_FULL_NAME,
-    role: "admin",
-    isActive: true,
-  }).returning({ id: usersTable.id });
-  assert(admin, "could not create test admin");
-  return admin.id;
+  const passwordHash = await bcrypt.hash(randomBytes(32).toString("base64url"), 10);
+  return db.transaction(async (tx) => {
+    const [admin] = await tx.insert(usersTable).values({
+      username: `${TEST_USERNAME_PREFIX}${suffix}`,
+      mobile: `${TEST_USERNAME_PREFIX}${suffix}`,
+      passwordHash,
+      fullName: TEST_FULL_NAME,
+      role: "admin",
+      isActive: true,
+    }).returning({ id: usersTable.id });
+    assert(admin, "could not create test admin");
+    await tx.insert(pdfTestRunsTable).values({ runId, ownerUserId: admin.id });
+    return admin.id;
+  });
 }
 
 async function main(): Promise<void> {
   await ensureRegistryProvisioned();
 
-  const interruptedAdminId = await createTestAdmin();
-  const freshAdminId = await createTestAdmin();
   const interruptedRunId = randomBytes(16).toString("hex");
   const freshRunId = randomBytes(16).toString("hex");
+  const interruptedAdminId = await createTestAdminWithRun(interruptedRunId);
+  const freshAdminId = await createTestAdminWithRun(freshRunId);
   const fixtureEntityIds = [901_000_001, 901_000_002];
 
   try {
-    await db.insert(pdfTestRunsTable).values([
-      { runId: interruptedRunId, ownerUserId: interruptedAdminId },
-      { runId: freshRunId, ownerUserId: freshAdminId },
-    ]);
     await db.insert(pdfTestFixturesTable).values([
       { runId: interruptedRunId, entityType: "invoice", entityId: fixtureEntityIds[0]! },
       { runId: interruptedRunId, entityType: "stock_purchase", entityId: fixtureEntityIds[1]! },

@@ -5,6 +5,7 @@ import { broadcast } from "../lib/socket.js";
 import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { applyStockDelta } from "./stock.js";
+import { authorizePdfTestRun, registerPdfTestFixture, unregisterPdfTestFixture } from "./pdf-test-fixtures.js";
 import { acquireStockMutationLock } from "../services/inventoryEngine.js";
 import {
   CreatePurchaseBillBody,
@@ -442,6 +443,16 @@ router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => 
   const totalPure = withPure.reduce((s, it) => s + it.pureWeightGrams, 0);
   const totalAed = withPure.reduce((s, it) => s + it.lineTotalAed, 0);
 
+  // If a registered test run requested ownership, record the created bill in
+  // the durable test registry atomically with its creation, so a crash right
+  // after the commit can never leave an unregistered (unrecoverable) record.
+  const testRun = await authorizePdfTestRun(req);
+  if (testRun.requested && !testRun.runId) {
+    // Never silently create an unregistered record for a caller that asked
+    // for fixture ownership — that would defeat crash recovery.
+    res.status(403).json({ error: "Test fixture ownership was rejected" });
+    return;
+  }
   const created = await db.transaction(async (tx) => {
     const [bill] = await tx.insert(purchaseBillsTable).values({
       billNo: input.billNo.trim(),
@@ -483,6 +494,7 @@ router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => 
       }).returning();
       itemRows.push(row);
     }
+    await registerPdfTestFixture(tx as unknown as typeof db, testRun.runId, "purchase_bill", bill.id);
     return { bill, itemRows };
   });
 
@@ -533,6 +545,10 @@ router.delete("/purchase-bills/:id", requireAdmin, async (req, res): Promise<voi
       }
     }
     const [bill] = await tx.delete(purchaseBillsTable).where(eq(purchaseBillsTable.id, id)).returning();
+    if (bill) {
+      // The test registry must only list records that still exist.
+      await unregisterPdfTestFixture(tx as unknown as typeof db, "purchase_bill", id);
+    }
     if (!bill) return null;
     // Reverse each linked stock batch (same semantics as deleting a purchase).
     for (const it of items) {

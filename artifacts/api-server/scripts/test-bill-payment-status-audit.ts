@@ -55,6 +55,9 @@
  * each test.  Any fixture that survives a failure can be removed manually.
  */
 
+import { pool } from "@workspace/db";
+import { ensureRegistryProvisioned, finalizeSuiteRun, recoverAbandonedSuiteRuns, startSuiteRun, type SuiteEntityType } from "./suite-run-registry";
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const devDomain = process.env["REPLIT_DEV_DOMAIN"];
@@ -89,7 +92,32 @@ async function login(): Promise<void> {
   if (!res.ok) throw new Error(`Login failed (${res.status}): ${await res.text()}`);
   const setCookie = res.headers.get("set-cookie");
   if (setCookie) _cookie = setCookie.split(";")[0]!;
+  const body = (await res.json()) as { id: number };
+  adminUserId = body.id;
   console.log("  ✓ Logged in as admin");
+}
+
+// ── Suite run registry ──────────────────────────────────────────────────────
+
+/** The logged-in admin's user id; required to start an owned suite run. */
+let adminUserId = 0;
+
+/** Set once in main() after recovery; used by fixture helpers to register IDs. */
+let suiteRunId = "";
+
+/** Deletes a single registered fixture via the script's own HTTP session. */
+async function deleteRegisteredFixture(entityType: SuiteEntityType, entityId: number): Promise<"deleted" | "missing" | "kept"> {
+  const target =
+    entityType === "invoice" ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } } :
+    entityType === "stock_purchase" ? { path: `/stock/purchases/${entityId}`, headers: {} } :
+    entityType === "purchase_bill" ? { path: `/purchase-bills/${entityId}`, headers: { "x-allow-paid-delete": "true" } } :
+    { path: `/admin/users/${entityId}`, headers: {} };
+  try {
+    const res = await apiReq(target.path, { method: "DELETE", headers: target.headers });
+    if (res.ok) return "deleted";
+    if (res.status === 404) return "missing";
+    return "kept";
+  } catch { return "kept"; }
 }
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
@@ -99,6 +127,7 @@ async function createTestBill(label: string): Promise<{ id: number; billNo: stri
   const billNo = `TEST-BILL-PSTATUS-AUDIT-${label}-${Date.now()}`;
   const res = await apiReq("/purchase-bills", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       billNo,
       billDate: new Date().toISOString().split("T")[0],
@@ -328,6 +357,7 @@ async function testC2_ConcurrentPatchesDistinctTargetsSameBillBothAuditEntriesLa
   const billNo = `TEST-BILL-PSTATUS-AUDIT-C2-${Date.now()}`;
   const createRes = await apiReq("/purchase-bills", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       billNo,
       billDate: new Date().toISOString().split("T")[0],
@@ -476,9 +506,13 @@ async function testD_ConcurrentPatchesDistinctBillsBothAuditEntriesLand(): Promi
   // Cleanup paid bills
   await Promise.all([
     apiReq(`/purchase-bills/${billA.id}`, { method: "DELETE", headers: { "x-allow-paid-delete": "true" } })
-      .then(async (r) => { try { await r.text(); } catch { /* noop */ } }),
+      .then(async (r) => {
+        try { await r.text(); } catch { /* noop */ }
+      }),
     apiReq(`/purchase-bills/${billB.id}`, { method: "DELETE", headers: { "x-allow-paid-delete": "true" } })
-      .then(async (r) => { try { await r.text(); } catch { /* noop */ } }),
+      .then(async (r) => {
+        try { await r.text(); } catch { /* noop */ }
+      }),
   ]);
 
   console.log("  (Both audit entries landed — concurrent patches on distinct bills cannot silently drop either entry)");
@@ -630,32 +664,46 @@ async function main(): Promise<void> {
 
   await login();
 
-  await testA_RealStatusChangeWritesAuditEntry();
-  await testB_NoopStatusChangeWritesNoAuditEntry();
-  await testC_ConcurrentPatchSameBillProducesOneAuditEntry();
-  await testC2_ConcurrentPatchesDistinctTargetsSameBillBothAuditEntriesLand();
-  await testD_ConcurrentPatchesDistinctBillsBothAuditEntriesLand();
+  await ensureRegistryProvisioned();
+  const recovery = await recoverAbandonedSuiteRuns(deleteRegisteredFixture);
+  if (recovery.claimedRunIds.length > 0) console.log(`  ✓ Recovered ${recovery.deleted} abandoned registered fixture(s) from ${recovery.claimedRunIds.length} prior run(s)${recovery.kept > 0 ? ` (${recovery.kept} kept)` : ""}`);
+  suiteRunId = await startSuiteRun("bill-payment-status-audit", adminUserId);
 
-  // Static check — load the source file from the working directory.
-  const { readFile } = await import("node:fs/promises");
-  const { resolve }  = await import("node:path");
-  const routeFile = resolve(process.cwd(), "src/routes/purchase-bills.ts");
-  let source: string;
+  let suiteSucceeded = false;
   try {
-    source = await readFile(routeFile, "utf-8");
-  } catch (err) {
-    assert(false, `Could not read purchase-bills.ts (${routeFile}): ${err}`);
-    console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
-    process.exit(1);
-    return;
-  }
-  await testE_StaticAuditInsertIsInsideTransaction(source);
+    await testA_RealStatusChangeWritesAuditEntry();
+    await testB_NoopStatusChangeWritesNoAuditEntry();
+    await testC_ConcurrentPatchSameBillProducesOneAuditEntry();
+    await testC2_ConcurrentPatchesDistinctTargetsSameBillBothAuditEntriesLand();
+    await testD_ConcurrentPatchesDistinctBillsBothAuditEntriesLand();
 
-  console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
-  if (failed > 0) process.exit(1);
+    // Static check — load the source file from the working directory.
+    const { readFile } = await import("node:fs/promises");
+    const { resolve }  = await import("node:path");
+    const routeFile = resolve(process.cwd(), "src/routes/purchase-bills.ts");
+    let source: string;
+    try {
+      source = await readFile(routeFile, "utf-8");
+    } catch (err) {
+      assert(false, `Could not read purchase-bills.ts (${routeFile}): ${err}`);
+      console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+      process.exitCode = 1;
+      return;
+    }
+    await testE_StaticAuditInsertIsInsideTransaction(source);
+
+    console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+    if (failed > 0) process.exitCode = 1;
+    else suiteSucceeded = true;
+  } finally {
+    const finalized = await finalizeSuiteRun(suiteRunId, suiteSucceeded);
+    if (!finalized.cleaned) console.warn(`Retaining suite run registry for later recovery (${finalized.remainingFixtures} registered fixture(s) still present).`);
+    await pool.end().catch(() => {});
+  }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("\nUnhandled error:", err);
-  process.exit(1);
+  await pool.end().catch(() => {});
+  process.exitCode = 1;
 });

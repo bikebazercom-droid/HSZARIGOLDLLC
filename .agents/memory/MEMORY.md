@@ -13,3 +13,4 @@
 - [FIFO statement test isolation](fifo-statement-test-isolation.md) — statement reconciliation tests on shared data must remove stale tags, reserve an empty earliest period, and baseline live stock.
 - [PDF e2e run registry](pdf-e2e-run-registry.md) — browser PDF fixtures owned via run-ID registry; recover only exact registered IDs, delete stale admins only by recorded owner ID, never prefix-wide.
 - [Shared-DB browser test safety](shared-db-browser-test-safety.md) — destructive browser regressions need dev-target gating, serialization, ephemeral credentials, and owned-ID cleanup.
+- [Suite run registry](suite-run-registry.md) — every destructive HTTP test suite registers created records by exact ID in the shared registry (`suite:` runs) and recovers abandoned runs at startup; never prefix-wide deletes.

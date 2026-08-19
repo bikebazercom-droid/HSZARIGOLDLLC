@@ -15,6 +15,14 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pool } from "@workspace/db";
+import {
+  ensureRegistryProvisioned,
+  finalizeSuiteRun,
+  recoverAbandonedSuiteRuns,
+  startSuiteRun,
+  type SuiteEntityType,
+} from "./suite-run-registry";
 
 const devDomain = process.env["REPLIT_DEV_DOMAIN"];
 const port = process.env["PORT"] ?? "3000";
@@ -29,6 +37,8 @@ const PERIOD_START = "0001-01-01";
 const PERIOD_END = "0001-02-28";
 
 let cookie = "";
+let suiteRunId = "";
+let adminUserId = 0;
 let passed = 0;
 let failed = 0;
 const purchaseIds: number[] = [];
@@ -65,7 +75,25 @@ async function login(): Promise<void> {
   if (!res.ok) throw new Error(`Login failed (${res.status}): ${await res.text()}`);
   const setCookie = res.headers.get("set-cookie");
   if (setCookie) cookie = setCookie.split(";")[0]!;
+  const user = (await res.json()) as { id: number };
+  adminUserId = user.id;
   console.log("  ✓ Logged in as admin");
+}
+
+// ── Durable registry deleter ───────────────────────────────────────────────────
+
+async function deleteRegisteredFixture(entityType: SuiteEntityType, entityId: number): Promise<"deleted" | "missing" | "kept"> {
+  const target =
+    entityType === "invoice" ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } } :
+    entityType === "stock_purchase" ? { path: `/stock/purchases/${entityId}`, headers: {} } :
+    entityType === "purchase_bill" ? { path: `/purchase-bills/${entityId}`, headers: { "x-allow-paid-delete": "true" } } :
+    { path: `/admin/users/${entityId}`, headers: {} };
+  try {
+    const res = await apiReq(target.path, { method: "DELETE", headers: target.headers });
+    if (res.ok) return "deleted";
+    if (res.status === 404) return "missing";
+    return "kept";
+  } catch { return "kept"; }
 }
 
 async function getStockLevels(): Promise<Record<string, number>> {
@@ -84,6 +112,7 @@ async function createPurchase(
 ): Promise<number> {
   const res = await apiReq("/stock/purchases", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       category,
       supplierName: `${FIXTURE_PREFIX}-${label}`,
@@ -108,6 +137,7 @@ async function createInvoice(
 ): Promise<{ id: number; invoiceNumber: string }> {
   const res = await apiReq("/invoices", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       customerName: `${FIXTURE_PREFIX}-${label}`,
       paymentMethod: "cash",
@@ -236,27 +266,6 @@ async function deletePurchase(id: number): Promise<void> {
   }
 }
 
-async function removeTaggedFixtures(tag: string): Promise<void> {
-  const errors: string[] = [];
-  const taggedInvoices = await listTaggedInvoices(tag);
-  for (const { id } of taggedInvoices) {
-    try {
-      await deleteInvoice(id);
-    } catch (error) {
-      errors.push(String(error));
-    }
-  }
-  const taggedPurchases = await listTaggedPurchases(tag);
-  for (const { id } of taggedPurchases) {
-    try {
-      await deletePurchase(id);
-    } catch (error) {
-      errors.push(String(error));
-    }
-  }
-  if (errors.length > 0) throw new Error(`Fixture cleanup failed:\n${errors.join("\n")}`);
-}
-
 async function assertReservedPeriodIsFree(): Promise<void> {
   // No older purchase may exist: FIFO must consume this run's two gold lots.
   const purchaseRes = await apiReq(`/stock/purchases?endDate=${PERIOD_END}`);
@@ -321,11 +330,20 @@ async function main(): Promise<void> {
   console.log(`API base: ${BASE}`);
   await login();
 
-  // A crashed prior run must not change this run's FIFO ordering or totals.
-  await removeTaggedFixtures(TEST_PREFIX);
-  await assertReservedPeriodIsFree();
-  const baseline = await getStockLevels();
+  await ensureRegistryProvisioned();
+  const recovery = await recoverAbandonedSuiteRuns(deleteRegisteredFixture);
+  if (recovery.claimedRunIds.length > 0) console.log(`  ✓ Recovered ${recovery.deleted} abandoned registered fixture(s) from ${recovery.claimedRunIds.length} prior run(s)${recovery.kept > 0 ? ` (${recovery.kept} kept)` : ""}`);
+  suiteRunId = await startSuiteRun("category-statement-reconciliation", adminUserId);
+
+  let suiteSucceeded = false;
   try {
+    // A crashed prior run's records are recovered above strictly by the exact
+    // IDs in the suite run registry — never by text-prefix matching, which
+    // could hit legitimate records. If anything (legacy or unowned) still
+    // occupies the reserved period, fail safely instead of deleting it.
+    await assertReservedPeriodIsFree();
+    const baseline = await getStockLevels();
+    try {
     // The reserved earliest AD dates isolate totals and guarantee these lots
     // are first in FIFO order after the preflight check above.
     const goldFirst = await createPurchase("gold", 10, 1000, "0001-01-01", "GOLD-OLD");
@@ -448,14 +466,22 @@ async function main(): Promise<void> {
     } finally {
       await rm(pdfDir, { recursive: true, force: true });
     }
+
+    if (failed === 0) suiteSucceeded = true;
+    } finally {
+      await cleanUp(baseline);
+      console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+      if (failed > 0) process.exitCode = 1;
+    }
   } finally {
-    await cleanUp(baseline);
-    console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
-    if (failed > 0) process.exitCode = 1;
+    const finalized = await finalizeSuiteRun(suiteRunId, suiteSucceeded);
+    if (!finalized.cleaned) console.warn(`Retaining suite run registry for later recovery (${finalized.remainingFixtures} registered fixture(s) still present).`);
+    await pool.end().catch(() => {});
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error("\nUnhandled error:", error);
+  await pool.end().catch(() => {});
   process.exitCode = 1;
 });

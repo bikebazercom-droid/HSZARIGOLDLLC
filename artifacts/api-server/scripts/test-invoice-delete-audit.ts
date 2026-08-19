@@ -26,6 +26,16 @@
  * marks any fixture that survives a failure for manual cleanup.
  */
 
+import { db, pool } from "@workspace/db";
+import {
+  ensureRegistryProvisioned,
+  finalizeSuiteRun,
+  recoverAbandonedSuiteRuns,
+  startSuiteRun,
+  unregisterSuiteFixture,
+  type SuiteEntityType,
+} from "./suite-run-registry";
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const devDomain = process.env["REPLIT_DEV_DOMAIN"];
@@ -42,6 +52,8 @@ const ADMIN_ROLE   = "admin";
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
 let _cookie = "";
+let suiteRunId = "";
+let adminUserId = 0;
 
 async function apiReq(path: string, init: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = {
@@ -60,7 +72,25 @@ async function login(): Promise<void> {
   if (!res.ok) throw new Error(`Login failed (${res.status}): ${await res.text()}`);
   const setCookie = res.headers.get("set-cookie");
   if (setCookie) _cookie = setCookie.split(";")[0]!;
+  const user = (await res.json()) as { id: number };
+  adminUserId = user.id;
   console.log("  ✓ Logged in as admin");
+}
+
+// ── Durable registry deleter ───────────────────────────────────────────────────
+
+async function deleteRegisteredFixture(entityType: SuiteEntityType, entityId: number): Promise<"deleted" | "missing" | "kept"> {
+  const target =
+    entityType === "invoice" ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } } :
+    entityType === "stock_purchase" ? { path: `/stock/purchases/${entityId}`, headers: {} } :
+    entityType === "purchase_bill" ? { path: `/purchase-bills/${entityId}`, headers: { "x-allow-paid-delete": "true" } } :
+    { path: `/admin/users/${entityId}`, headers: {} };
+  try {
+    const res = await apiReq(target.path, { method: "DELETE", headers: target.headers });
+    if (res.ok) return "deleted";
+    if (res.status === 404) return "missing";
+    return "kept";
+  } catch { return "kept"; }
 }
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
@@ -74,6 +104,7 @@ async function createTestInvoice(
   for (let attempt = 1; attempt <= 2; attempt++) {
     const res = await apiReq("/invoices", {
       method: "POST",
+      headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
       body: JSON.stringify({
         customerName: `TEST-DELETE-AUDIT-${label}`,
         paymentMethod: "cash",
@@ -89,7 +120,10 @@ async function createTestInvoice(
         items: [],
       }),
     });
-    if (res.ok) return res.json() as Promise<{ id: number; invoiceNumber: string }>;
+    if (res.ok) {
+      const created = (await res.json()) as { id: number; invoiceNumber: string };
+      return created;
+    }
     const body = await res.text();
     if (res.status >= 500 && attempt < 2) {
       console.log(`  ⚠ createTestInvoice(${label}) got ${res.status} on attempt ${attempt}, retrying in 500ms…`);
@@ -696,7 +730,6 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
     "FIFO reversal is a silent no-op, 204 returned, audit written, batch not double-restored",
   );
 
-  const { db } = await import("@workspace/db");
   const { sql } = await import("drizzle-orm");
 
   // ── 1. Create a dedicated fixture batch ───────────────────────────────────
@@ -704,6 +737,7 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
   // real batches in the DB (ordered purchase_date ASC).
   const purchaseRes = await apiReq("/stock/purchases", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       category: "gold",
       supplierName: "TEST-G-FIXTURE",
@@ -736,6 +770,7 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
     // ── 2. Create a pending invoice with a 10g gold item ──────────────────
     const createRes = await apiReq("/invoices", {
       method: "POST",
+      headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
       body: JSON.stringify({
         customerName: "TEST-DELETE-AUDIT-NULL-PURCHASE",
         paymentMethod: "cash",
@@ -939,6 +974,9 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
         // Clean up consumption rows then delete the invoice directly via DB.
         await db.execute(sql`DELETE FROM inventory_consumptions WHERE invoice_id = ${invId}`);
         await db.execute(sql`DELETE FROM invoices WHERE id = ${invId}`);
+        // Direct-DB delete bypasses the server-side registry unregister, so remove
+        // the registry row here to keep the run's fixture set accurate.
+        await unregisterSuiteFixture(suiteRunId, "invoice", invId);
         console.log(`  Cleanup: removed orphan invoice id=${invId} from DB`);
       }
       // Restore remaining_weight_grams so the API guard (remaining < weight → 409)
@@ -966,20 +1004,34 @@ async function main(): Promise<void> {
 
   await login();
 
-  await testA_PendingInvoiceDeleteWritesAuditEntry();
-  await testB_PaidInvoiceDeleteWritesAuditEntry();
-  await testC_FailedDeletionLeavesNoOrphanAuditEntry();
-  await testD_ConcurrentDeletesProduceExactlyOneAuditEntry();
-  await testD2_ConcurrentPaidDeletesProduceExactlyOneAuditEntry();
-  await testF_RowLockPrecedesAuditInsertInDeleteTransaction();
-  await testE_AuditInsertIsInsideDeleteTransaction();
-  await testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry();
+  await ensureRegistryProvisioned();
+  const recovery = await recoverAbandonedSuiteRuns(deleteRegisteredFixture);
+  if (recovery.claimedRunIds.length > 0) console.log(`  ✓ Recovered ${recovery.deleted} abandoned registered fixture(s) from ${recovery.claimedRunIds.length} prior run(s)${recovery.kept > 0 ? ` (${recovery.kept} kept)` : ""}`);
+  suiteRunId = await startSuiteRun("invoice-delete-audit", adminUserId);
 
-  console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+  let suiteSucceeded = false;
+  try {
+    await testA_PendingInvoiceDeleteWritesAuditEntry();
+    await testB_PaidInvoiceDeleteWritesAuditEntry();
+    await testC_FailedDeletionLeavesNoOrphanAuditEntry();
+    await testD_ConcurrentDeletesProduceExactlyOneAuditEntry();
+    await testD2_ConcurrentPaidDeletesProduceExactlyOneAuditEntry();
+    await testF_RowLockPrecedesAuditInsertInDeleteTransaction();
+    await testE_AuditInsertIsInsideDeleteTransaction();
+    await testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry();
+
+    console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+    if (failed === 0) suiteSucceeded = true;
+  } finally {
+    const finalized = await finalizeSuiteRun(suiteRunId, suiteSucceeded);
+    if (!finalized.cleaned) console.warn(`Retaining suite run registry for later recovery (${finalized.remainingFixtures} registered fixture(s) still present).`);
+    await pool.end().catch(() => {});
+  }
   if (failed > 0) process.exit(1);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("\nUnhandled error:", err);
+  await pool.end().catch(() => {});
   process.exit(1);
 });

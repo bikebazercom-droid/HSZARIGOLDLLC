@@ -6,7 +6,7 @@
  * by exact ID — never by prefix-wide deletion.
  */
 
-import { sql, and, eq, inArray, isNotNull, lt, ne, notInArray } from "drizzle-orm";
+import { sql, and, eq, inArray, isNotNull, lt, ne, notInArray, notLike } from "drizzle-orm";
 import { db, pdfTestFixturesTable, pdfTestRunsTable, usersTable } from "@workspace/db";
 
 export const TEST_USERNAME_PREFIX = "__pdf_e2e_ephemeral__";
@@ -64,6 +64,11 @@ export async function recoverStaleRuns(now: Date = new Date()): Promise<StaleRun
     .where(and(
       ne(pdfTestRunsTable.status, "abandoned"),
       lt(pdfTestRunsTable.createdAt, cutoff),
+      // Suite runs (runId prefixed "suite:") belong to the HTTP test suites'
+      // own registry lifecycle; the browser-PDF recovery must never mutate
+      // them — abandoning a live suite run would break its atomic fixture
+      // registration and expose its exact IDs to the suite recovery path.
+      notLike(pdfTestRunsTable.runId, "suite:%"),
     ))
     .returning({
       runId: pdfTestRunsTable.runId,

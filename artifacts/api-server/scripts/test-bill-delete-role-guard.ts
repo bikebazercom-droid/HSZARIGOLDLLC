@@ -25,6 +25,9 @@
  * labelled TEST-ROLE-GUARD-* and can be removed manually.
  */
 
+import { pool } from "@workspace/db";
+import { ensureRegistryProvisioned, finalizeSuiteRun, recoverAbandonedSuiteRuns, startSuiteRun, type SuiteEntityType } from "./suite-run-registry";
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const devDomain = process.env["REPLIT_DEV_DOMAIN"];
@@ -45,6 +48,8 @@ const STAFF_PIN    = "9999";
 
 /** Per-session cookie; swapped between admin and staff sessions. */
 let _cookie = "";
+/** The logged-in admin's user id; captured on admin login for run ownership. */
+let adminUserId = 0;
 
 async function apiReq(path: string, init: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = {
@@ -64,7 +69,29 @@ async function loginAs(mobile: string, pin: string, role: "admin" | "staff"): Pr
   if (!res.ok) throw new Error(`Login as ${role} failed (${res.status}): ${await res.text()}`);
   const setCookie = res.headers.get("set-cookie");
   if (setCookie) _cookie = setCookie.split(";")[0]!;
+  const user = (await res.json()) as { id: number };
+  if (role === "admin") adminUserId = user.id;
   console.log(`  ✓ Logged in as ${role} (mobile: ${mobile})`);
+}
+
+// ── Suite run registry ──────────────────────────────────────────────────────
+
+/** Set once in main() after recovery; used by fixture helpers to register IDs. */
+let suiteRunId = "";
+
+/** Deletes a single registered fixture via the script's own HTTP session. */
+async function deleteRegisteredFixture(entityType: SuiteEntityType, entityId: number): Promise<"deleted" | "missing" | "kept"> {
+  const target =
+    entityType === "invoice" ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } } :
+    entityType === "stock_purchase" ? { path: `/stock/purchases/${entityId}`, headers: {} } :
+    entityType === "purchase_bill" ? { path: `/purchase-bills/${entityId}`, headers: { "x-allow-paid-delete": "true" } } :
+    { path: `/admin/users/${entityId}`, headers: {} };
+  try {
+    const res = await apiReq(target.path, { method: "DELETE", headers: target.headers });
+    if (res.ok) return "deleted";
+    if (res.status === 404) return "missing";
+    return "kept";
+  } catch { return "kept"; }
 }
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
@@ -74,6 +101,7 @@ async function createTestBill(): Promise<{ id: number; billNo: string }> {
   const billNo = `TEST-ROLE-GUARD-${Date.now()}`;
   const res = await apiReq("/purchase-bills", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       billNo,
       billDate: new Date().toISOString().split("T")[0],
@@ -100,7 +128,8 @@ async function createTestBill(): Promise<{ id: number; billNo: string }> {
 
 /** Best-effort cleanup of a bill (ignores errors). */
 async function cleanupBill(id: number): Promise<void> {
-  await apiReq(`/purchase-bills/${id}`, { method: "DELETE" }).catch(() => {});
+  // The API DELETE unregisters the fixture server-side in the same transaction.
+  await apiReq(`/purchase-bills/${id}`, { method: "DELETE" }).catch(() => null);
 }
 
 // ── Assertions ────────────────────────────────────────────────────────────────
@@ -195,47 +224,65 @@ async function main(): Promise<void> {
 
   // Create a temporary staff user for this test run using the admin session.
   await loginAs(ADMIN_MOBILE, ADMIN_PIN, "admin");
-  const createStaffRes = await apiReq("/admin/users", {
-    method: "POST",
-    body: JSON.stringify({
-      fullName: "TEST-ROLE-GUARD-STAFF",
-      mobile: STAFF_MOBILE,
-      pin: STAFF_PIN,
-      role: "staff",
-    }),
-  });
-  if (!createStaffRes.ok) {
-    throw new Error(`Failed to create staff user (${createStaffRes.status}): ${await createStaffRes.text()}`);
-  }
-  const staffUser = (await createStaffRes.json()) as { id: number };
-  console.log(`  ✓ Created temporary staff user id=${staffUser.id} (mobile: ${STAFF_MOBILE})`);
 
+  await ensureRegistryProvisioned();
+  const recovery = await recoverAbandonedSuiteRuns(deleteRegisteredFixture);
+  if (recovery.claimedRunIds.length > 0) console.log(`  ✓ Recovered ${recovery.deleted} abandoned registered fixture(s) from ${recovery.claimedRunIds.length} prior run(s)${recovery.kept > 0 ? ` (${recovery.kept} kept)` : ""}`);
+  suiteRunId = await startSuiteRun("bill-delete-role-guard", adminUserId);
+
+  let suiteSucceeded = false;
   try {
-    await test1_StaffIsBlocked();
-    await test2_AdminCanDelete();
-    await test2b_AdminMissingBillIs404();
-  } finally {
-    // Remove the temporary staff user.
-    await loginAs(ADMIN_MOBILE, ADMIN_PIN, "admin");
-    const delRes = await apiReq(`/admin/users/${staffUser.id}`, { method: "DELETE" });
-    if (delRes.ok || delRes.status === 404) {
-      console.log(`\n  ✓ Removed temporary staff user id=${staffUser.id}`);
-    } else {
-      // Non-fatal: warn but don't fail the test suite over cleanup.
-      // Try deactivating as a fallback.
-      await apiReq(`/admin/users/${staffUser.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ isActive: false }),
-      }).catch(() => {});
-      console.warn(`\n  ⚠ Could not delete staff user id=${staffUser.id} — deactivated instead`);
+    const createStaffRes = await apiReq("/admin/users", {
+      method: "POST",
+      headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
+      body: JSON.stringify({
+        fullName: "TEST-ROLE-GUARD-STAFF",
+        mobile: STAFF_MOBILE,
+        pin: STAFF_PIN,
+        role: "staff",
+      }),
+    });
+    if (!createStaffRes.ok) {
+      throw new Error(`Failed to create staff user (${createStaffRes.status}): ${await createStaffRes.text()}`);
     }
-  }
+    const staffUser = (await createStaffRes.json()) as { id: number };
+    console.log(`  ✓ Created temporary staff user id=${staffUser.id} (mobile: ${STAFF_MOBILE})`);
 
-  console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
-  if (failed > 0) process.exit(1);
+    try {
+      await test1_StaffIsBlocked();
+      await test2_AdminCanDelete();
+      await test2b_AdminMissingBillIs404();
+    } finally {
+      // Remove the temporary staff user.
+      await loginAs(ADMIN_MOBILE, ADMIN_PIN, "admin");
+      const delRes = await apiReq(`/admin/users/${staffUser.id}`, { method: "DELETE" });
+      if (delRes.ok || delRes.status === 404) {
+        // The user is gone; the API DELETE unregisters its registry row server-side.
+        console.log(`\n  ✓ Removed temporary staff user id=${staffUser.id}`);
+      } else {
+        // Non-fatal: warn but don't fail the test suite over cleanup.
+        // Try deactivating as a fallback. The user still exists, so it stays
+        // registered and a later run's recovery will remove it.
+        await apiReq(`/admin/users/${staffUser.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ isActive: false }),
+        }).catch(() => {});
+        console.warn(`\n  ⚠ Could not delete staff user id=${staffUser.id} — deactivated instead`);
+      }
+    }
+
+    console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+    if (failed > 0) process.exitCode = 1;
+    else suiteSucceeded = true;
+  } finally {
+    const finalized = await finalizeSuiteRun(suiteRunId, suiteSucceeded);
+    if (!finalized.cleaned) console.warn(`Retaining suite run registry for later recovery (${finalized.remainingFixtures} registered fixture(s) still present).`);
+    await pool.end().catch(() => {});
+  }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("\nUnhandled error:", err);
-  process.exit(1);
+  await pool.end().catch(() => {});
+  process.exitCode = 1;
 });

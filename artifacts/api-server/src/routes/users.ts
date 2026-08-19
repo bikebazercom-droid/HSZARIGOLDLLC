@@ -4,6 +4,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth";
 import { broadcast } from "../lib/socket.js";
+import { authorizePdfTestRun, registerPdfTestFixture, unregisterPdfTestFixture } from "./pdf-test-fixtures.js";
 
 const router: IRouter = Router();
 
@@ -47,25 +48,41 @@ router.post("/admin/users", requireAdmin, async (req, res): Promise<void> => {
   const username = `${normalizedMobile}_${role === "admin" ? "admin" : "staff"}`;
   const pinHash = await bcrypt.hash(pin, 10);
 
-  const [user] = await db
-    .insert(usersTable)
-    .values({
-      username,
-      mobile: normalizedMobile,
-      passwordHash: pinHash,
-      fullName: fullName.trim(),
-      role: role === "admin" ? "admin" : "staff",
-      isActive: true,
-    })
-    .returning({
-      id: usersTable.id,
-      username: usersTable.username,
-      fullName: usersTable.fullName,
-      mobile: usersTable.mobile,
-      role: usersTable.role,
-      isActive: usersTable.isActive,
-      createdAt: usersTable.createdAt,
-    });
+  // If a registered test run requested ownership, record the created user in
+  // the durable test registry atomically with its creation, so a crash right
+  // after the commit can never leave an unregistered (unrecoverable) record.
+  const testRun = await authorizePdfTestRun(req);
+  if (testRun.requested && !testRun.runId) {
+    // Never silently create an unregistered record for a caller that asked
+    // for fixture ownership — that would defeat crash recovery.
+    res.status(403).json({ error: "Test fixture ownership was rejected" });
+    return;
+  }
+  const user = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(usersTable)
+      .values({
+        username,
+        mobile: normalizedMobile,
+        passwordHash: pinHash,
+        fullName: fullName.trim(),
+        role: role === "admin" ? "admin" : "staff",
+        isActive: true,
+      })
+      .returning({
+        id: usersTable.id,
+        username: usersTable.username,
+        fullName: usersTable.fullName,
+        mobile: usersTable.mobile,
+        role: usersTable.role,
+        isActive: usersTable.isActive,
+        createdAt: usersTable.createdAt,
+      });
+    if (created) {
+      await registerPdfTestFixture(tx as unknown as typeof db, testRun.runId, "user", created.id);
+    }
+    return created;
+  });
 
   broadcast("USER_MUTATION");
   res.status(201).json({ ...user, createdAt: user.createdAt.toISOString() });
@@ -124,7 +141,13 @@ router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> 
     return;
   }
 
-  await db.delete(usersTable).where(eq(usersTable.id, id));
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(usersTable).where(eq(usersTable.id, id)).returning({ id: usersTable.id });
+    if (deleted) {
+      // The test registry must only list records that still exist.
+      await unregisterPdfTestFixture(tx as unknown as typeof db, "user", id);
+    }
+  });
   broadcast("USER_MUTATION");
   res.sendStatus(204);
 });

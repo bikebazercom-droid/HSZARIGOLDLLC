@@ -28,6 +28,15 @@
  * marks any fixture that survives a failure for manual cleanup.
  */
 
+import { pool } from "@workspace/db";
+import {
+  ensureRegistryProvisioned,
+  finalizeSuiteRun,
+  recoverAbandonedSuiteRuns,
+  startSuiteRun,
+  type SuiteEntityType,
+} from "./suite-run-registry";
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const devDomain = process.env["REPLIT_DEV_DOMAIN"];
@@ -44,6 +53,8 @@ const ADMIN_ROLE   = "admin";
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
 let _cookie = "";
+let suiteRunId = "";
+let adminUserId = 0;
 
 async function apiReq(path: string, init: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = {
@@ -62,7 +73,25 @@ async function login(): Promise<void> {
   if (!res.ok) throw new Error(`Login failed (${res.status}): ${await res.text()}`);
   const setCookie = res.headers.get("set-cookie");
   if (setCookie) _cookie = setCookie.split(";")[0]!;
+  const user = (await res.json()) as { id: number };
+  adminUserId = user.id;
   console.log("  ✓ Logged in as admin");
+}
+
+// ── Durable registry deleter ───────────────────────────────────────────────────
+
+async function deleteRegisteredFixture(entityType: SuiteEntityType, entityId: number): Promise<"deleted" | "missing" | "kept"> {
+  const target =
+    entityType === "invoice" ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } } :
+    entityType === "stock_purchase" ? { path: `/stock/purchases/${entityId}`, headers: {} } :
+    entityType === "purchase_bill" ? { path: `/purchase-bills/${entityId}`, headers: { "x-allow-paid-delete": "true" } } :
+    { path: `/admin/users/${entityId}`, headers: {} };
+  try {
+    const res = await apiReq(target.path, { method: "DELETE", headers: target.headers });
+    if (res.ok) return "deleted";
+    if (res.status === 404) return "missing";
+    return "kept";
+  } catch { return "kept"; }
 }
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
@@ -95,10 +124,12 @@ async function createTestInvoice(
   }
   const res = await apiReq("/invoices", {
     method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`createTestInvoice(${label}) failed (${res.status}): ${await res.text()}`);
-  return res.json() as Promise<CreatedInvoice>;
+  const created = (await res.json()) as CreatedInvoice;
+  return created;
 }
 
 /** Best-effort cleanup — deletes an invoice so it doesn't litter the DB. */
@@ -390,15 +421,29 @@ async function main(): Promise<void> {
 
   await login();
 
-  await testA_NormalInvoiceCreationWritesAuditEntry();
-  await testB_BackdatedInvoiceCreationWritesAuditEntry();
-  await testC_AuditInsertIsInsideTransaction();
+  await ensureRegistryProvisioned();
+  const recovery = await recoverAbandonedSuiteRuns(deleteRegisteredFixture);
+  if (recovery.claimedRunIds.length > 0) console.log(`  ✓ Recovered ${recovery.deleted} abandoned registered fixture(s) from ${recovery.claimedRunIds.length} prior run(s)${recovery.kept > 0 ? ` (${recovery.kept} kept)` : ""}`);
+  suiteRunId = await startSuiteRun("invoice-create-audit", adminUserId);
 
-  console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+  let suiteSucceeded = false;
+  try {
+    await testA_NormalInvoiceCreationWritesAuditEntry();
+    await testB_BackdatedInvoiceCreationWritesAuditEntry();
+    await testC_AuditInsertIsInsideTransaction();
+
+    console.log(`\n━━━ Results: ${passed} passed, ${failed} failed ━━━\n`);
+    if (failed === 0) suiteSucceeded = true;
+  } finally {
+    const finalized = await finalizeSuiteRun(suiteRunId, suiteSucceeded);
+    if (!finalized.cleaned) console.warn(`Retaining suite run registry for later recovery (${finalized.remainingFixtures} registered fixture(s) still present).`);
+    await pool.end().catch(() => {});
+  }
   if (failed > 0) process.exit(1);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("\nUnhandled error:", err);
+  await pool.end().catch(() => {});
   process.exit(1);
 });
