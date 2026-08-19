@@ -31,6 +31,8 @@ node_modules
 /.sass-cache
 /connect.lock
 /coverage
+/artifacts/gold-shop/playwright-report/
+/artifacts/gold-shop/test-results/
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log
