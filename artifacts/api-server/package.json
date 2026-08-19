@@ -8,10 +8,12 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:category-statement-test": "tsc -p tsconfig.category-statement-test.json --noEmit",
     "test:invoice-delete-guard": "tsx scripts/test-invoice-delete-guard.ts",
     "test:invoice-delete-audit": "tsx scripts/test-invoice-delete-audit.ts",
     "test:bill-delete-role-guard": "tsx scripts/test-bill-delete-role-guard.ts",
     "test:invoice-create-audit": "tsx scripts/test-invoice-create-audit.ts",
+    "test:category-statement-reconciliation": "tsx scripts/test-category-statement-reconciliation.ts",
     "test:bill-delete-audit": "tsx scripts/test-bill-delete-audit.ts",
     "test:bill-payment-status-audit": "tsx scripts/test-bill-payment-status-audit.ts",
     "test:all-audit-guards": "pnpm run test:invoice-delete-guard && pnpm run test:invoice-delete-audit && pnpm run test:invoice-create-audit && pnpm run test:bill-delete-role-guard && pnpm run test:bill-delete-audit && pnpm run test:bill-payment-status-audit"

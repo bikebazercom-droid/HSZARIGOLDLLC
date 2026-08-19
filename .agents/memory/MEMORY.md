@@ -10,3 +10,4 @@
 - [Gold-shop purchase bills](gold-shop-purchase-bills.md) — bill lines become FIFO stock batches; delete 409s if consumed; server recomputes line totals (never trust client math).
 - [Gold-shop TV board fully removed](gold-shop-tv-removed.md) — TV board and entire ExternalSync system permanently deleted; no /tv route, no sync service, no sync DB columns, no sync settings tab.
 - [Gold-shop audit validation overlap](gold-shop-audit-validation-overlap.md) — completion validation can run the standalone invoice audit beside the aggregate suite, causing fixture-number collisions.
+- [FIFO statement test isolation](fifo-statement-test-isolation.md) — statement reconciliation tests on shared data must remove stale tags, reserve an empty earliest period, and baseline live stock.
