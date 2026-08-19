@@ -59,10 +59,16 @@ export function PdfCompanyDetails() {
   );
 }
 
-export function PdfSignatureBlock() {
+export function PdfInvoiceSignatureBlock() {
   return (
-    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end", minHeight: "32mm", padding: "0 10mm" }}>
-      <div style={{ width: "180px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY, position: "relative" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", minHeight: "32mm", padding: "0 10mm" }}>
+      <div style={{ width: "160px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY }}>
+        Customer&apos;s Signature
+      </div>
+      <div style={{ width: "160px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY }}>
+        Checked By
+      </div>
+      <div style={{ width: "160px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY, position: "relative" }}>
         <img
           src={OFFICIAL_IDENTITY.stampUrl}
           alt="Official Hazari Gold seal"
@@ -90,7 +96,7 @@ export function PdfFooter({ absolute = false }: { absolute?: boolean }) {
 
   return (
     <div style={containerStyle}>
-      <PdfSignatureBlock />
+      <PdfInvoiceSignatureBlock />
       <div aria-hidden="true" style={{ height: `${AUTHORISED_SIGNATURE_BANNER_GAP_MM}mm` }} />
       <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "0.5px" }}>
         Thank you for your business!

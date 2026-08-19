@@ -369,8 +369,8 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       await expect(document).toContainText("FIRSTMARKER");
       await expect(document).toContainText("FINALMARKER");
       await expect(document).toContainText("Hazari Gold L.L.C");
-      await expect(document).not.toContainText("Customer's Signature");
-      await expect(document).not.toContainText("Checked By");
+      await expect(document).toContainText("Customer's Signature");
+      await expect(document).toContainText("Checked By");
       await expect(document).toContainText("Authorised Signature");
       expect(await document.evaluate((element) => element.scrollHeight)).toBeGreaterThan(1123);
 
@@ -383,8 +383,8 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(ocr).toContain("HAZARIGOLD");
       expect(ocr).toContain("FIRSTMARKER");
       expect(ocr).toContain("FINALMARKER");
-      expect(ocr).not.toContain("CUSTOMERSSIGNATURE");
-      expect(ocr).not.toContain("CHECKEDBY");
+      expect(ocr).toContain("CUSTOMERSSIGNATURE");
+      expect(ocr).toContain("CHECKEDBY");
       expect(ocr).toContain("AUTHORISEDSIGNATURE");
       expect(ocr).toContain("THANKYOUFORYOURBUSINESS");
       const visual = finalPageVisualMetrics(path);
