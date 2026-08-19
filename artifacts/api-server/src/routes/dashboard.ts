@@ -2,8 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq, gte, desc, sql } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
 import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummaryResponse } from "@workspace/api-zod";
-import PDFDocument from "pdfkit";
 import { requireAdmin } from "../middlewares/auth";
+import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding";
 import ExcelJS from "exceljs";
 
 const router: IRouter = Router();
@@ -590,56 +590,62 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   const catLabel = categoryLabel[category] ?? category;
   const filename = `hazari-gold-${catLabel.toLowerCase().replace(/ /g, "-")}-${period}.pdf`;
 
-  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  const pdf = createBrandedPdf({
+    title: "Management Portal — Sales Report",
+    generatedAt: now,
+  });
+  const { doc } = pdf;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   doc.pipe(res);
 
-  const NAVY = "#1e3a5f";
-  const GOLD = "#c8a43a";
+  const NAVY = PDF_BRAND.navy;
+  const GOLD = PDF_BRAND.gold;
   const LIGHT = "#f5f3ee";
+  const W = pdf.width;
 
-  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
-  doc.fillColor(GOLD).fontSize(22).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
-  doc.fillColor("#aac4e8").fontSize(10).font("Helvetica").text("Management Portal — Sales Report", 40, 50);
-  doc.fillColor("white").fontSize(9).text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 66);
-
-  doc.rect(40, 100, doc.page.width - 80, 36).fill(LIGHT);
-  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(`${catLabel}  ·  ${periodLabel}`, 52, 112);
+  let y = pdf.contentTop;
+  doc.rect(40, y, W, 36).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(`${catLabel}  ·  ${periodLabel}`, 52, y + 12);
+  y += 50;
 
   const grandTotal = rows.reduce((s, { inv }) => s + Number(inv.total), 0);
   const totalGrams = rows.reduce((s, { items }) =>
     s + items.reduce((si, it) => si + (it.weight ? Number(it.weight) : 0), 0), 0);
 
-  doc.moveDown(3.2);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(
     `Invoices: ${rows.length}   |   Total Weight: ${totalGrams.toFixed(2)} g   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
-    { align: "right" }
+    40,
+    y,
+    { width: W, align: "right" },
   );
-  doc.moveDown(0.5);
+  y += 20;
 
   const cols = { no: 40, date: 110, customer: 195, method: 300, category: 360, weight: 435, total: 480 };
   const colWidths = { no: 65, date: 80, customer: 100, method: 55, category: 70, weight: 42, total: 65 };
-  const tableTop = doc.y;
-
-  doc.rect(40, tableTop, doc.page.width - 80, 18).fill(NAVY);
-  doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
-  doc.text("Invoice #", cols.no, tableTop + 5, { width: colWidths.no });
-  doc.text("Date", cols.date, tableTop + 5, { width: colWidths.date });
-  doc.text("Customer", cols.customer, tableTop + 5, { width: colWidths.customer });
-  doc.text("Method", cols.method, tableTop + 5, { width: colWidths.method });
-  doc.text("Category", cols.category, tableTop + 5, { width: colWidths.category });
-  doc.text("Wt.(g)", cols.weight, tableTop + 5, { width: colWidths.weight, align: "right" });
-  doc.text("Total AED", cols.total, tableTop + 5, { width: colWidths.total, align: "right" });
-
-  let y = tableTop + 18;
+  const drawTableHeader = () => {
+    doc.rect(40, y, W, 18).fill(NAVY);
+    doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
+    doc.text("Invoice #", cols.no, y + 5, { width: colWidths.no });
+    doc.text("Date", cols.date, y + 5, { width: colWidths.date });
+    doc.text("Customer", cols.customer, y + 5, { width: colWidths.customer });
+    doc.text("Method", cols.method, y + 5, { width: colWidths.method });
+    doc.text("Category", cols.category, y + 5, { width: colWidths.category });
+    doc.text("Wt.(g)", cols.weight, y + 5, { width: colWidths.weight, align: "right" });
+    doc.text("Total AED", cols.total, y + 5, { width: colWidths.total, align: "right" });
+    y += 18;
+  };
+  drawTableHeader();
   let rowIndex = 0;
 
   for (const { inv, items } of rows) {
     const rowH = 16;
-    if (y + rowH > doc.page.height - 60) { doc.addPage(); y = 40; }
+    if (y + rowH > pdf.contentBottom) {
+      y = pdf.addPage();
+      drawTableHeader();
+    }
     const bg = rowIndex % 2 === 0 ? "white" : LIGHT;
-    doc.rect(40, y, doc.page.width - 80, rowH).fill(bg);
+    doc.rect(40, y, W, rowH).fill(bg);
 
     const date = new Date(inv.createdAt).toLocaleDateString("en-AE");
     const customer = (inv.customerName ?? "Walk-in").substring(0, 16);
@@ -665,18 +671,20 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
   if (rows.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(10).text(
       "No invoices found for this period.",
-      40, y + 10, { align: "center", width: doc.page.width - 80 }
+      40, y + 10, { align: "center", width: W },
     );
+    y += 28;
   }
 
-  doc.rect(40, y + 8, doc.page.width - 80, 1).fill(GOLD);
+  y = pdf.ensureSpace(y, 42);
+  doc.rect(40, y + 8, W, 1).fill(GOLD);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9)
     .text(
       `Total Weight: ${totalGrams.toFixed(2)} g   |   Grand Total: AED ${grandTotal.toLocaleString("en-AE", { minimumFractionDigits: 2 })}`,
-      40, y + 14, { align: "right", width: doc.page.width - 80 }
+      40, y + 14, { align: "right", width: W },
     );
 
-  doc.end();
+  pdf.finish(y + 34);
 });
 
 // ---------------------------------------------------------------------------
@@ -973,34 +981,34 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   const catLabel = STMT_CAT_LABEL;
 
   const now = new Date();
-  const doc = new PDFDocument({ margin: 40, size: "A4", layout: "landscape" });
+  const pdf = createBrandedPdf({
+    title: "Stock & Profit Statement",
+    layout: "landscape",
+    generatedAt: now,
+  });
+  const { doc } = pdf;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-statement.pdf"`);
   doc.pipe(res);
 
-  const NAVY = "#1e3a5f";
+  const NAVY = PDF_BRAND.navy;
   const HEADER_BG = "#1e293b"; // excel header row
   const GRID = "#d1d5db";      // excel gridlines
   const ZEBRA = "#f8fafc";     // alternating rows
-  const GOLD = "#c8a43a";
+  const GOLD = PDF_BRAND.gold;
   const LIGHT = "#f5f3ee";
-  const W = doc.page.width - 80;
-
-  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
-  doc.fillColor(GOLD).fontSize(22).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
-  doc.fillColor("#aac4e8").fontSize(10).font("Helvetica").text("Stock & Profit Statement", 40, 50);
-  doc.fillColor("white").fontSize(9).text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 66);
+  const W = pdf.width;
 
   const criteria = [
     startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
     `Category: ${category ? (catLabel[category] ?? category) : "All"}`,
   ].join("   ·   ");
-  doc.rect(40, 100, W, 30).fill(LIGHT);
-  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, 110);
+  doc.rect(40, pdf.contentTop, W, 30).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, pdf.contentTop + 10);
 
-  let y = 145;
+  let y = pdf.contentTop + 45;
   const ensureSpace = (h: number) => {
-    if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
+    y = pdf.ensureSpace(y, h);
   };
   const sectionHeader = (title: string) => {
     ensureSpace(40);
@@ -1019,9 +1027,8 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     cells: [string, number, boolean?][],
     opts: { bg: string; color: string; bold: boolean; h: number },
   ) => {
-    if (y + opts.h + 1 > doc.page.height - 60) {
-      doc.addPage();
-      y = 40;
+    if (y + opts.h + 1 > pdf.contentBottom) {
+      y = pdf.addPage();
       if (activeTableHeader && cells !== activeTableHeader) {
         drawCells(activeTableHeader, { bg: HEADER_BG, color: "white", bold: true, h: 18 });
       }
@@ -1038,7 +1045,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   };
   const gridHeader = (cells: [string, number, boolean?][]) => {
     // Keep the header attached to at least one data row.
-    if (y + 18 + 17 > doc.page.height - 60) { doc.addPage(); y = 40; }
+    if (y + 18 + 17 > pdf.contentBottom) y = pdf.addPage();
     activeTableHeader = cells;
     drawCells(cells, { bg: HEADER_BG, color: "white", bold: true, h: 18 });
   };
@@ -1176,8 +1183,9 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   y = y + boxH + 8;
   doc.fillColor("#666").font("Helvetica").fontSize(7)
     .text("Profit = Sales revenue minus exact FIFO cost of sold items (consumed purchase batches, oldest first). Remaining stock is the live balance.", 40, y, { width: W });
+  y += 18;
 
-  doc.end();
+  pdf.finish(y);
 });
 
 // /api/dashboard/statement-xlsx?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
@@ -1505,36 +1513,36 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
   ].sort((a, b) => a.date.localeCompare(b.date) || (a.cashDebit > 0 ? -1 : 1));
 
   const now = new Date();
-  const doc = new PDFDocument({ margin: 40, size: "A4", layout: "landscape" });
+  const pdf = createBrandedPdf({
+    title: "Gold & Silver Account Ledger Statement",
+    layout: "landscape",
+    generatedAt: now,
+  });
+  const { doc } = pdf;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-account-ledger.pdf"`);
   doc.pipe(res);
 
-  const NAVY = "#1e3a5f";
+  const NAVY = PDF_BRAND.navy;
   const HEADER_BG = "#1e293b";
   const GRID = "#d1d5db";
   const ZEBRA = "#f8fafc";
-  const GOLD = "#c8a43a";
+  const GOLD = PDF_BRAND.gold;
   const LIGHT = "#f5f3ee";
-  const W = doc.page.width - 80;
+  const W = pdf.width;
   const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const bal2 = (n: number) => `${num2(Math.abs(n))} ${n >= 0 ? "CR" : "DR"}`;
   const bal3 = (n: number) => `${num3(Math.abs(n))} ${n >= 0 ? "CR" : "DR"}`;
 
-  doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
-  doc.fillColor(GOLD).fontSize(20).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 20);
-  doc.fillColor("#aac4e8").fontSize(11).font("Helvetica-Bold").text("GOLD & SILVER ACCOUNT LEDGER STATEMENT", 40, 46);
-  doc.fillColor("white").fontSize(9).font("Helvetica").text(`Generated: ${now.toLocaleString("en-AE")}`, 40, 64);
-
   const criteria = [
     `Account / Party: ${party ?? "All Parties"}`,
     startDate || endDate ? `Period: ${startDate ?? "…"} to ${endDate ?? "…"}` : "Period: All time",
   ].join("   ·   ");
-  doc.rect(40, 100, W, 28).fill(LIGHT);
-  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, 109);
+  doc.rect(40, pdf.contentTop, W, 28).fill(LIGHT);
+  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10).text(criteria, 52, pdf.contentTop + 9);
 
-  let y = 145;
+  let y = pdf.contentTop + 43;
   // Column layout (sums to 762): Date 54, Ref 60, Type&Narrative 180,
   // Cash Debit 76, Cash Credit 76, Cash Balance 94, Metal Debit 66,
   // Metal Credit 66, Metal Balance 90.
@@ -1548,9 +1556,8 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
     opts: { bg: string; color: string; bold: boolean; h: number; sub?: { text: string; colIdx: number } },
   ) => {
     const totalH = opts.h + (opts.sub ? 11 : 0);
-    if (y + totalH + 1 > doc.page.height - 50) {
-      doc.addPage();
-      y = 40;
+    if (y + totalH + 1 > pdf.contentBottom) {
+      y = pdf.addPage();
       drawRow(COLS, { bg: HEADER_BG, color: "white", bold: true, h: 20 });
     }
     let x = 40;
@@ -1620,15 +1627,16 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
     ], { bg: "#eee6cf", color: NAVY, bold: true, h: 18 });
 
     y += 10;
-    if (y + 40 > doc.page.height - 50) { doc.addPage(); y = 40; }
+    y = pdf.ensureSpace(y, 40);
     doc.rect(40, y, W, 1).fill(GOLD);
     doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
       .text(`Net Final Cash Balance: AED ${bal2(cashBal)}     ·     Net Final Gold Balance: ${bal3(metalBal)} grams`, 40, y + 8, { width: W, align: "right" });
     doc.fillColor("#666").font("Helvetica").fontSize(7)
       .text("Posting rule: Stock purchase = Cash Debit + Metal Credit. Sale = Cash Credit + Metal Debit. Balances run cumulatively; CR = credit surplus, DR = debit surplus.", 40, y + 24, { width: W });
+    y += 40;
   }
 
-  doc.end();
+  pdf.finish(y);
 });
 
 export default router;

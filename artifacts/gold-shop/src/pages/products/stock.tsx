@@ -18,9 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { FileDown, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/auth";
-
-const NAVY = "#1e3a5f";
-const GOLD = "#c8a43a";
+import { decorateStatementPdf, NAVY, GOLD } from "@/components/pdf-branding";
 
 export const STOCK_CATEGORIES = [
   { id: "gold", label: "GOLD" },
@@ -261,16 +259,37 @@ export function StockLedger() {
     try {
       const html2pdf = (await import("html2pdf.js")).default;
       const supplierTag = supplierFilter === "all" ? "All-Suppliers" : supplierFilter.replace(/\s+/g, "-");
-      await html2pdf()
+
+      const subtitle = `Supplier: ${supplierFilter === "all" ? "All Suppliers" : supplierFilter}${categoryFilter !== "all" ? ` | Category: ${stockCategoryLabel(categoryFilter)}` : ""}`;
+
+      const worker: any = html2pdf()
         .set({
-          margin: [10, 10, 10, 10],
+          margin: [56, 10, 48, 10], // top, right, bottom, left
           filename: `Supplier-Statement_${supplierTag}_${format(new Date(), "yyyy-MM-dd")}.pdf`,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, logging: false },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(reportRef.current)
-        .save();
+        .toPdf()
+        .get("pdf")
+        .then(async (pdf: any) => {
+          await decorateStatementPdf(pdf, {
+            title: "Supplier Purchase Statement",
+            subtitle,
+            userName: user?.fullName ?? "Admin",
+            columns: [
+              { label: "Date", width: 25 },
+              { label: "Supplier", width: 36 },
+              { label: "Category", width: 39 },
+              { label: "Weight (g)", width: 28, align: "right" },
+              { label: "Price/Gram (AED)", width: 31, align: "right" },
+              { label: "Total (AED)", width: 31, align: "right" },
+            ],
+          });
+        });
+
+      await worker.save();
     } finally {
       setIsDownloading(false);
     }
@@ -410,61 +429,40 @@ export function StockLedger() {
 
       {/* Hidden printable A4 supplier statement (html2pdf source) */}
       <div style={{ position: "fixed", top: 0, left: "-9999px", width: "190mm" }}>
-        <div ref={reportRef} style={{ width: "190mm", fontFamily: "Arial, sans-serif", color: "#222", background: "#fff", padding: "6mm 8mm", boxSizing: "border-box" }}>
-          <div style={{ height: "4px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, marginBottom: "10px" }} />
-          <div style={{ textAlign: "center", marginBottom: "10px", borderBottom: `2px solid ${NAVY}`, paddingBottom: "8px" }}>
-            <div style={{ fontSize: "18px", fontWeight: "bold", color: NAVY, letterSpacing: "0.5px" }}>{companyName}</div>
-            {companyTrn && <div style={{ fontSize: "10px", color: "#555", marginTop: "2px" }}>TRN: {companyTrn}</div>}
-            <div style={{ fontSize: "9px", color: "#777", marginTop: "2px" }}>
-              Date of Report Generation: {format(new Date(), "dd/MM/yyyy hh:mm a")}
-            </div>
-          </div>
-          <div style={{ textAlign: "center", marginBottom: "14px" }}>
-            <div style={{ fontSize: "14px", fontWeight: "bold", color: NAVY, letterSpacing: "1px", marginBottom: "4px" }}>
-              SUPPLIER PURCHASE STATEMENT
-            </div>
-            <div style={{ fontSize: "11px", color: "#333" }}>
-              Supplier: {supplierFilter === "all" ? "All Suppliers" : supplierFilter}
-              {categoryFilter !== "all" ? ` — Category: ${stockCategoryLabel(categoryFilter)}` : ""}
-            </div>
-          </div>
+        <div ref={reportRef} style={{ width: "190mm", fontFamily: "Arial, sans-serif", color: "#222", background: "#fff", boxSizing: "border-box" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
             <thead>
-              <tr>
-                {["Date", "Supplier", "Category", "Weight (g)", "Price/Gram (AED)", "Total (AED)"].map((h, i) => (
-                  <th key={h} style={{ background: NAVY, color: "#fff", textAlign: i >= 3 ? "right" : "left", padding: "8px 8px", border: `1px solid ${NAVY}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p, idx) => (
-                <tr key={p.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f7f7f7" }}>
-                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{fmtDate(p.purchaseDate)}</td>
-                  <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>{p.supplierName}</td>
-                  <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>{stockCategoryLabel(p.category)}</td>
-                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtG(p.weightGrams)}</td>
-                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtAED(p.pricePerGram)}</td>
-                  <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(p.totalPriceAed)}</td>
+                <tr>
+                  {["Date", "Supplier", "Category", "Weight (g)", "Price/Gram (AED)", "Total (AED)"].map((h, i) => (
+                    <th key={h} style={{ background: NAVY, color: "#fff", textAlign: i >= 3 ? "right" : "left", padding: "8px 8px", border: `1px solid ${NAVY}` }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-              <tr style={{ background: "#eee6cf" }}>
-                <td colSpan={3} style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>
-                  Grand Total ({filtered.length} purchases)
-                </td>
-                <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
-                  {fmtG(totals.grams)} g ({(totals.grams / 1000).toFixed(3)} kg)
-                </td>
-                <td style={{ border: `2px solid ${NAVY}` }} />
-                <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
-                  AED {fmtAED(totals.aed)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div style={{ marginTop: "20px", paddingTop: "8px", borderTop: "1px solid #ccc", display: "flex", justifyContent: "space-between", fontSize: "9px", color: "#777" }}>
-            <div>Generated by {user?.fullName ?? "Admin"} on {format(new Date(), "dd/MM/yyyy hh:mm a")}</div>
-            <div>{companyName} — Supplier Purchase Statement</div>
-          </div>
+              </thead>
+              <tbody>
+                {filtered.map((p, idx) => (
+                  <tr key={p.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f7f7f7", breakInside: "avoid" }}>
+                    <td style={{ padding: "7px 8px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{fmtDate(p.purchaseDate)}</td>
+                    <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>{p.supplierName}</td>
+                    <td style={{ padding: "7px 8px", border: "1px solid #ddd" }}>{stockCategoryLabel(p.category)}</td>
+                    <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtG(p.weightGrams)}</td>
+                    <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtAED(p.pricePerGram)}</td>
+                    <td style={{ padding: "7px 8px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(p.totalPriceAed)}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: "#eee6cf", breakInside: "avoid" }}>
+                  <td colSpan={3} style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>
+                    Grand Total ({filtered.length} purchases)
+                  </td>
+                  <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
+                    {fmtG(totals.grams)} g ({(totals.grams / 1000).toFixed(3)} kg)
+                  </td>
+                  <td style={{ border: `2px solid ${NAVY}` }} />
+                  <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
+                    AED {fmtAED(totals.aed)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
         </div>
       </div>
     </div>

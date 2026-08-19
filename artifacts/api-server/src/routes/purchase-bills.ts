@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import PDFDocument from "pdfkit";
 import { and, count, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable, auditLogTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
+import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { applyStockDelta } from "./stock.js";
 import { acquireStockMutationLock } from "../services/inventoryEngine.js";
@@ -146,31 +146,30 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
   const totalUnpaidAed = rows.reduce((s, r) => s + r.unpaidTotalAed, 0);
   const totalUnfixedPureGrams = rows.reduce((s, r) => s + r.unfixedPureGrams, 0);
 
-  const NAVY = "#1e3a5f";
-  const GOLD = "#c8a43a";
+  const NAVY = PDF_BRAND.navy;
+  const GOLD = PDF_BRAND.gold;
   const GRID = "#d1d5db";
   const LIGHT = "#f5f3ee";
 
-  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  const generatedAt = new Date();
+  const pdf = createBrandedPdf({
+    title: "Supplier Liability Statement",
+    generatedAt,
+  });
+  const { doc } = pdf;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="supplier-liability-${new Date().toISOString().slice(0, 10)}.pdf"`,
+    `attachment; filename="supplier-liability-${generatedAt.toISOString().slice(0, 10)}.pdf"`,
   );
   doc.pipe(res);
 
-  const W = doc.page.width - 80;
+  const W = pdf.width;
   const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-  // ── Header banner ──
-  doc.rect(0, 0, doc.page.width, 96).fill(NAVY);
-  doc.fillColor(GOLD).fontSize(20).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
-  doc.fillColor("#aac4e8").fontSize(11).font("Helvetica-Bold").text("SUPPLIER LIABILITY STATEMENT", 40, 48);
-  doc.fillColor("white").fontSize(9).font("Helvetica").text(`Generated: ${new Date().toLocaleString("en-AE")}`, 40, 66);
-
   // ── Grand total summary box ──
-  const summaryY = 110;
+  const summaryY = pdf.contentTop;
   doc.rect(40, summaryY, W, 52).fillAndStroke(LIGHT, GRID);
   doc.fillColor("#666").font("Helvetica").fontSize(9).text("Outstanding Summary", 52, summaryY + 8);
   doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11)
@@ -197,7 +196,12 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
     bold: boolean,
     h = 18,
   ) => {
-    if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
+    if (y + h > pdf.contentBottom) {
+      y = pdf.addPage();
+      if (cells !== cols) {
+        drawRow(cols, "#1e293b", "white", true);
+      }
+    }
     let x = 40;
     doc.lineWidth(0.5);
     for (const [text, width, right] of cells) {
@@ -217,7 +221,7 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
   drawRow(cols, "#1e293b", "white", true);
 
   if (rows.length === 0) {
-    if (y + 24 > doc.page.height - 60) { doc.addPage(); y = 40; }
+    y = pdf.ensureSpace(y, 24);
     doc.rect(40, y, W, 24).fillAndStroke("white", GRID);
     doc.fillColor("#888").font("Helvetica-Oblique").fontSize(9)
       .text("No outstanding liabilities.", 52, y + 7, { lineBreak: false });
@@ -245,7 +249,7 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
 
   // ── Footer note ──
   y += 14;
-  if (y + 38 > doc.page.height - 40) { doc.addPage(); y = 40; }
+  y = pdf.ensureSpace(y, 38);
   doc.rect(40, y, W, 38).fillAndStroke("#fdf9ee", GOLD);
   doc.fillColor("#666").font("Helvetica").fontSize(8.5)
     .text(
@@ -254,8 +258,9 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
       52, y + 8,
       { width: W - 24 },
     );
+  y += 38;
 
-  doc.end();
+  pdf.finish(y);
 });
 
 // Configurable capacity-warning threshold: emit a warning flag when the table
@@ -741,23 +746,21 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
   if (!loaded) { res.status(404).json({ error: "Bill not found" }); return; }
   const { bill, items } = loaded;
 
-  const NAVY = "#1e3a5f";
-  const GOLD = "#c8a43a";
+  const NAVY = PDF_BRAND.navy;
+  const GOLD = PDF_BRAND.gold;
   const GRID = "#d1d5db";
   const LIGHT = "#f5f3ee";
-  const doc = new PDFDocument({ margin: 40, size: "A4" });
+  const pdf = createBrandedPdf({
+    title: "Purchase Receipt / Bill Confirmation",
+  });
+  const { doc } = pdf;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="purchase-bill-${bill.billNo.replace(/[^A-Za-z0-9-_]/g, "_")}.pdf"`);
   doc.pipe(res);
 
-  const W = doc.page.width - 80; // 515 for A4 portrait
+  const W = pdf.width; // 515 for A4 portrait
   const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-
-  doc.rect(0, 0, doc.page.width, 96).fill(NAVY);
-  doc.fillColor(GOLD).fontSize(20).font("Helvetica-Bold").text("Hazari Gold L.L.C", 40, 22);
-  doc.fillColor("#aac4e8").fontSize(11).font("Helvetica-Bold").text("PURCHASE RECEIPT / BILL CONFIRMATION", 40, 48);
-  doc.fillColor("white").fontSize(9).font("Helvetica").text(`Generated: ${new Date().toLocaleString("en-AE")}`, 40, 66);
 
   // Bill meta box
   const meta: [string, string][] = [
@@ -767,8 +770,8 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
     ["Purchase Type:", bill.purchaseType === "fixed" ? "Fixed Purchase" : "Unfixed Purchase"],
     ["Payment Status:", bill.paymentStatus === "paid" ? "Paid in Cash" : bill.paymentStatus === "unpaid" ? "Unpaid / Liability" : "Unfixed Balance"],
   ];
-  doc.rect(40, 110, W, 20 + meta.length * 16).fillAndStroke(LIGHT, GRID);
-  let my = 120;
+  doc.rect(40, pdf.contentTop, W, 20 + meta.length * 16).fillAndStroke(LIGHT, GRID);
+  let my = pdf.contentTop + 10;
   for (const [k, v] of meta) {
     doc.fillColor("#666").font("Helvetica").fontSize(9).text(k, 52, my, { lineBreak: false });
     doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9).text(v, 160, my);
@@ -776,14 +779,19 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
   }
 
   // Items table — widths sum to 515.
-  let y = 110 + 20 + meta.length * 16 + 18;
+  let y = pdf.contentTop + 20 + meta.length * 16 + 18;
   const header: [string, number, boolean?][] = [
     ["Category", 95], ["Gross Wt (g)", 70, true], ["Purity %", 55, true],
     ["Pure Wt (g)", 70, true], ["Rate (AED/g)", 70, true],
     ["Making (AED)", 70, true], ["Line Total (AED)", 85, true],
   ];
   const drawRow = (cells: [string, number, boolean?][], bg: string, color: string, bold: boolean, h = 18) => {
-    if (y + h > doc.page.height - 60) { doc.addPage(); y = 40; }
+    if (y + h > pdf.contentBottom) {
+      y = pdf.addPage();
+      if (cells !== header) {
+        drawRow(header, "#1e293b", "white", true);
+      }
+    }
     let x = 40;
     doc.lineWidth(0.5);
     for (const [text, width, right] of cells) {
@@ -818,6 +826,7 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
   ], "#eee6cf", NAVY, true, 20);
 
   y += 14;
+  y = pdf.ensureSpace(y, 44);
   doc.rect(40, y, W, 44).fillAndStroke("#fdf9ee", GOLD);
   doc.fillColor("#666").font("Helvetica").fontSize(8.5)
     .text("Ledger posting: Metal Credit (+ weight) to supplier & master ledger; Cash Debit (+ cost) to supplier account.", 52, y + 8, { width: W - 24 });
@@ -825,15 +834,57 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
     .text(`Total Metal Credit: ${num3(Number(bill.totalGrossGrams))} g     ·     Total Cash Debit: AED ${num2(Number(bill.totalAed))}`, 52, y + 24, { width: W - 24 });
   y += 58;
   if (bill.notes) {
-    doc.fillColor("#444").font("Helvetica-Oblique").fontSize(8.5).text(`Notes: ${bill.notes}`, 40, y, { width: W });
-    y += 20;
+    doc.fillColor("#444").font("Helvetica-Oblique").fontSize(8.5);
+    let remaining = `Notes: ${bill.notes}`.trim();
+    const lineHeight = doc.currentLineHeight(true);
+
+    while (remaining.length > 0) {
+      if (y + lineHeight > pdf.contentBottom) {
+        y = pdf.addPage();
+      }
+
+      const availableHeight = pdf.contentBottom - y;
+      const fullHeight = doc.heightOfString(remaining, { width: W });
+      if (fullHeight <= availableHeight) {
+        doc.text(remaining, 40, y, { width: W });
+        y += fullHeight + 8;
+        break;
+      }
+
+      // Find the largest prefix that fits on this page. Prefer a whitespace
+      // boundary, while still making progress for unusually long unbroken text.
+      let low = 1;
+      let high = remaining.length;
+      let best = 1;
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const candidate = remaining.slice(0, middle);
+        const candidateHeight = doc.heightOfString(candidate, { width: W });
+        if (candidateHeight <= availableHeight) {
+          best = middle;
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+
+      const whitespaceBoundary = remaining.lastIndexOf(" ", best);
+      if (whitespaceBoundary > 0) {
+        best = whitespaceBoundary;
+      }
+      const chunk = remaining.slice(0, best).trimEnd();
+      const chunkHeight = doc.heightOfString(chunk, { width: W });
+      doc.text(chunk, 40, y, { width: W });
+      y += chunkHeight;
+      remaining = remaining.slice(best).trimStart();
+
+      if (remaining.length > 0) {
+        y = pdf.addPage();
+      }
+    }
   }
 
-  doc.fillColor("#777").font("Helvetica").fontSize(8)
-    .text("Supplier Signature: ______________________", 40, y + 30)
-    .text("Authorized Signature: ______________________", 320, y + 30);
-
-  doc.end();
+  pdf.finish(y);
 });
 
 export default router;

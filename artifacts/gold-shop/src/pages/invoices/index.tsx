@@ -24,9 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/auth";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "../products/stock";
-
-const NAVY = "#1e3a5f";
-const GOLD = "#c8a43a";
+import { decorateStatementPdf, NAVY, GOLD } from "@/components/pdf-branding";
 
 // For known stock buckets show the friendly label; for custom items show the
 // exact user-entered item name (never a generic "Custom" fallback).
@@ -169,16 +167,36 @@ export default function Invoices() {
     try {
       const html2pdf = (await import("html2pdf.js")).default;
       const catTag = category === "all" ? "All-Categories" : stockCategoryLabel(category).replace(/\s+/g, "-");
-      await html2pdf()
+
+      const worker: any = html2pdf()
         .set({
-          margin: [10, 10, 10, 10],
+          margin: [56, 10, 48, 10], // top, right, bottom, left
           filename: `Sales-Statement_${catTag}_${format(new Date(), "yyyy-MM-dd")}.pdf`,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, logging: false },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(reportRef.current)
-        .save();
+        .toPdf()
+        .get("pdf")
+        .then(async (pdf: any) => {
+          await decorateStatementPdf(pdf, {
+            title: "Sales Statement",
+            subtitle: criteriaLine,
+            userName: user?.fullName ?? "Admin",
+            columns: [
+              { label: "Invoice #", width: 23 },
+              { label: "Date", width: 20 },
+              { label: "Customer", width: 35 },
+              { label: "Category", width: 35 },
+              { label: "Weight (g)", width: 24, align: "right" },
+              { label: "Rate/Gram (AED)", width: 27, align: "right" },
+              { label: "Total (AED)", width: 26, align: "right" },
+            ],
+          });
+        });
+
+      await worker.save();
     } finally {
       setIsDownloading(false);
     }
@@ -426,83 +444,57 @@ export default function Invoices() {
 
       {/* Hidden printable A4 sales statement (html2pdf source) */}
       <div style={{ position: "fixed", top: 0, left: "-9999px", width: "190mm" }}>
-        <div ref={reportRef} style={{ width: "190mm", fontFamily: "Arial, sans-serif", color: "#222", background: "#fff", padding: "6mm 8mm", boxSizing: "border-box" }}>
-          <div style={{ height: "4px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})`, marginBottom: "10px" }} />
-          <div style={{ textAlign: "center", marginBottom: "10px", borderBottom: `2px solid ${NAVY}`, paddingBottom: "8px" }}>
-            <div style={{ fontSize: "18px", fontWeight: "bold", color: NAVY, letterSpacing: "0.5px" }}>{companyName}</div>
-            {companyTrn && <div style={{ fontSize: "10px", color: "#555", marginTop: "2px" }}>TRN: {companyTrn}</div>}
-            <div style={{ fontSize: "9px", color: "#777", marginTop: "2px" }}>
-              Date of Report Generation: {format(new Date(), "dd/MM/yyyy hh:mm a")}
-            </div>
-          </div>
-          <div style={{ textAlign: "center", marginBottom: "12px" }}>
-            <div style={{ fontSize: "14px", fontWeight: "bold", color: NAVY, letterSpacing: "1px", marginBottom: "4px" }}>
-              SALES STATEMENT
-            </div>
-            <div style={{ fontSize: "11px", color: "#333" }}>{criteriaLine}</div>
-          </div>
-          {/* Summary box */}
-          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+        <div ref={reportRef} style={{ width: "190mm", fontFamily: "Arial, sans-serif", color: "#222", background: "#fff", boxSizing: "border-box" }}>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px", breakInside: "avoid" }}>
             <div style={{ flex: 1, border: `1.5px solid ${NAVY}`, borderRadius: "4px", padding: "8px 10px", background: "#f4f0e4" }}>
-              <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total Weight Sold</div>
-              <div style={{ fontSize: "13px", fontWeight: "bold", color: NAVY }}>
-                {fmtG(summary?.totalGrams)} g ({((summary?.totalGrams ?? 0) / 1000).toFixed(3)} KG)
+                <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total Weight Sold</div>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: NAVY }}>
+                  {fmtG(summary?.totalGrams)} g ({((summary?.totalGrams ?? 0) / 1000).toFixed(3)} KG)
+                </div>
+              </div>
+              <div style={{ flex: 1, border: `1.5px solid ${NAVY}`, borderRadius: "4px", padding: "8px 10px", background: "#f4f0e4" }}>
+                <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total Amount</div>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: NAVY }}>AED {fmtAED(summary?.totalAed)}</div>
+              </div>
+              <div style={{ flex: 1, border: `1.5px solid ${NAVY}`, borderRadius: "4px", padding: "8px 10px", background: "#f4f0e4" }}>
+                <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Invoices</div>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: NAVY }}>{summary?.invoiceCount ?? 0}</div>
               </div>
             </div>
-            <div style={{ flex: 1, border: `1.5px solid ${NAVY}`, borderRadius: "4px", padding: "8px 10px", background: "#f4f0e4" }}>
-              <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total Amount</div>
-              <div style={{ fontSize: "13px", fontWeight: "bold", color: NAVY }}>AED {fmtAED(summary?.totalAed)}</div>
-            </div>
-            <div style={{ flex: 1, border: `1.5px solid ${NAVY}`, borderRadius: "4px", padding: "8px 10px", background: "#f4f0e4" }}>
-              <div style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.5px" }}>Invoices</div>
-              <div style={{ fontSize: "13px", fontWeight: "bold", color: NAVY }}>{summary?.invoiceCount ?? 0}</div>
-            </div>
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
-            <thead>
-              <tr>
-                {["Invoice #", "Date", "Customer", "Category", "Weight (g)", "Rate/Gram (AED)", "Total (AED)"].map((h, i) => (
-                  <th key={h} style={{ background: NAVY, color: "#fff", textAlign: i >= 4 ? "right" : "left", padding: "7px 6px", border: `1px solid ${NAVY}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {report?.rows.map((r, idx) => (
-                <tr key={`${r.invoiceId}-${idx}`} style={{ background: idx % 2 === 0 ? "#fff" : "#f7f7f7" }}>
-                  <td style={{ padding: "6px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{r.invoiceNumber}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{format(new Date(r.date), "dd/MM/yyyy")}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd" }}>{r.customerName || "Walk-in Customer"}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd" }}>{rowCategoryDisplay(r)}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtG(r.weightGrams)}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtAED(r.ratePerGram)}</td>
-                  <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(r.totalAed)}</td>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+              <thead>
+                <tr>
+                  {["Invoice #", "Date", "Customer", "Category", "Weight (g)", "Rate/Gram (AED)", "Total (AED)"].map((h, i) => (
+                    <th key={h} style={{ background: NAVY, color: "#fff", textAlign: i >= 4 ? "right" : "left", padding: "7px 6px", border: `1px solid ${NAVY}` }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-              <tr style={{ background: "#eee6cf" }}>
-                <td colSpan={4} style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>
-                  Grand Total ({summary?.invoiceCount ?? 0} invoices)
-                </td>
-                <td style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
-                  {fmtG(summary?.totalGrams)} g
-                </td>
-                <td style={{ border: `2px solid ${NAVY}` }} />
-                <td style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
-                  AED {fmtAED(summary?.totalAed)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div style={{ marginTop: "28px", display: "flex", justifyContent: "flex-end" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: "160px", borderTop: "1px solid #555", paddingTop: "4px", fontSize: "10px", color: "#333" }}>
-                Authorised Signature
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: "16px", paddingTop: "8px", borderTop: "1px solid #ccc", display: "flex", justifyContent: "space-between", fontSize: "9px", color: "#777" }}>
-            <div>Generated by {user?.fullName ?? "Admin"} on {format(new Date(), "dd/MM/yyyy hh:mm a")}</div>
-            <div>{companyName} — Sales Statement</div>
-          </div>
+              </thead>
+              <tbody>
+                {report?.rows.map((r, idx) => (
+                  <tr key={`${r.invoiceId}-${idx}`} style={{ background: idx % 2 === 0 ? "#fff" : "#f7f7f7", breakInside: "avoid" }}>
+                    <td style={{ padding: "6px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{r.invoiceNumber}</td>
+                    <td style={{ padding: "6px", border: "1px solid #ddd", whiteSpace: "nowrap" }}>{format(new Date(r.date), "dd/MM/yyyy")}</td>
+                    <td style={{ padding: "6px", border: "1px solid #ddd" }}>{r.customerName || "Walk-in Customer"}</td>
+                    <td style={{ padding: "6px", border: "1px solid #ddd" }}>{rowCategoryDisplay(r)}</td>
+                    <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtG(r.weightGrams)}</td>
+                    <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>{fmtAED(r.ratePerGram)}</td>
+                    <td style={{ padding: "6px", border: "1px solid #ddd", textAlign: "right", whiteSpace: "nowrap" }}>AED {fmtAED(r.totalAed)}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: "#eee6cf", breakInside: "avoid" }}>
+                  <td colSpan={4} style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY }}>
+                    Grand Total ({summary?.invoiceCount ?? 0} invoices)
+                  </td>
+                  <td style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
+                    {fmtG(summary?.totalGrams)} g
+                  </td>
+                  <td style={{ border: `2px solid ${NAVY}` }} />
+                  <td style={{ padding: "8px 6px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
+                    AED {fmtAED(summary?.totalAed)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
         </div>
       </div>
     </div>

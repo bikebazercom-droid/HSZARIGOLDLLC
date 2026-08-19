@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/context/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { PdfCompanyDetails, PdfFooter } from "@/components/pdf-branding";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -107,17 +108,7 @@ export default function InvoiceDetail() {
     return <div className="p-8">Invoice not found</div>;
   }
 
-  // Company info from settings (fall back to defaults)
-  const companyName = settings?.companyName ?? "HAZARI GOLD L.L.C";
-  const companyAddress = settings?.address ?? "Matar Abdul Rahman Khalfan Al Muhairi Building, 1st Floor, Room# 101, Deira, Dubai, UAE";
-  const companyPhone = settings?.phone ?? "+971 50 536 4193";
-  const companyEmail = settings?.email ?? "hazarigoldllc@gmail.com";
-  const companyTrn = settings?.trn ?? "105301944200003";
   const locationUrl = settings?.locationUrl ?? "";
-  const logoType = settings?.logoType ?? "monogram";
-  const logoInitial = settings?.logoInitial ?? "H";
-  const logoImageUrl = settings?.logoImageUrl ?? "";
-  const tagline = settings?.tagline ?? "";
 
   const fmt = (n: number | null | undefined) =>
     (n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -142,9 +133,6 @@ export default function InvoiceDetail() {
   const totalPure = invoice.items?.reduce((s, i) => s + (i.pureWeight ?? 0), 0) ?? 0;
   const totalMakingAmt = invoice.items?.reduce((s, i) => s + (i.makingAmt ?? 0), 0) ?? 0;
   const totalPrice = invoice.items?.reduce((s, i) => s + (i.totalPrice ?? 0), 0) ?? 0;
-
-  // Split address only on explicit newlines (as typed in the textarea)
-  const addressLines = companyAddress.split("\n").map(s => s.trim()).filter(Boolean);
 
   const isPaid = invoice ? invoice.isPending === false : false;
 
@@ -210,13 +198,15 @@ export default function InvoiceDetail() {
   const handleDownloadPdf = async () => {
     if (!invoiceRef.current) return;
     const html2pdf = (await import("html2pdf.js")).default;
-    // A4 at 96 dpi: 210mm = 794px wide, 297mm = 1123px tall.
-    // Setting both `height` and `windowHeight` to 1123 crops the html2canvas
-    // capture to exactly one A4 page — jsPDF then maps that image to 210×297mm
-    // with no pagination and no second blank page.
+    // Capture the complete invoice, then fit that canvas onto one A4 page.
+    // This preserves the one-page guarantee without silently cropping long
+    // notes, customer fields, or additional item rows.
     const A4_W_PX = 794;
     const A4_H_PX = Math.round(A4_W_PX * 297 / 210); // 1123
-    html2pdf()
+    const captureHeight = Math.max(invoiceRef.current.scrollHeight, A4_H_PX);
+    let capturedCanvas: HTMLCanvasElement | null = null;
+
+    const worker: any = (html2pdf()
       .set({
         margin: [0, 0, 0, 0],
         filename: `Invoice-${invoice.invoiceNumber}.pdf`,
@@ -231,29 +221,52 @@ export default function InvoiceDetail() {
             clonedDoc.querySelectorAll(".no-print").forEach((el) => el.remove());
           },
           windowWidth: A4_W_PX,
-          windowHeight: A4_H_PX,
-          height: A4_H_PX,      // crop canvas to exactly 1 A4 page height
+          windowHeight: captureHeight,
           scrollX: 0,
           scrollY: 0,
         },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       })
       .from(invoiceRef.current)
+      .toCanvas()
+      .get("canvas") as any)
+      .then((canvas: HTMLCanvasElement) => {
+        capturedCanvas = canvas;
+      })
       .toPdf()
       .get("pdf")
-      // html2pdf's Worker is a thenable whose chain keeps worker methods
-      // (.save) after .then — but its TS types say plain Promise, so cast.
       .then((pdf: any) => {
-        // Hard guarantee: delete any pages beyond page 1 so the downloaded
-        // PDF is always exactly one A4 page (kills the trailing blank page
-        // that pagination rounding sometimes produces).
+        if (!capturedCanvas) {
+          throw new Error("Invoice PDF canvas was not created");
+        }
+
+        // Keep a fresh blank page, then remove every page html2pdf generated.
         const totalPages = pdf.internal.getNumberOfPages();
+        pdf.addPage();
         for (let i = totalPages; i > 1; i--) {
           pdf.deletePage(i);
         }
+        pdf.deletePage(1);
+        pdf.setPage(1);
+
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const aspect = capturedCanvas.width / capturedCanvas.height;
+        let renderWidth = pageWidth;
+        let renderHeight = renderWidth / aspect;
+        if (renderHeight > pageHeight) {
+          renderHeight = pageHeight;
+          renderWidth = renderHeight * aspect;
+        }
+
+        const x = (pageWidth - renderWidth) / 2;
+        const y = (pageHeight - renderHeight) / 2;
+        const imageData = capturedCanvas.toDataURL("image/jpeg", 0.98);
+        pdf.addImage(imageData, "JPEG", x, y, renderWidth, renderHeight, undefined, "FAST");
         return pdf;
-      })
-      .then((pdf: any) => pdf.save());
+      });
+
+    await worker.save();
   };
 
   return (
@@ -349,42 +362,7 @@ export default function InvoiceDetail() {
 
           {/* LEFT: Logo + Company Info */}
           <div style={{ flex: "0 0 38%" }}>
-            {/* Logo — large block */}
-            {logoType === "image" && logoImageUrl ? (
-              <div style={{ marginBottom: "8px" }}>
-                <img
-                  src={logoImageUrl}
-                  alt="Logo"
-                  style={{ width: "140px", height: "auto", display: "block", borderRadius: "8px" }}
-                />
-              </div>
-            ) : logoType === "monogram" ? (
-              <div style={{
-                width: "100px", height: "100px", background: NAVY, borderRadius: "8px",
-                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px"
-              }}>
-                <span style={{ color: GOLD, fontSize: "48px", fontWeight: "bold", fontFamily: "Georgia, serif" }}>
-                  {logoInitial}
-                </span>
-              </div>
-            ) : null}
-
-            {/* Company name */}
-            <div style={{ fontWeight: "bold", fontSize: "13px", color: NAVY, marginBottom: "4px" }}>{companyName}</div>
-            {tagline && <div style={{ fontSize: "10px", color: "#555", marginBottom: "4px", fontStyle: "italic" }}>{tagline}</div>}
-
-            {/* Contact details */}
-            <div style={{ color: "#333", lineHeight: "1.8", fontSize: "10px" }}>
-              <div style={{ display: "flex", gap: "4px" }}>
-                <span>📍</span>
-                <div>
-                  {addressLines.map((line, i) => <div key={i}>{line}</div>)}
-                </div>
-              </div>
-              <div>📞 Phone: &nbsp;{companyPhone}</div>
-              <div>✉ Email: &nbsp;&nbsp;{companyEmail}</div>
-              <div>🏢 TRN: &nbsp;&nbsp;&nbsp;&nbsp;{companyTrn}</div>
-            </div>
+            <PdfCompanyDetails />
           </div>
 
           {/* CENTER: TAX INVOICE + QR */}
@@ -574,12 +552,10 @@ export default function InvoiceDetail() {
         {/* Amount in Words + Payment Mode */}
         <div style={{ margin: "0 16px 8px", border: `1px solid #ccc`, borderRadius: "4px", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #eee", gap: "8px" }}>
-            <span style={{ fontSize: "14px" }}>💰</span>
             <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Amount In Words (AED):</span>
             <span style={{ fontStyle: "italic" }}>{numberToWords(totalIncludingVat)}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", gap: "8px" }}>
-            <span style={{ fontSize: "14px" }}>💳</span>
             <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Payment Mode:</span>
             <span style={{ fontWeight: "bold" }}>{paymentLabel}</span>
           </div>
@@ -593,46 +569,13 @@ export default function InvoiceDetail() {
           </div>
         )}
 
-        {/* ── BOTTOM FOOTER WRAPPER ──────────────────────────────────────────
-            Absolutely pinned to the bottom of the A4 frame so that signatures
-            and the navy ribbon always sit at the foot of the page regardless
-            of how many item rows are in the invoice.  The wrapper spans edge-
-            to-edge (left/right: 0) so the full-width navy & gold strips need
-            no negative-margin escape. Signatures are padded inward to match
-            the 15mm content boundary. */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, pageBreakBefore: "avoid" }}>
-          {/* Signatures */}
-          <div style={{ padding: "8px 15mm 6px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-            {["Customer's Signature", "Checked By", "Authorised Signature"].map((label) => (
-              <div key={label} style={{ width: "30%" }}>
-                {label === "Authorised Signature" && settings?.stampSignatureUrl && (
-                  <img
-                    src={settings.stampSignatureUrl}
-                    alt="Authorized stamp and signature"
-                    style={{
-                      display: "block",
-                      width: "130px",
-                      maxWidth: "100%",
-                      height: "auto",
-                      margin: "0 auto -10px",
-                    }}
-                  />
-                )}
-                <div style={{ borderTop: "1px solid #333", paddingTop: "4px", fontSize: "10px", fontWeight: "bold", color: NAVY, textAlign: "center" }}>
-                  {label}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Navy "Thank you" ribbon — full width inside the wrapper */}
-          <div className="thank-you-footer" style={{ background: NAVY, color: "white", textAlign: "center", padding: "6px", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px", pageBreakBefore: "avoid" }}>
-            Thank you for your business!
-          </div>
-
-          {/* Gold bottom border — full width, flush at the very bottom */}
-          <div style={{ height: "5px", background: `linear-gradient(to right, ${GOLD}, #f5d77a, ${GOLD})` }} />
+        {/* User / Timestamp inside the flexible part */}
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", color: "#777", paddingTop: "4px", margin: "auto 16px 0", flexShrink: 0 }}>
+          <div>Generated by {user?.fullName ?? "Admin"} on {format(new Date(), "dd/MM/yyyy hh:mm a")}</div>
         </div>
+
+        {/* ── BOTTOM FOOTER WRAPPER ────────────────────────────────────────── */}
+        <PdfFooter absolute />
       </div>
       </div>
 
