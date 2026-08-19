@@ -5,6 +5,7 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { DashboardCategoryStock } from './dashboardCategoryStock';
 
 export interface DashboardSummaryCards {
   /** Non-silver purchased grams minus sold grams (live remaining main stock) */
@@ -21,4 +22,12 @@ export interface DashboardSummaryCards {
   soldCostAed: number;
   /** totalRevenueAed - all-time COGS */
   netProfitAed: number;
+  /** Current live physical metal balance across every stock category */
+  totalPhysicalRemainingGrams: number;
+  /** All-time purchase cash outflow (cash debit) */
+  totalPurchaseDebitAed: number;
+  /** All-time invoiced sales revenue (cash credit) */
+  totalSalesCreditAed: number;
+  /** All-time metal movement and live vault balance by stock category */
+  categoryBreakdown: DashboardCategoryStock[];
 }

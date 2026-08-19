@@ -17,6 +17,7 @@ export * from './customDescription';
 export * from './customer';
 export * from './customerInput';
 export * from './customerListItem';
+export * from './dashboardCategoryStock';
 export * from './dashboardKpis';
 export * from './dashboardStats';
 export * from './dashboardSummaryCards';

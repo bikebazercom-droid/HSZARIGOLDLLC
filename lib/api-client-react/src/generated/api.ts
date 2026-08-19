@@ -3034,7 +3034,7 @@ export const getGetDashboardSummaryCardsUrl = () => {
 }
 
 /**
- * @summary All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+ * @summary All-time physical stock, category vault movement, and debit/credit financial summary
  */
 export const getDashboardSummaryCards = async ( options?: RequestInit): Promise<DashboardSummaryCards> => {
 
@@ -3081,7 +3081,7 @@ export type GetDashboardSummaryCardsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+ * @summary All-time physical stock, category vault movement, and debit/credit financial summary
  */
 
 export function useGetDashboardSummaryCards<TData = Awaited<ReturnType<typeof getDashboardSummaryCards>>, TError = ErrorType<unknown>>(

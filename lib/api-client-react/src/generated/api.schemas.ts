@@ -36,6 +36,17 @@ export interface DashboardKpis {
   netProfitAed: number;
 }
 
+export interface DashboardCategoryStock {
+  category: string;
+  label: string;
+  /** All-time metal purchased/in for this category */
+  purchasedGrams: number;
+  /** All-time metal sold/out for this category */
+  soldGrams: number;
+  /** Current live vault balance for this category */
+  remainingGrams: number;
+}
+
 export interface DashboardSummaryCards {
   /** Non-silver purchased grams minus sold grams (live remaining main stock) */
   availableStockGrams: number;
@@ -51,6 +62,14 @@ export interface DashboardSummaryCards {
   soldCostAed: number;
   /** totalRevenueAed - all-time COGS */
   netProfitAed: number;
+  /** Current live physical metal balance across every stock category */
+  totalPhysicalRemainingGrams: number;
+  /** All-time purchase cash outflow (cash debit) */
+  totalPurchaseDebitAed: number;
+  /** All-time invoiced sales revenue (cash credit) */
+  totalSalesCreditAed: number;
+  /** All-time metal movement and live vault balance by stock category */
+  categoryBreakdown: DashboardCategoryStock[];
 }
 
 export interface SalesReportRow {

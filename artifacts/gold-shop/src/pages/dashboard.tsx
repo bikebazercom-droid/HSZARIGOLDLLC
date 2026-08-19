@@ -3,7 +3,6 @@ import { Link } from "wouter";
 import {
   useGetDashboardKpis, getGetDashboardKpisQueryKey,
   useGetDashboardSummaryCards, getGetDashboardSummaryCardsQueryKey,
-  useListStockLevels, getListStockLevelsQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
@@ -19,18 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format, startOfWeek, startOfMonth } from "date-fns";
 import {
-  Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote, Package, Medal,
+  Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote,
   Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown, FileSpreadsheet,
+  Database, Layers
 } from "lucide-react";
-
-const STOCK_LEVEL_CATEGORIES: [string, string][] = [
-  ["gold", "GOLD"],
-  ["tt_bar", "TT Bar"],
-  ["kg_bar", "KG Bar"],
-  ["995", "995"],
-  ["gold_jewelry_22k", "Gold Jewelry 22K"],
-  ["silver", "Silver"],
-];
 
 const STATEMENT_CATEGORIES: [string, string][] = [
   ["all", "All Categories"],
@@ -76,9 +67,7 @@ export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummaryCards({
     query: { queryKey: getGetDashboardSummaryCardsQueryKey() },
   });
-  const { data: stockLevels, isLoading: levelsLoading } = useListStockLevels({
-    query: { queryKey: getListStockLevelsQueryKey() },
-  });
+
   const todayDate = format(new Date(), "MMMM d, yyyy");
 
   // PDF statement modal state
@@ -144,7 +133,7 @@ export default function Dashboard() {
   ] : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <div>
@@ -202,169 +191,181 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Live summary hero cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {summaryLoading || !summary ? (
-          <>
-            <Skeleton className="h-44" />
-            <Skeleton className="h-44" />
-            <Skeleton className="h-44" />
-          </>
-        ) : (
-          <>
-            {/* Card 1 — dark: live available stock + purchase cost value */}
-            <div className="rounded-xl bg-[#1e293b] text-white p-5 shadow-md">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
-                  <Package className="w-4 h-4 text-[#c8a43a]" /> Current Available Stock
-                </h2>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 text-emerald-300 rounded-full px-2.5 py-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Inventory
-                </span>
+      {/* Hero Control Desk */}
+      {summaryLoading || !summary ? (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <Skeleton className="h-[140px] xl:col-span-2" />
+          <Skeleton className="h-[140px] xl:col-span-1" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          {/* Financial Control */}
+          <Card className="col-span-1 xl:col-span-2 overflow-hidden border-border/50 shadow-sm">
+            <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                <Banknote className="w-4 h-4 text-muted-foreground" /> Financial Control &amp; Profit (AED)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
+                <div className="p-5 flex flex-col justify-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Purchase Debit (Cash Out)</p>
+                  <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.totalPurchaseDebitAed)}</p>
+                </div>
+                <div className="p-5 flex flex-col justify-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Sales Credit (Cash In)</p>
+                  <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.totalSalesCreditAed)}</p>
+                </div>
+                <div className="p-5 flex flex-col justify-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FIFO Cost of Sold</p>
+                  <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.soldCostAed)}</p>
+                </div>
+                <div className="p-5 bg-muted/20 flex flex-col justify-center border-t-0">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Overall Net Profit</p>
+                  <p className={`text-2xl font-bold font-mono ${summary.netProfitAed < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
+                    {fmtAED(summary.netProfitAed)}
+                  </p>
+                </div>
               </div>
-              <div className="mt-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">Stock IN (Purchased Balance)</p>
-                <p className={`text-2xl font-bold mt-0.5 ${summary.availableStockGrams < 0 ? "text-red-400" : ""}`}>
-                  {fmtG(summary.availableStockGrams)} g
-                  <span className="text-sm font-medium text-slate-400"> / {kg(summary.availableStockGrams)} KG</span>
-                </p>
-              </div>
-              <div className="border-t border-dashed border-slate-600 my-4" />
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">Total Purchase Cost Value</p>
-                <p className={`text-xl font-bold mt-0.5 text-[#c8a43a] ${summary.availableStockCostAed < 0 ? "text-red-400" : ""}`}>
-                  AED {fmtAED(summary.availableStockCostAed)}
-                </p>
-                <p className="text-[10px] text-slate-500 mt-1">Deducts automatically on every sale</p>
-              </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Card 2 — silver: dedicated silver inventory & valuation */}
-            <div className="rounded-xl bg-slate-100 border border-slate-300 text-slate-800 p-5 shadow-md">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
-                  <Medal className="w-4 h-4 text-slate-500" /> Silver Inventory &amp; Valuation
-                </h2>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-600 rounded-full px-2.5 py-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-pulse" /> Silver Only
-                </span>
+          {/* Vault Physical Control */}
+          <Card className="col-span-1 overflow-hidden border-border/50 shadow-sm">
+            <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                <Database className="w-4 h-4 text-muted-foreground" /> Physical Vault Control (Grams)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 divide-y sm:divide-y-0 xl:divide-y sm:divide-x xl:divide-x-0 divide-border/50 h-full">
+                <div className="p-5 flex flex-col justify-center bg-muted/10">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Total Physical Remaining</p>
+                  <p className="text-2xl font-bold font-mono text-foreground">
+                    {fmtG(summary.totalPhysicalRemainingGrams)}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">g</span>
+                  </p>
+                </div>
+                <div className="p-5 grid grid-cols-2 gap-4 items-center">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Gold &amp; Other</p>
+                    <p className="text-sm font-bold font-mono text-foreground">{fmtG(summary.availableStockGrams)} g</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Silver</p>
+                    <p className="text-sm font-bold font-mono text-foreground">{fmtG(summary.silverStockGrams)} g</p>
+                  </div>
+                </div>
               </div>
-              <div className="mt-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">Silver Available Weight</p>
-                <p className={`text-2xl font-bold mt-0.5 ${summary.silverStockGrams < 0 ? "text-red-600" : ""}`}>
-                  {fmtG(summary.silverStockGrams)} g
-                  <span className="text-sm font-medium text-slate-500"> / {kg(summary.silverStockGrams)} KG</span>
-                </p>
-              </div>
-              <div className="border-t border-dashed border-slate-300 my-4" />
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">Silver Total Purchase Cost</p>
-                <p className={`text-xl font-bold mt-0.5 ${summary.silverStockCostAed < 0 ? "text-red-600" : "text-slate-700"}`}>
-                  AED {fmtAED(summary.silverStockCostAed)}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">Deducts automatically on every silver sale</p>
-              </div>
-            </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-            {/* Card 3 — emerald: sales revenue + net profit */}
-            <div className="rounded-xl bg-emerald-900 text-white p-5 shadow-md">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="text-sm font-semibold tracking-wide flex items-center gap-2">
-                  <Banknote className="w-4 h-4 text-emerald-300" /> Sales &amp; Profit Summary
-                </h2>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 text-emerald-200 rounded-full px-2.5 py-1 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" /> Performance
-                </span>
-              </div>
-              <div className="mt-4">
-                <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Total Sales Revenue (Invoiced)</p>
-                <p className="text-2xl font-bold mt-0.5">AED {fmtAED(summary.totalRevenueAed)}</p>
-              </div>
-              <div className="border-t border-dashed border-emerald-700 my-4" />
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Purchase Cost of Sold Items (COGS)</p>
-                <p className="text-xl font-bold mt-0.5 text-amber-300">AED {fmtAED(summary.soldCostAed)}</p>
-              </div>
-              <div className="border-t border-dashed border-emerald-700 my-4" />
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-emerald-200/70">Net Profit Earned</p>
-                <p className={`text-xl font-bold mt-0.5 ${summary.netProfitAed < 0 ? "text-red-400" : "text-[#4ade80]"}`}>
-                  AED {fmtAED(summary.netProfitAed)}
-                </p>
-                <p className="text-[10px] text-emerald-200/50 mt-1">Revenue − purchase cost of sold items</p>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      {/* Category Breakdown Table */}
+      {summaryLoading || !summary ? (
+        <Skeleton className="h-64 mt-6" />
+      ) : (
+        <Card className="overflow-hidden border-border/50 shadow-sm">
+          <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <Layers className="w-4 h-4 text-muted-foreground" /> Category-wise Vault Breakdown
+            </CardTitle>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-background text-muted-foreground rounded px-2.5 py-1 flex items-center gap-1 border border-border/50 shadow-sm">
+              Real-time Balance
+            </span>
+          </CardHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/10">
+                <TableRow>
+                  <TableHead className="font-semibold text-muted-foreground">Category Name</TableHead>
+                  <TableHead className="text-right font-semibold text-muted-foreground">Metal Purchased / In <span className="text-[10px] font-normal uppercase ml-1">(Debit g)</span></TableHead>
+                  <TableHead className="text-right font-semibold text-muted-foreground">Metal Sold / Out <span className="text-[10px] font-normal uppercase ml-1">(Credit g)</span></TableHead>
+                  <TableHead className="text-right font-semibold text-foreground bg-muted/20 w-56 border-l border-border/50">Net Remaining Vault <span className="text-[10px] font-normal uppercase ml-1">(Balance g)</span></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {summary.categoryBreakdown.map((row) => (
+                  <TableRow key={row.category} className="hover:bg-muted/5 transition-colors">
+                    <TableCell className="font-medium text-foreground py-3">{row.label}</TableCell>
+                    <TableCell className="text-right text-muted-foreground font-mono">{fmtG(row.purchasedGrams)} <span className="text-xs">g</span></TableCell>
+                    <TableCell className="text-right text-muted-foreground font-mono">{fmtG(row.soldGrams)} <span className="text-xs">g</span></TableCell>
+                    <TableCell className="text-right font-bold text-foreground bg-muted/5 font-mono py-3 border-l border-border/50">{fmtG(row.remainingGrams)} <span className="text-xs text-muted-foreground">g</span></TableCell>
+                  </TableRow>
+                ))}
+                {/* Totals Footer Row */}
+                <TableRow className="bg-muted/20 hover:bg-muted/20 border-t-2 border-border">
+                  <TableCell className="font-bold text-foreground py-3 uppercase text-[11px] tracking-wider">Total Vault</TableCell>
+                  <TableCell className="text-right text-foreground font-bold font-mono">{fmtG(summary.categoryBreakdown.reduce((acc, r) => acc + r.purchasedGrams, 0))} <span className="text-xs font-normal">g</span></TableCell>
+                  <TableCell className="text-right text-foreground font-bold font-mono">{fmtG(summary.categoryBreakdown.reduce((acc, r) => acc + r.soldGrams, 0))} <span className="text-xs font-normal">g</span></TableCell>
+                  <TableCell className="text-right font-bold text-foreground font-mono py-3 text-sm border-l border-border/50">{fmtG(summary.totalPhysicalRemainingGrams)} <span className="text-xs font-normal text-muted-foreground">g</span></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
 
-      {/* Per-category live stock boxes */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-        {levelsLoading || !stockLevels
-          ? [...Array(6)].map((_, i) => <Skeleton key={i} className="h-20" />)
-          : STOCK_LEVEL_CATEGORIES.map(([cat, label]) => {
-              const grams = stockLevels.find((l) => l.category === cat)?.weightGrams ?? 0;
-              return (
-                <Card key={cat}>
-                  <CardContent className="px-4 py-3">
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className={`text-lg font-bold mt-0.5 ${grams < 0 ? "text-destructive" : ""}`}>{fmtG(grams)} g</p>
-                    <p className="text-[11px] text-muted-foreground">{kg(grams)} kg</p>
+      {/* Time range filter & KPIs */}
+      <div className="pt-4 mt-6 border-t border-border/50">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight text-foreground">Operational KPIs</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Metrics filtered by selected time range</p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            {([
+              ["today", "Today"],
+              ["week", "This Week"],
+              ["month", "This Month"],
+              ["custom", "Custom Range"],
+            ] as [RangeKey, string][]).map(([key, label]) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={range === key ? "default" : "outline"}
+                onClick={() => setRange(key)}
+                className="h-8 text-xs shadow-sm"
+              >
+                {label}
+              </Button>
+            ))}
+            {range === "custom" && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Start Date</Label>
+                  <Input type="date" className="w-36 h-8 text-xs" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">End Date</Label>
+                  <Input type="date" className="w-36 h-8 text-xs" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 8-card KPI grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          {kpisLoading || !kpis
+            ? [...Array(8)].map((_, i) => <Skeleton key={i} className="h-[90px]" />)
+            : kpiCards.map((c) => (
+                <Card key={c.title} className="shadow-sm border-border/50 overflow-hidden">
+                  <CardHeader className="bg-muted/10 pb-2 pt-3 px-4 flex flex-row items-center justify-between space-y-0 border-b border-border/50">
+                    <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{c.title}</CardTitle>
+                    <c.icon className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 pt-2.5">
+                    <div className={`text-lg font-bold font-mono tracking-tight ${c.danger ? "text-destructive" : (c as { green?: boolean }).green ? "text-emerald-600 dark:text-emerald-500" : "text-foreground"}`}>
+                      {c.value}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{c.sub}</div>
                   </CardContent>
                 </Card>
-              );
-            })}
+              ))}
+        </div>
       </div>
-
-      {/* Time range filter */}
-      <div className="flex flex-wrap items-end gap-2">
-        {([
-          ["today", "Today"],
-          ["week", "This Week"],
-          ["month", "This Month"],
-          ["custom", "Custom Range"],
-        ] as [RangeKey, string][]).map(([key, label]) => (
-          <Button
-            key={key}
-            size="sm"
-            variant={range === key ? "default" : "outline"}
-            onClick={() => setRange(key)}
-          >
-            {label}
-          </Button>
-        ))}
-        {range === "custom" && (
-          <>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Start Date</Label>
-              <Input type="date" className="w-40 h-9" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">End Date</Label>
-              <Input type="date" className="w-40 h-9" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* 8-card KPI grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpisLoading || !kpis
-          ? [...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)
-          : kpiCards.map((c) => (
-              <Card key={c.title}>
-                <CardHeader className="pb-1 pt-3 px-4 flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">{c.title}</CardTitle>
-                  <c.icon className="w-4 h-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <div className={`text-lg font-bold ${c.danger ? "text-destructive" : (c as { green?: boolean }).green ? "text-green-700" : ""}`}>{c.value}</div>
-                  <div className="text-[11px] text-muted-foreground">{c.sub}</div>
-                </CardContent>
-              </Card>
-            ))}
-      </div>
-
     </div>
   );
 }

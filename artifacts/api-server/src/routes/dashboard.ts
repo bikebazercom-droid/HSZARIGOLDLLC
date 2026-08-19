@@ -132,7 +132,12 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   });
 });
 
-// All-time live totals for the two dashboard hero cards. Not date-filtered:
+const STOCK_CATEGORY_LABEL: Record<string, string> = {
+  gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
+  gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
+};
+
+// All-time live totals for the dashboard profit/stock summary. Not date-filtered:
 // Card 1 shows remaining stock (purchased − sold) and its value at purchase
 // cost (total purchase spend − COGS of everything sold so far); Card 2 shows
 // cumulative invoiced revenue and net profit (revenue − COGS; making charges
@@ -143,18 +148,15 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
   // Cost values come straight from the FIFO batch ledger: remaining stock is
   // valued at each surviving lot's own purchase rate, and COGS is the exact
   // sum of consumed batch slices — no averaging.
-  const [purchaseAgg, salesAgg, cogsAgg] = await Promise.all([
-    db.execute<{ main_grams: string; main_cost: string; silver_grams: string; silver_cost: string }>(sql`
-      SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN weight_grams::numeric ELSE 0 END), 0)::text AS main_grams,
-             COALESCE(SUM(CASE WHEN category <> 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS main_cost,
-             COALESCE(SUM(CASE WHEN category = 'silver' THEN weight_grams::numeric ELSE 0 END), 0)::text AS silver_grams,
-             COALESCE(SUM(CASE WHEN category = 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS silver_cost
+  const [purchaseAgg, salesAgg, cogsAgg, purchasesByCategory, salesByCategory, liveLevels] = await Promise.all([
+    db.execute<{ main_cost: string; silver_cost: string; purchase_debit: string }>(sql`
+      SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS main_cost,
+             COALESCE(SUM(CASE WHEN category = 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS silver_cost,
+             COALESCE(SUM(total_price_aed::numeric), 0)::text AS purchase_debit
       FROM stock_purchases
     `).then((r) => r.rows[0]),
-    db.execute<{ total_revenue: string; main_sold: string; silver_sold: string }>(sql`
-      SELECT COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
-             COALESCE((SELECT SUM(CASE WHEN ii.category <> 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) ELSE 0 END) FROM invoice_items ii), 0)::text AS main_sold,
-             COALESCE((SELECT SUM(CASE WHEN ii.category = 'silver' THEN COALESCE(ii.gross_weight::numeric, 0) ELSE 0 END) FROM invoice_items ii), 0)::text AS silver_sold
+    db.execute<{ total_revenue: string }>(sql`
+      SELECT COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue
       FROM invoices i
     `).then((r) => r.rows[0]),
     db.execute<{ main_cogs: string; silver_cogs: string }>(sql`
@@ -162,6 +164,25 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
              COALESCE(SUM(CASE WHEN category = 'silver' THEN cost_aed::numeric ELSE 0 END), 0)::text AS silver_cogs
       FROM inventory_consumptions
     `).then((r) => r.rows[0]),
+    db.execute<{ category: string; purchased_grams: string }>(sql`
+      SELECT category, COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams
+      FROM stock_purchases
+      GROUP BY category
+    `).then((r) => r.rows),
+    db.execute<{ category: string; sold_grams: string }>(sql`
+      SELECT CASE WHEN TRIM(ii.description) = '995' THEN '995'
+                  WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+                  ELSE ii.category END AS category,
+             COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0)), 0)::text AS sold_grams
+      FROM invoice_items ii
+      WHERE ii.category IS NOT NULL
+      GROUP BY 1
+    `).then((r) => r.rows),
+    db.execute<{ category: string; remaining_grams: string }>(sql`
+      SELECT category, weight_grams::text AS remaining_grams
+      FROM stock_levels
+      ORDER BY category
+    `).then((r) => r.rows),
   ]);
 
   const mainCogs = Number(cogsAgg.main_cogs);
@@ -169,15 +190,46 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
   const revenue = Number(salesAgg.total_revenue);
   const round3 = (n: number) => Math.round(n * 1000) / 1000;
   const round2 = (n: number) => Math.round(n * 100) / 100;
+  const purchasedMap = new Map(purchasesByCategory.map((row) => [row.category, Number(row.purchased_grams)]));
+  const soldMap = new Map(salesByCategory.map((row) => [row.category, Number(row.sold_grams)]));
+  const remainingMap = new Map(liveLevels.map((row) => [row.category, Number(row.remaining_grams)]));
+  const categoryOrder = Object.keys(STOCK_CATEGORY_LABEL);
+  const categorySet = new Set([
+    ...categoryOrder,
+    ...purchasedMap.keys(),
+    ...soldMap.keys(),
+    ...remainingMap.keys(),
+  ]);
+  const categoryBreakdown = [...categorySet]
+    .sort((a, b) => {
+      const ai = categoryOrder.indexOf(a);
+      const bi = categoryOrder.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    })
+    .map((category) => ({
+      category,
+      label: STOCK_CATEGORY_LABEL[category] ?? category,
+      purchasedGrams: round3(purchasedMap.get(category) ?? 0),
+      soldGrams: round3(soldMap.get(category) ?? 0),
+      remainingGrams: round3(remainingMap.get(category) ?? 0),
+    }));
+  const totalPhysicalRemainingGrams = round3(categoryBreakdown.reduce((sum, row) => sum + row.remainingGrams, 0));
 
   res.json({
-    availableStockGrams: round3(Number(purchaseAgg.main_grams) - Number(salesAgg.main_sold)),
+    availableStockGrams: round3(categoryBreakdown.filter((row) => row.category !== "silver").reduce((sum, row) => sum + row.remainingGrams, 0)),
     availableStockCostAed: round2(Number(purchaseAgg.main_cost)),
-    silverStockGrams: round3(Number(purchaseAgg.silver_grams) - Number(salesAgg.silver_sold)),
+    silverStockGrams: round3(remainingMap.get("silver") ?? 0),
     silverStockCostAed: round2(Number(purchaseAgg.silver_cost)),
     totalRevenueAed: round2(revenue),
     soldCostAed: round2(mainCogs + silverCogs),
     netProfitAed: round2(revenue - mainCogs - silverCogs),
+    totalPhysicalRemainingGrams,
+    totalPurchaseDebitAed: round2(Number(purchaseAgg.purchase_debit)),
+    totalSalesCreditAed: round2(revenue),
+    categoryBreakdown,
   });
 });
 
@@ -632,10 +684,7 @@ router.get("/dashboard/download-pdf", async (req, res): Promise<void> => {
 // Raw download routes, intentionally outside the OpenAPI spec.
 // ---------------------------------------------------------------------------
 
-const STMT_CAT_LABEL: Record<string, string> = {
-  gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
-  gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
-};
+const STMT_CAT_LABEL = STOCK_CATEGORY_LABEL;
 
 interface StatementLedgerRow {
   sl: number;
@@ -652,6 +701,14 @@ interface StatementLedgerRow {
   costAed: number | null;   // sales only: exact FIFO purchase cost of this line
   profitAed: number | null; // sales only
   batchRefs: string | null; // sales only: consumed FIFO lots, e.g. "#19 (50g)"
+}
+
+interface StatementCategoryBreakdownRow {
+  category: string;
+  label: string;
+  purchasedGrams: number;
+  soldGrams: number;
+  remainingGrams: number;
 }
 
 function parseStatementQuery(req: { query: unknown }): { startDate: string | null; endDate: string | null; category: string | null } | { error: string } {
@@ -772,6 +829,46 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   const cogs = sales.reduce((s, r) => s + itemCogs(r), 0);
   const profit = totalSalesAed - cogs;
 
+  // Category-wise metal ledger. Purchased/sold columns honor the active
+  // statement period; remaining is the current physical vault balance, matching
+  // the existing statement's live-stock semantics.
+  const purchasedByCategory = new Map<string, number>();
+  for (const row of purchases) {
+    purchasedByCategory.set(
+      row.category,
+      (purchasedByCategory.get(row.category) ?? 0) + Number(row.weight_grams),
+    );
+  }
+  const soldByCategory = new Map<string, number>();
+  for (const row of sales) {
+    const bucket = row.bucket ?? "custom";
+    soldByCategory.set(bucket, (soldByCategory.get(bucket) ?? 0) + Number(row.grams));
+  }
+  const remainingByCategory = new Map(levels.map((row) => [row.category, Number(row.weight_grams)]));
+  const standardCategoryOrder = Object.keys(STMT_CAT_LABEL);
+  const categoryKeys = category
+    ? [category]
+    : [...new Set([
+        ...standardCategoryOrder,
+        ...purchasedByCategory.keys(),
+        ...soldByCategory.keys(),
+        ...remainingByCategory.keys(),
+      ])].sort((a, b) => {
+        const ai = standardCategoryOrder.indexOf(a);
+        const bi = standardCategoryOrder.indexOf(b);
+        if (ai === -1 && bi === -1) return a.localeCompare(b);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
+  const categoryBreakdown: StatementCategoryBreakdownRow[] = categoryKeys.map((key) => ({
+    category: key,
+    label: STMT_CAT_LABEL[key] ?? (key === "custom" ? "Custom" : key),
+    purchasedGrams: purchasedByCategory.get(key) ?? 0,
+    soldGrams: soldByCategory.get(key) ?? 0,
+    remainingGrams: remainingByCategory.get(key) ?? 0,
+  }));
+
   // Unified excel-style ledger: purchases + sales in one table, chronological.
   const ledger: StatementLedgerRow[] = [];
   for (const p of purchases) {
@@ -856,7 +953,10 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     profitAed: profit,
   };
 
-  return { purchases, sales, levels, ledger, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit };
+  return {
+    purchases, sales, levels, ledger, liveBatches, totals, totalPurchaseAed,
+    totalSalesAed, cogs, profit, categoryBreakdown,
+  };
 }
 
 // /api/dashboard/statement-pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&category=<bucket|all>
@@ -868,7 +968,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     return;
   }
   const { startDate, endDate, category } = parsed;
-  const { purchases, ledger, levels, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+  const { purchases, ledger, totals, totalPurchaseAed, totalSalesAed, cogs, profit, categoryBreakdown } =
     await loadStatementData(startDate, endDate, category);
   const catLabel = STMT_CAT_LABEL;
 
@@ -1015,33 +1115,60 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
     y += 14;
   }
 
-  // ===== SECTION 3: PROFIT & REMAINING STOCK SUMMARY BOX =====
-  // Live remaining stock from stock_levels (category-filtered when active) —
-  // a live snapshot by design, not date-filtered.
-  const liveMetalG = levels
-    .filter((l) => !category || l.category === category)
-    .reduce((sum, l) => sum + Number(l.weight_grams), 0);
+  // ===== SECTION 3: CATEGORY-WISE VAULT BREAKDOWN =====
+  sectionHeader("3. Category-wise Vault Breakdown");
+  gridHeader([
+    ["Category Name", 220],
+    ["Metal Purchased / In (Debit g)", 180, true],
+    ["Metal Sold / Out (Credit g)", 180, true],
+    ["Net Remaining Vault Balance (g)", 182, true],
+  ]);
+  categoryBreakdown.forEach((row) => {
+    gridRow([
+      [row.label, 220],
+      [num3(row.purchasedGrams), 180, true],
+      [num3(row.soldGrams), 180, true],
+      [num3(row.remainingGrams), 182, true],
+    ]);
+  });
+  const categoryPurchasedTotal = categoryBreakdown.reduce((sum, row) => sum + row.purchasedGrams, 0);
+  const categorySoldTotal = categoryBreakdown.reduce((sum, row) => sum + row.soldGrams, 0);
+  const liveMetalG = categoryBreakdown.reduce((sum, row) => sum + row.remainingGrams, 0);
+  gridRow([
+    ["TOTAL PHYSICAL METAL", 220],
+    [num3(categoryPurchasedTotal), 180, true],
+    [num3(categorySoldTotal), 180, true],
+    [num3(liveMetalG), 182, true],
+  ], { bold: true, bg: "#eee6cf" });
+  activeTableHeader = null;
+  y += 6;
+  doc.fillColor("#666").font("Helvetica").fontSize(7)
+    .text("Purchased and sold columns follow the selected period. Remaining vault balance is the current live physical stock.", 40, y, { width: W });
+  y += 18;
+
+  // ===== SECTION 4: PROFIT & REMAINING STOCK SUMMARY BOX =====
   const summaryLines: [string, string, boolean][] = [
     ["Total Sold Weight:", `${num3(totals.soldGrams)} g`, false],
-    ["Total Sales Revenue:", `AED ${num2(totalSalesAed)}`, false],
+    ["Total Cash Outflow - Purchases Debit:", `AED ${num2(totalPurchaseAed)}`, false],
+    ["Total Cash Inflow - Sales Revenue Credit:", `AED ${num2(totalSalesAed)}`, false],
     ["Purchase Cost of Goods Sold (COGS):", `AED ${num2(cogs)}`, false],
-    ["TOTAL NET PROFIT EARNED:", `${profit >= 0 ? "+" : "-"}AED ${num2(Math.abs(profit))}`, true],
-    ["CURRENT REMAINING STOCK:", `${num3(liveMetalG)} g  (${(liveMetalG / 1000).toFixed(3)} kg)`, true],
+    ["OVERALL NET REALIZED PROFIT:", `${profit >= 0 ? "+" : "-"}AED ${num2(Math.abs(profit))}`, true],
+    ["TOTAL PHYSICAL METAL REMAINING:", `${num3(liveMetalG)} g  (${(liveMetalG / 1000).toFixed(3)} kg)`, true],
   ];
   const boxRowH = 22;
   const boxH = 34 + summaryLines.length * boxRowH + 10;
   ensureSpace(boxH + 20);
   doc.rect(40, y, W, boxH).fillAndStroke("#fdf9ee", GOLD);
   doc.rect(40, y, W, 26).fill(NAVY);
-  doc.fillColor(GOLD).font("Helvetica-Bold").fontSize(11).text("3. Profit & Remaining Stock Summary", 52, y + 8);
+  doc.fillColor(GOLD).font("Helvetica-Bold").fontSize(11).text("4. Financial Debit / Credit & Profit Summary", 52, y + 8);
   let ly = y + 34;
   summaryLines.forEach(([label, val, strong]) => {
     if (strong) {
-      doc.rect(46, ly - 3, W - 12, boxRowH - 2).fill(label.startsWith("TOTAL NET") ? (profit >= 0 ? "#e7f5ec" : "#fdecec") : "#eef2f7");
+      doc.rect(46, ly - 3, W - 12, boxRowH - 2).fill(label.startsWith("OVERALL NET") ? (profit >= 0 ? "#e7f5ec" : "#fdecec") : "#eef2f7");
     }
     doc.fillColor(strong ? NAVY : "#444").font(strong ? "Helvetica-Bold" : "Helvetica").fontSize(strong ? 11 : 10)
       .text(label, 56, ly, { width: W * 0.6, lineBreak: false });
-    doc.fillColor(strong && label.startsWith("TOTAL NET") ? (profit >= 0 ? "#1c7a3d" : "#b3261e") : NAVY)
+    doc.fillColor(strong && label.startsWith("OVERALL NET") ? (profit >= 0 ? "#1c7a3d" : "#b3261e") : NAVY)
       .font("Helvetica-Bold").fontSize(strong ? 12 : 10)
       .text(val, 40, ly, { width: W - 56, align: "right" });
     ly += boxRowH;
@@ -1062,7 +1189,7 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
     return;
   }
   const { startDate, endDate, category } = parsed;
-  const { levels, ledger, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit } =
+  const { ledger, liveBatches, totals, totalPurchaseAed, totalSalesAed, cogs, profit, categoryBreakdown } =
     await loadStatementData(startDate, endDate, category);
 
   const wb = new ExcelJS.Workbook();
@@ -1153,8 +1280,44 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
     row.getCell(11).numFmt = fmt;
   }
 
-  // ===== SECTION 3: REMAINING STOCK - LIVE =====
-  sectionTitle("SECTION 3: REMAINING STOCK - LIVE (Unsold Batches)");
+  // ===== SECTION 3: CATEGORY-WISE VAULT BREAKDOWN =====
+  sectionTitle("SECTION 3: CATEGORY-WISE VAULT BREAKDOWN");
+  styleHeader(ws.addRow([
+    "Category Name",
+    "Metal Purchased / In (Debit g)",
+    "Metal Sold / Out (Credit g)",
+    "Net Remaining Vault Balance (g)",
+  ]));
+  for (const breakdown of categoryBreakdown) {
+    const row = ws.addRow([
+      breakdown.label,
+      breakdown.purchasedGrams,
+      breakdown.soldGrams,
+      breakdown.remainingGrams,
+    ]);
+    row.eachCell((cell, col) => {
+      cell.border = allBorders;
+      if (col >= 2 && col <= 4) cell.numFmt = "#,##0.000";
+    });
+  }
+  const categoryPurchasedTotal = categoryBreakdown.reduce((sum, row) => sum + row.purchasedGrams, 0);
+  const categorySoldTotal = categoryBreakdown.reduce((sum, row) => sum + row.soldGrams, 0);
+  const categoryRemainingTotal = categoryBreakdown.reduce((sum, row) => sum + row.remainingGrams, 0);
+  const categoryTotalRow = ws.addRow([
+    "TOTAL PHYSICAL METAL",
+    categoryPurchasedTotal,
+    categorySoldTotal,
+    categoryRemainingTotal,
+  ]);
+  styleTotal(categoryTotalRow, "FFEEE6CF");
+  [2, 3, 4].forEach((col) => { categoryTotalRow.getCell(col).numFmt = "#,##0.000"; });
+  const categoryNote = ws.addRow([
+    "Purchased and sold columns follow the selected period. Remaining vault balance is the current live physical stock.",
+  ]);
+  categoryNote.getCell(1).font = { italic: true, size: 9, color: { argb: "FF64748B" } };
+
+  // ===== SECTION 4: REMAINING STOCK - LIVE =====
+  sectionTitle("SECTION 4: REMAINING STOCK - LIVE (Unsold Batches)");
   styleHeader(ws.addRow(["SL", "Category", "Batch ID", "Purchase Date", "Supplier", "Purchased Wt (g)", "Sold Wt (g)", "Remaining Wt (g)", "Rate (AED/g)", "Cost Value (AED)"]));
   for (const [i, b] of liveBatches.entries()) {
     const row = ws.addRow([
@@ -1174,34 +1337,59 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   s3.getCell(8).numFmt = "#,##0.000";
   s3.getCell(10).numFmt = "#,##0.00";
 
-  // Summary sheet
+  // Summary sheet: mirrors the PDF financial debit/credit summary and category
+  // vault table so both statement formats reconcile from the same projection.
   const sum = wb.addWorksheet("Summary");
-  sum.columns = [{ width: 28 }, { width: 20 }];
-  const sumRows: [string, number][] = [
-    ["Total Purchases (AED)", totalPurchaseAed],
-    ["Total Revenue Received (AED)", totalSalesAed],
-    ["Total Purchase Cost of Sold Goods - COGS (AED)", cogs],
-    ["Total Net Profit Earned (AED)", profit],
+  sum.columns = [{ width: 42 }, { width: 26 }, { width: 26 }, { width: 32 }];
+  const financialHeader = sum.addRow(["Financial Debit / Credit & Profit Summary", "Amount"]);
+  financialHeader.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+    cell.border = allBorders;
+  });
+  const sumRows: [string, number, string][] = [
+    ["Total Cash Outflow - Purchases Debit (AED)", totalPurchaseAed, "#,##0.00"],
+    ["Total Cash Inflow - Sales Revenue Credit (AED)", totalSalesAed, "#,##0.00"],
+    ["Purchase Cost of Goods Sold - COGS (AED)", cogs, "#,##0.00"],
+    ["Overall Net Realized Profit (AED)", profit, "#,##0.00"],
+    ["Total Physical Metal Remaining (g)", categoryRemainingTotal, "#,##0.000"],
   ];
-  for (const [label, val] of sumRows) {
+  for (const [label, val, fmt] of sumRows) {
     const row = sum.addRow([label, val]);
     row.getCell(1).font = { bold: true };
-    row.getCell(2).numFmt = "#,##0.00";
+    row.getCell(2).numFmt = fmt;
     row.eachCell((cell) => { cell.border = allBorders; });
   }
   sum.addRow([]);
-  const lvlHeader = sum.addRow(["Remaining Stock (Live)", "Grams"]);
+  const lvlHeader = sum.addRow([
+    "Category Name",
+    "Metal Purchased / In (Debit g)",
+    "Metal Sold / Out (Credit g)",
+    "Net Remaining Vault Balance (g)",
+  ]);
   lvlHeader.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
     cell.border = allBorders;
   });
-  const levelRows = category ? levels.filter((l) => l.category === category) : levels;
-  for (const l of levelRows) {
-    const row = sum.addRow([STMT_CAT_LABEL[l.category] ?? l.category, Number(l.weight_grams)]);
-    row.getCell(2).numFmt = "#,##0.000";
+  for (const breakdown of categoryBreakdown) {
+    const row = sum.addRow([
+      breakdown.label,
+      breakdown.purchasedGrams,
+      breakdown.soldGrams,
+      breakdown.remainingGrams,
+    ]);
+    [2, 3, 4].forEach((col) => { row.getCell(col).numFmt = "#,##0.000"; });
     row.eachCell((cell) => { cell.border = allBorders; });
   }
+  const summaryCategoryTotal = sum.addRow([
+    "TOTAL PHYSICAL METAL",
+    categoryPurchasedTotal,
+    categorySoldTotal,
+    categoryRemainingTotal,
+  ]);
+  styleTotal(summaryCategoryTotal, "FFEEE6CF");
+  [2, 3, 4].forEach((col) => { summaryCategoryTotal.getCell(col).numFmt = "#,##0.000"; });
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="hazari-gold-statement.xlsx"`);

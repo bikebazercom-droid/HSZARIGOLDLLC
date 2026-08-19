@@ -789,7 +789,7 @@ paths:
     get:
       operationId: getDashboardSummaryCards
       tags: [dashboard]
-      summary: All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+      summary: All-time physical stock, category vault movement, and debit/credit financial summary
       responses:
         "200":
           description: Live all-time summary card metrics
@@ -899,7 +899,7 @@ components:
 
     DashboardSummaryCards:
       type: object
-      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, soldCostAed, netProfitAed]
+      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, soldCostAed, netProfitAed, totalPhysicalRemainingGrams, totalPurchaseDebitAed, totalSalesCreditAed, categoryBreakdown]
       properties:
         availableStockGrams:
           type: number
@@ -922,6 +922,38 @@ components:
         netProfitAed:
           type: number
           description: totalRevenueAed - all-time COGS
+        totalPhysicalRemainingGrams:
+          type: number
+          description: Current live physical metal balance across every stock category
+        totalPurchaseDebitAed:
+          type: number
+          description: All-time purchase cash outflow (cash debit)
+        totalSalesCreditAed:
+          type: number
+          description: All-time invoiced sales revenue (cash credit)
+        categoryBreakdown:
+          type: array
+          description: All-time metal movement and live vault balance by stock category
+          items:
+            $ref: "#/components/schemas/DashboardCategoryStock"
+
+    DashboardCategoryStock:
+      type: object
+      required: [category, label, purchasedGrams, soldGrams, remainingGrams]
+      properties:
+        category:
+          type: string
+        label:
+          type: string
+        purchasedGrams:
+          type: number
+          description: All-time metal purchased/in for this category
+        soldGrams:
+          type: number
+          description: All-time metal sold/out for this category
+        remainingGrams:
+          type: number
+          description: Current live vault balance for this category
 
     SalesReportRow:
       type: object

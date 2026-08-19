@@ -299,18 +299,18 @@ async function testC_ConcurrentPatchSameBillProducesOneAuditEntry(): Promise<voi
 // ── Test C2: concurrent PATCHes with DISTINCT targets on same bill → 2 entries ─
 
 /**
- * Start a bill in "unfixed" status, then fire two concurrent PATCH requests
- * that target different statuses ("paid" and "unpaid").  The FOR UPDATE lock
+ * Start a fixed bill in "paid" status, then fire two concurrent PATCH requests
+ * that target different statuses ("unpaid" and "unfixed").  The FOR UPDATE lock
  * serialises the two at the DB:
  *
- *  Scenario A (paid wins first):
- *    1. Request-paid: reads "unfixed" → sets "paid"  → audit (unfixed→paid)
- *    2. Request-unpaid: reads "paid" → sets "unpaid" → audit (paid→unpaid)
+ *  Scenario A (unpaid wins first):
+ *    1. Request-unpaid: reads "paid" → sets "unpaid"    → audit (paid→unpaid)
+ *    2. Request-unfixed: reads "unpaid" → sets "unfixed" → audit (unpaid→unfixed)
  *    Result: 2 entries.
  *
- *  Scenario B (unpaid wins first):
- *    1. Request-unpaid: reads "unfixed" → sets "unpaid" → audit (unfixed→unpaid)
- *    2. Request-paid:   reads "unpaid"  → sets "paid"   → audit (unpaid→paid)
+ *  Scenario B (unfixed wins first):
+ *    1. Request-unfixed: reads "paid" → sets "unfixed" → audit (paid→unfixed)
+ *    2. Request-unpaid: reads "unfixed" → sets "unpaid" → audit (unfixed→unpaid)
  *    Result: 2 entries.
  *
  * Either execution order yields exactly TWO audit entries and both requests
@@ -321,7 +321,10 @@ async function testC_ConcurrentPatchSameBillProducesOneAuditEntry(): Promise<voi
 async function testC2_ConcurrentPatchesDistinctTargetsSameBillBothAuditEntriesLand(): Promise<void> {
   console.log("\nTest C2: Two concurrent PATCHes with DISTINCT target statuses on the same bill — both audit entries must be present");
 
-  // Create with "unfixed" so both competing transitions are genuine changes.
+  // Start at "paid" so both competing transitions are genuine and valid in
+  // either lock order. This deliberately avoids racing the special unfixed →
+  // paid settlement transition, which requires a fixing rate and is not
+  // commutative with an unfixed → unpaid transition.
   const billNo = `TEST-BILL-PSTATUS-AUDIT-C2-${Date.now()}`;
   const createRes = await apiReq("/purchase-bills", {
     method: "POST",
@@ -329,8 +332,8 @@ async function testC2_ConcurrentPatchesDistinctTargetsSameBillBothAuditEntriesLa
       billNo,
       billDate: new Date().toISOString().split("T")[0],
       supplierName: "TEST-BILL-PSTATUS-AUDIT-SUPPLIER",
-      purchaseType: "unfixed",
-      paymentStatus: "unfixed",
+      purchaseType: "fixed",
+      paymentStatus: "paid",
       notes: "Created by test-bill-payment-status-audit C2",
       items: [
         {
@@ -348,25 +351,25 @@ async function testC2_ConcurrentPatchesDistinctTargetsSameBillBothAuditEntriesLa
     throw new Error(`createTestBill(C2) failed (${createRes.status}): ${await createRes.text()}`);
   }
   const bill = (await createRes.json()) as { id: number; billNo: string };
-  console.log(`  Created bill id=${bill.id} (${bill.billNo}) with paymentStatus="unfixed"`);
+  console.log(`  Created bill id=${bill.id} (${bill.billNo}) with paymentStatus="paid"`);
 
   const before = await paymentStatusAuditEntriesForBill(bill.id);
   assert(before.length === 0, `No audit entries before the race (got ${before.length})`);
 
   // Fire both PATCHes concurrently, targeting distinct statuses.
   const [r1, r2] = await Promise.all([
-    patchPaymentStatus(bill.id, "paid").then(async (r) => {
+    patchPaymentStatus(bill.id, "unpaid").then(async (r) => {
       try { await r.text(); } catch { /* drain */ }
       return r.status;
     }),
-    patchPaymentStatus(bill.id, "unpaid").then(async (r) => {
+    patchPaymentStatus(bill.id, "unfixed").then(async (r) => {
       try { await r.text(); } catch { /* drain */ }
       return r.status;
     }),
   ]);
 
-  assert(r1 >= 200 && r1 < 300, `"paid" PATCH returned 2xx (got ${r1})`);
-  assert(r2 >= 200 && r2 < 300, `"unpaid" PATCH returned 2xx (got ${r2})`);
+  assert(r1 >= 200 && r1 < 300, `"unpaid" PATCH returned 2xx (got ${r1})`);
+  assert(r2 >= 200 && r2 < 300, `"unfixed" PATCH returned 2xx (got ${r2})`);
 
   // Brief pause to let both DB transactions fully commit.
   await new Promise<void>((resolve) => setTimeout(resolve, 200));

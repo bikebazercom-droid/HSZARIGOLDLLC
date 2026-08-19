@@ -1154,7 +1154,7 @@ export const GetDashboardKpisResponse = zod.object({
 
 
 /**
- * @summary All-time live totals for the two dashboard hero cards (available stock/cost, revenue/profit)
+ * @summary All-time physical stock, category vault movement, and debit/credit financial summary
  */
 export const GetDashboardSummaryCardsResponse = zod.object({
   "availableStockGrams": zod.number().describe('Non-silver purchased grams minus sold grams (live remaining main stock)'),
@@ -1163,7 +1163,17 @@ export const GetDashboardSummaryCardsResponse = zod.object({
   "silverStockCostAed": zod.number().describe('Silver purchase cost minus COGS of sold silver items'),
   "totalRevenueAed": zod.number().describe('Cumulative invoiced revenue (all-time)'),
   "soldCostAed": zod.number().describe('All-time exact FIFO purchase cost (COGS) of sold items'),
-  "netProfitAed": zod.number().describe('totalRevenueAed - all-time COGS')
+  "netProfitAed": zod.number().describe('totalRevenueAed - all-time COGS'),
+  "totalPhysicalRemainingGrams": zod.number().describe('Current live physical metal balance across every stock category'),
+  "totalPurchaseDebitAed": zod.number().describe('All-time purchase cash outflow (cash debit)'),
+  "totalSalesCreditAed": zod.number().describe('All-time invoiced sales revenue (cash credit)'),
+  "categoryBreakdown": zod.array(zod.object({
+  "category": zod.string(),
+  "label": zod.string(),
+  "purchasedGrams": zod.number().describe('All-time metal purchased\/in for this category'),
+  "soldGrams": zod.number().describe('All-time metal sold\/out for this category'),
+  "remainingGrams": zod.number().describe('Current live vault balance for this category')
+})).describe('All-time metal movement and live vault balance by stock category')
 })
 
 
