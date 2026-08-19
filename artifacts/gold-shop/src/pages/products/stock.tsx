@@ -22,7 +22,6 @@ import {
   decorateStatementPdf,
   GOLD,
   NAVY,
-  PdfSignatureBlock,
   STATEMENT_FINAL_FOOTER_SPACER,
   STATEMENT_FIRST_PAGE_SPACER,
   STATEMENT_PDF_MARGIN,
@@ -470,11 +469,6 @@ export function StockLedger() {
                   <td style={{ border: `2px solid ${NAVY}` }} />
                   <td style={{ padding: "9px 8px", border: `2px solid ${NAVY}`, fontWeight: "bold", color: NAVY, textAlign: "right", whiteSpace: "nowrap" }}>
                     AED {fmtAED(totals.aed)}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={6} style={{ padding: 0, border: 0 }}>
-                    <PdfSignatureBlock />
                   </td>
                 </tr>
                 <tr aria-hidden="true">

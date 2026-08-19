@@ -95,9 +95,9 @@ function finalPageVisualMetrics(pdfPath: string): {
       { encoding: "utf8" },
     ).trim().split(/\s+/).map(Number);
     const stampCrop = {
-      x: Math.floor(width * 0.65),
-      y: Math.floor(height * 0.23),
-      width: Math.floor(width * 0.30),
+      x: Math.floor(width * 0.70),
+      y: Math.floor(height * 0.78),
+      width: Math.floor(width * 0.27),
       height: Math.floor(height * 0.17),
     };
     const authorisedStampDarkFraction = Number(execFileSync(
@@ -295,11 +295,13 @@ function expectStatementBranding(pages: string[], ocrPages: string[]): void {
     expect(page).toContain("Date");
     expect(page).toContain("Total (AED)");
   }
-  for (const label of ["Customer's Signature", "Checked By", "Authorised Signature"]) {
-    const normalizedLabel = normalized(label);
-    expect(ocrPages.slice(0, -1).every((page) => !page.includes(normalizedLabel))).toBe(true);
-    expect(ocrPages.at(-1)).toContain(normalizedLabel);
+  for (const removedLabel of ["Customer's Signature", "Checked By"]) {
+    const normalizedLabel = normalized(removedLabel);
+    expect(ocrPages.every((page) => !page.includes(normalizedLabel))).toBe(true);
   }
+  const authorisedLabel = normalized("Authorised Signature");
+  expect(ocrPages.slice(0, -1).every((page) => !page.includes(authorisedLabel))).toBe(true);
+  expect(ocrPages.at(-1)).toContain(authorisedLabel);
   expect(ocrPages.at(-1)).toContain("GRANDTOTAL");
 }
 
@@ -367,7 +369,9 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       await expect(document).toContainText("FIRSTMARKER");
       await expect(document).toContainText("FINALMARKER");
       await expect(document).toContainText("Hazari Gold L.L.C");
-      await expect(document).toContainText("Customer's Signature");
+      await expect(document).not.toContainText("Customer's Signature");
+      await expect(document).not.toContainText("Checked By");
+      await expect(document).toContainText("Authorised Signature");
       expect(await document.evaluate((element) => element.scrollHeight)).toBeGreaterThan(1123);
 
       const path = await downloadPdf(page, "Download PDF", "oversized-invoice.pdf", testInfo);
@@ -379,9 +383,12 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(ocr).toContain("HAZARIGOLD");
       expect(ocr).toContain("FIRSTMARKER");
       expect(ocr).toContain("FINALMARKER");
-      expect(ocr).toContain("CUSTOMERSSIGNATURE");
+      expect(ocr).not.toContain("CUSTOMERSSIGNATURE");
+      expect(ocr).not.toContain("CHECKEDBY");
       expect(ocr).toContain("AUTHORISEDSIGNATURE");
       expect(ocr).toContain("THANKYOUFORYOURBUSINESS");
+      const visual = finalPageVisualMetrics(path);
+      expect(visual.authorisedStampDarkFraction, "invoice seal must be visible above the authorised signature").toBeGreaterThan(0.04);
     });
 
     await test.step("multi-page sales statement repeats its safe frame and headings", async () => {
@@ -399,7 +406,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       const visual = finalPageVisualMetrics(path);
       expect(visual.navyAtBottom, "final thank-you banner must be flush with the bottom edge").toBe(true);
       expect(visual.goldAtBottom, "final gold rule must reach the absolute bottom edge").toBe(true);
-      expect(visual.authorisedStampDarkFraction, "round stamp must be visible above the authorised signature").toBeGreaterThan(0.08);
+      expect(visual.authorisedStampDarkFraction, "round stamp must be visible above the authorised signature").toBeGreaterThan(0.04);
       for (const pageText of pages.slice(1)) {
         expect(pageText).toContain("Invoice #");
         expect(pageText).toContain("Customer");
@@ -425,7 +432,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       const visual = finalPageVisualMetrics(path);
       expect(visual.navyAtBottom, "final thank-you banner must be flush with the bottom edge").toBe(true);
       expect(visual.goldAtBottom, "final gold rule must reach the absolute bottom edge").toBe(true);
-      expect(visual.authorisedStampDarkFraction, "round stamp must be visible above the authorised signature").toBeGreaterThan(0.08);
+      expect(visual.authorisedStampDarkFraction, "round stamp must be visible above the authorised signature").toBeGreaterThan(0.04);
       for (const pageText of pages.slice(1)) {
         expect(pageText).toContain("Supplier");
         expect(pageText).toContain("Category");

@@ -21,8 +21,12 @@ const CONTINUATION_CONTENT_TOP = 40;
 const BANNER_HEIGHT = 30;
 const BANNER_GOLD_HEIGHT = 4;
 const SIGNATURE_BLOCK_HEIGHT = 88;
-const SIGNATURE_GAP = 12;
-const FINAL_CONTENT_RESERVE = BANNER_HEIGHT + SIGNATURE_BLOCK_HEIGHT + SIGNATURE_GAP;
+const CONTENT_TO_SIGNATURE_GAP = 12;
+const SIGNATURE_TO_BANNER_GAP = 36;
+const FINAL_CONTENT_RESERVE = BANNER_HEIGHT
+  + SIGNATURE_BLOCK_HEIGHT
+  + SIGNATURE_TO_BANNER_GAP
+  + CONTENT_TO_SIGNATURE_GAP;
 
 function resolveBrandAsset(filename: string): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -159,23 +163,20 @@ function drawPageBanner(doc: PDFKit.PDFDocument, pageNumber: number, totalPages:
   }
 }
 
-function drawFinalSignatures(doc: PDFKit.PDFDocument, topY: number): void {
+function drawFinalAuthorisedSignature(doc: PDFKit.PDFDocument, topY: number): void {
   const lineY = topY + 68;
-  const availableWidth = doc.page.width - SIDE_MARGIN * 2;
-  const gap = 34;
-  const blockWidth = (availableWidth - gap * 2) / 3;
-  const labels = ["Customer's Signature", "Checked By", "Authorised Signature"];
+  const blockWidth = 180;
+  const x = doc.page.width - SIDE_MARGIN - blockWidth;
+  const originalBottomMargin = doc.page.margins.bottom;
 
+  doc.page.margins.bottom = 0;
   doc.save();
-  labels.forEach((label, index) => {
-    const x = SIDE_MARGIN + index * (blockWidth + gap);
-    if (index === 2) {
-      doc.image(STAMP_PATH, x + blockWidth / 2 - 43, topY, {
-        fit: [86, 68],
-        align: "center",
-        valign: "bottom",
-      });
-    }
+  try {
+    doc.image(STAMP_PATH, x + blockWidth / 2 - 43, topY, {
+      fit: [86, 68],
+      align: "center",
+      valign: "bottom",
+    });
     doc.strokeColor("#4b5563").lineWidth(0.7)
       .moveTo(x, lineY)
       .lineTo(x + blockWidth, lineY)
@@ -183,13 +184,15 @@ function drawFinalSignatures(doc: PDFKit.PDFDocument, topY: number): void {
     doc.fillColor(PDF_BRAND.navy)
       .font("Helvetica-Bold")
       .fontSize(8.5)
-      .text(label, x, lineY + 6, {
+      .text("Authorised Signature", x, lineY + 6, {
         width: blockWidth,
         align: "center",
         lineBreak: false,
       });
-  });
-  doc.restore();
+  } finally {
+    doc.restore();
+    doc.page.margins.bottom = originalBottomMargin;
+  }
 }
 
 export function createBrandedPdf(options: BrandedPdfOptions): BrandedPdfLayout {
@@ -242,13 +245,13 @@ export function createBrandedPdf(options: BrandedPdfOptions): BrandedPdfLayout {
     },
     finish: (currentY) => {
       const bannerY = doc.page.height - BANNER_HEIGHT;
-      const signatureTop = currentY + SIGNATURE_GAP;
-      if (signatureTop + SIGNATURE_BLOCK_HEIGHT > bannerY) {
+      const signatureTop = bannerY - SIGNATURE_TO_BANNER_GAP - SIGNATURE_BLOCK_HEIGHT;
+      if (currentY + CONTENT_TO_SIGNATURE_GAP > signatureTop) {
         throw new Error(
           `PDF final content exceeded the reserved signature area (${currentY.toFixed(1)} > ${contentBottom.toFixed(1)})`,
         );
       }
-      drawFinalSignatures(doc, signatureTop);
+      drawFinalAuthorisedSignature(doc, signatureTop);
 
       const range = doc.bufferedPageRange();
       const finalPageIndex = range.start + range.count - 1;

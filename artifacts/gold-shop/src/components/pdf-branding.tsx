@@ -19,7 +19,8 @@ export const NAVY = "#1e3a5f";
 export const GOLD = "#c8a43a";
 export const STATEMENT_PDF_MARGIN = [17, 10, 10, 10] as const;
 export const STATEMENT_FIRST_PAGE_SPACER = "39mm";
-export const STATEMENT_FINAL_FOOTER_SPACER = "12mm";
+export const STATEMENT_FINAL_FOOTER_SPACER = "50mm";
+const AUTHORISED_SIGNATURE_BANNER_GAP_MM = 18;
 
 export function PdfCompanyDetails() {
   return (
@@ -60,30 +61,24 @@ export function PdfCompanyDetails() {
 
 export function PdfSignatureBlock() {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "88px 10mm 10px" }}>
-        <div style={{ width: "160px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY }}>
-          Customer's Signature
-        </div>
-        <div style={{ width: "160px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY }}>
-          Checked By
-        </div>
-        <div style={{ width: "160px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY, position: "relative" }}>
-          <img 
-            src={OFFICIAL_IDENTITY.stampUrl}
-            alt="Stamp"
-            style={{
-              position: "absolute",
-              bottom: "10px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: "110px",
-              height: "auto",
-              opacity: 0.9,
-              pointerEvents: "none",
-            }}
-          />
-          Authorised Signature
-        </div>
+    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end", minHeight: "32mm", padding: "0 10mm" }}>
+      <div style={{ width: "180px", textAlign: "center", borderTop: "1px solid #333", paddingTop: "4px", fontSize: "11px", fontWeight: "bold", color: NAVY, position: "relative" }}>
+        <img
+          src={OFFICIAL_IDENTITY.stampUrl}
+          alt="Official Hazari Gold seal"
+          style={{
+            position: "absolute",
+            bottom: "10px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "110px",
+            height: "auto",
+            opacity: 0.9,
+            pointerEvents: "none",
+          }}
+        />
+        Authorised Signature
+      </div>
     </div>
   );
 }
@@ -96,6 +91,7 @@ export function PdfFooter({ absolute = false }: { absolute?: boolean }) {
   return (
     <div style={containerStyle}>
       <PdfSignatureBlock />
+      <div aria-hidden="true" style={{ height: `${AUTHORISED_SIGNATURE_BANNER_GAP_MM}mm` }} />
       <div style={{ background: NAVY, color: "white", textAlign: "center", padding: "8px", fontWeight: "bold", fontSize: "12px", letterSpacing: "0.5px" }}>
         Thank you for your business!
       </div>
@@ -120,7 +116,10 @@ export async function decorateStatementPdf(
     img.src = src;
   });
 
-  const logoImg = await loadImg(OFFICIAL_IDENTITY.logoUrl);
+  const [logoImg, stampImg] = await Promise.all([
+    loadImg(OFFICIAL_IDENTITY.logoUrl),
+    loadImg(OFFICIAL_IDENTITY.stampUrl),
+  ]);
 
   const totalPages = pdf.internal.getNumberOfPages();
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -205,9 +204,33 @@ export async function decorateStatementPdf(
     }
 
     if (i === totalPages) {
-      // Signatures and the closing banner are exclusive to the final page.
+      // The authorised signature and closing banner are exclusive to the final page.
+      const signatureWidth = 50;
+      const signatureX = pageWidth - 10 - signatureWidth;
+      const signatureCenterX = signatureX + signatureWidth / 2;
+      const bannerY = pageHeight - 12;
+      const signatureLineY = bannerY - AUTHORISED_SIGNATURE_BANNER_GAP_MM;
+      const stampWidth = 28;
+      const stampHeight = stampWidth * (stampImg.height / stampImg.width);
+
+      pdf.addImage(
+        stampImg,
+        "PNG",
+        signatureCenterX - stampWidth / 2,
+        signatureLineY - stampHeight,
+        stampWidth,
+        stampHeight,
+      );
+      pdf.setDrawColor(75, 85, 99);
+      pdf.setLineWidth(0.25);
+      pdf.line(signatureX, signatureLineY, signatureX + signatureWidth, signatureLineY);
+      pdf.setTextColor(30, 58, 95);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.text("Authorised Signature", signatureCenterX, signatureLineY + 4, { align: "center" });
+
       pdf.setFillColor(30, 58, 95);
-      pdf.rect(0, pageHeight - 12, pageWidth, 11, "F");
+      pdf.rect(0, bannerY, pageWidth, 11, "F");
       pdf.setTextColor(255, 255, 255);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);

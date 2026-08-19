@@ -75,7 +75,7 @@ function darkPixelFraction(
 
 async function renderRepresentativePdf(
   layout: "portrait" | "landscape",
-): Promise<{ bytes: Buffer; finalContentY: number }> {
+): Promise<Buffer> {
   const pdf = createBrandedPdf({
     title: `${layout} regression report`,
     layout,
@@ -102,11 +102,11 @@ async function renderRepresentativePdf(
     y += 18;
   }
   pdf.finish(y);
-  return { bytes: await completed, finalContentY: y };
+  return completed;
 }
 
 async function inspectPdf(layout: "portrait" | "landscape"): Promise<void> {
-  const { bytes, finalContentY } = await renderRepresentativePdf(layout);
+  const bytes = await renderRepresentativePdf(layout);
   assert(bytes.subarray(0, 4).toString("utf8") === "%PDF", `${layout} output is a PDF download`);
 
   const dir = await mkdtemp(join(tmpdir(), "hazari-pdf-branding-"));
@@ -157,14 +157,17 @@ async function inspectPdf(layout: "portrait" | "landscape"): Promise<void> {
       );
     }
 
-    const signatureLabels = ["Customer's Signature", "Checked By", "Authorised Signature"];
-    for (const label of signatureLabels) {
+    for (const removedLabel of ["Customer's Signature", "Checked By"]) {
       assert(
-        pages.slice(0, -1).every((page) => !page.includes(label)),
-        `${layout} continuation pages do not contain "${label}"`,
+        pages.every((page) => !page.includes(removedLabel)),
+        `${layout} output removes "${removedLabel}"`,
       );
-      assert(pages.at(-1)?.includes(label) ?? false, `${layout} final page contains "${label}"`);
     }
+    assert(
+      pages.slice(0, -1).every((page) => !page.includes("Authorised Signature")),
+      `${layout} continuation pages do not contain the authorised signature`,
+    );
+    assert(pages.at(-1)?.includes("Authorised Signature") ?? false, `${layout} final page contains the authorised signature`);
     assert(pages.at(-1)?.includes(`${layout} continuation row 52`) ?? false, `${layout} final row is not cropped`);
 
     const finalPageImage = join(dir, `${layout}-final.png`);
@@ -191,14 +194,15 @@ async function inspectPdf(layout: "portrait" | "landscape"): Promise<void> {
     const pageHeightPt = pageHeight;
     const scaleX = image.width / pageWidthPt;
     const scaleY = image.height / pageHeightPt;
-    const signatureGap = 12;
-    const availableWidth = pageWidthPt - 80;
-    const signatureBlockGap = 34;
-    const signatureBlockWidth = (availableWidth - signatureBlockGap * 2) / 3;
-    const authorisedX = 40 + 2 * (signatureBlockWidth + signatureBlockGap);
+    const signatureToBannerGap = 36;
+    const signatureBlockHeight = 88;
+    const bannerHeight = 30;
+    const signatureTop = pageHeightPt - bannerHeight - signatureToBannerGap - signatureBlockHeight;
+    const authorisedBlockWidth = 180;
+    const authorisedX = pageWidthPt - 40 - authorisedBlockWidth;
     const stampCrop = {
-      x: Math.floor((authorisedX + signatureBlockWidth / 2 - 43) * scaleX),
-      y: Math.floor((finalContentY + signatureGap) * scaleY),
+      x: Math.floor((authorisedX + authorisedBlockWidth / 2 - 43) * scaleX),
+      y: Math.floor(signatureTop * scaleY),
       width: Math.ceil(86 * scaleX),
       height: Math.ceil(68 * scaleY),
     };
