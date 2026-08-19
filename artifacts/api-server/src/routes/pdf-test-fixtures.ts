@@ -1,0 +1,204 @@
+import { Router, type IRouter, type Request } from "express";
+import { and, eq, ne } from "drizzle-orm";
+import { db, pdfTestFixturesTable, pdfTestRunsTable, usersTable } from "@workspace/db";
+import { requireAdmin } from "../middlewares/auth";
+
+const router: IRouter = Router();
+
+class RecoveryConflictError extends Error {
+  constructor() {
+    super("PDF test run is not abandoned");
+  }
+}
+const TEST_USERNAME_PREFIX = "__pdf_e2e_ephemeral__";
+export const PDF_TEST_RUN_HEADER = "x-pdf-e2e-run-id";
+
+function runIdFromRequest(req: Request): string | null {
+  const value = req.headers[PDF_TEST_RUN_HEADER];
+  return typeof value === "string" && /^[a-f0-9]{32}$/.test(value) ? value : null;
+}
+
+async function isEphemeralPdfAdmin(userId: number | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const [user] = await db.select({
+    username: usersTable.username,
+    role: usersTable.role,
+    isActive: usersTable.isActive,
+  }).from(usersTable).where(eq(usersTable.id, userId));
+  return Boolean(user?.isActive && user.role === "admin" && user.username.startsWith(TEST_USERNAME_PREFIX));
+}
+
+export async function authorizePdfTestRun(req: Request): Promise<{
+  requested: boolean;
+  runId: string | null;
+}> {
+  const requested = req.headers[PDF_TEST_RUN_HEADER] != null;
+  const runId = runIdFromRequest(req);
+  if (!requested || !runId) return { requested, runId: null };
+  const [run] = await db.select({ runId: pdfTestRunsTable.runId })
+    .from(pdfTestRunsTable)
+    .where(and(
+      eq(pdfTestRunsTable.runId, runId),
+      eq(pdfTestRunsTable.ownerUserId, req.session.userId!),
+      eq(pdfTestRunsTable.status, "active"),
+    ));
+  return {
+    requested,
+    runId: run && await isEphemeralPdfAdmin(req.session.userId) ? runId : null,
+  };
+}
+
+export async function registerPdfTestFixture(
+  tx: typeof db,
+  runId: string | null,
+  entityType: "invoice" | "stock_purchase",
+  entityId: number,
+): Promise<void> {
+  if (!runId) return;
+  await tx.insert(pdfTestFixturesTable).values({ runId, entityType, entityId })
+    .onConflictDoNothing();
+}
+
+/**
+ * Removes registry rows for a record that is being deleted, inside the same
+ * transaction. The registry must only ever list records that still exist so
+ * end-of-run verification can distinguish cleaned runs from interrupted ones.
+ */
+export async function unregisterPdfTestFixture(
+  tx: typeof db,
+  entityType: "invoice" | "stock_purchase",
+  entityId: number,
+): Promise<void> {
+  await tx.delete(pdfTestFixturesTable).where(and(
+    eq(pdfTestFixturesTable.entityType, entityType),
+    eq(pdfTestFixturesTable.entityId, entityId),
+  ));
+}
+
+router.get("/test-fixtures/pdf/abandoned", requireAdmin, async (req, res): Promise<void> => {
+  const currentRunId = runIdFromRequest(req);
+  if (!currentRunId || !(await isEphemeralPdfAdmin(req.session.userId))) {
+    res.sendStatus(403);
+    return;
+  }
+  const [currentRun] = await db.select({ runId: pdfTestRunsTable.runId })
+    .from(pdfTestRunsTable)
+    .where(and(
+      eq(pdfTestRunsTable.runId, currentRunId),
+      eq(pdfTestRunsTable.ownerUserId, req.session.userId!),
+      eq(pdfTestRunsTable.status, "active"),
+    ));
+  if (!currentRun) {
+    res.sendStatus(403);
+    return;
+  }
+
+  const [fixtures, runs] = await Promise.all([
+    db.select({
+      runId: pdfTestFixturesTable.runId,
+      entityType: pdfTestFixturesTable.entityType,
+      entityId: pdfTestFixturesTable.entityId,
+    }).from(pdfTestFixturesTable)
+      .innerJoin(pdfTestRunsTable, eq(pdfTestFixturesTable.runId, pdfTestRunsTable.runId))
+      .where(and(
+        ne(pdfTestFixturesTable.runId, currentRunId),
+        eq(pdfTestRunsTable.status, "abandoned"),
+      )),
+    db.select({ runId: pdfTestRunsTable.runId }).from(pdfTestRunsTable)
+      .where(and(
+        ne(pdfTestRunsTable.runId, currentRunId),
+        eq(pdfTestRunsTable.status, "abandoned"),
+      )),
+  ]);
+  res.json({ fixtures, runIds: runs.map((run) => run.runId) });
+});
+
+router.post("/test-fixtures/pdf/complete", requireAdmin, async (req, res): Promise<void> => {
+  const runId = runIdFromRequest(req);
+  if (!runId || !(await isEphemeralPdfAdmin(req.session.userId))) {
+    res.sendStatus(403);
+    return;
+  }
+  // Keep the row (status "completed") so a crashed runner's ephemeral admin
+  // stays findable by the ownerUserId recorded here.
+  await db.update(pdfTestRunsTable)
+    .set({ status: "completed" })
+    .where(and(
+      eq(pdfTestRunsTable.runId, runId),
+      eq(pdfTestRunsTable.ownerUserId, req.session.userId!),
+      eq(pdfTestRunsTable.status, "active"),
+    ));
+  res.sendStatus(204);
+});
+
+router.post("/test-fixtures/pdf/abandon", requireAdmin, async (req, res): Promise<void> => {
+  const runId = runIdFromRequest(req);
+  if (!runId || !(await isEphemeralPdfAdmin(req.session.userId))) {
+    res.sendStatus(403);
+    return;
+  }
+  const [abandoned] = await db.update(pdfTestRunsTable)
+    .set({ status: "abandoned" })
+    .where(and(
+      eq(pdfTestRunsTable.runId, runId),
+      eq(pdfTestRunsTable.ownerUserId, req.session.userId!),
+      eq(pdfTestRunsTable.status, "active"),
+    ))
+    .returning({ runId: pdfTestRunsTable.runId });
+  if (!abandoned) {
+    res.sendStatus(404);
+    return;
+  }
+  res.sendStatus(204);
+});
+
+router.post("/test-fixtures/pdf/recovery-complete", requireAdmin, async (req, res): Promise<void> => {
+  const currentRunId = runIdFromRequest(req);
+  const runIds: string[] = Array.isArray(req.body?.runIds)
+    ? req.body.runIds.filter((value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{32}$/.test(value))
+    : [];
+  if (!currentRunId || runIds.length === 0 || !(await isEphemeralPdfAdmin(req.session.userId))) {
+    res.status(400).json({ error: "A registered PDF test run and recovery run IDs are required" });
+    return;
+  }
+  const [currentRun] = await db.select({ runId: pdfTestRunsTable.runId })
+    .from(pdfTestRunsTable)
+    .where(and(
+      eq(pdfTestRunsTable.runId, currentRunId),
+      eq(pdfTestRunsTable.ownerUserId, req.session.userId!),
+      eq(pdfTestRunsTable.status, "active"),
+    ));
+  if (!currentRun || runIds.includes(currentRunId)) {
+    res.sendStatus(403);
+    return;
+  }
+  try {
+    await db.transaction(async (tx) => {
+      for (const staleRunId of new Set(runIds)) {
+        // Lock the run row and refuse to touch anything not explicitly
+        // abandoned — an active concurrent run's registry must never be erased.
+        const [run] = await tx.select({ status: pdfTestRunsTable.status })
+          .from(pdfTestRunsTable)
+          .where(eq(pdfTestRunsTable.runId, staleRunId))
+          .for("update");
+        if (run && run.status !== "abandoned") {
+          throw new RecoveryConflictError();
+        }
+        await tx.delete(pdfTestFixturesTable).where(eq(pdfTestFixturesTable.runId, staleRunId));
+        await tx.delete(pdfTestRunsTable).where(and(
+          eq(pdfTestRunsTable.runId, staleRunId),
+          eq(pdfTestRunsTable.status, "abandoned"),
+        ));
+      }
+    });
+  } catch (error) {
+    if (error instanceof RecoveryConflictError) {
+      res.status(409).json({ error: "Refusing to recover a PDF test run that is not marked abandoned" });
+      return;
+    }
+    throw error;
+  }
+  res.sendStatus(204);
+});
+
+export default router;

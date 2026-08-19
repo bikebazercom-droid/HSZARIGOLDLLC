@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
 import { db, stockPurchasesTable, stockLevelsTable, stockMovementsTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
+import { authorizePdfTestRun, registerPdfTestFixture, unregisterPdfTestFixture } from "./pdf-test-fixtures";
 import {
   CreateStockPurchaseBody,
   CreateStockPurchaseResponse,
@@ -98,6 +99,11 @@ router.post("/stock/purchases", async (req, res): Promise<void> => {
     return;
   }
   const { category, supplierName, purchaseDate, weightGrams, totalPriceAed, narrative } = parsed.data;
+  const pdfTestRun = await authorizePdfTestRun(req);
+  if (pdfTestRun.requested && !pdfTestRun.runId) {
+    res.status(403).json({ error: "PDF test fixture ownership was rejected" });
+    return;
+  }
   const pricePerGram = weightGrams > 0 ? totalPriceAed / weightGrams : 0;
 
   const purchase = await db.transaction(async (tx) => {
@@ -116,6 +122,12 @@ router.post("/stock/purchases", async (req, res): Promise<void> => {
       })
       .returning();
     await applyStockDelta(tx as unknown as typeof db, category, weightGrams, "purchase", "stock_purchase", row.id);
+    await registerPdfTestFixture(
+      tx as unknown as typeof db,
+      pdfTestRun.runId,
+      "stock_purchase",
+      row.id,
+    );
     return row;
   });
 
@@ -146,6 +158,8 @@ router.delete("/stock/purchases/:id", async (req, res): Promise<void> => {
       return null;
     }
     await tx.delete(stockPurchasesTable).where(eq(stockPurchasesTable.id, id));
+    // The PDF test registry must only list records that still exist.
+    await unregisterPdfTestFixture(tx as unknown as typeof db, "stock_purchase", id);
     await applyStockDelta(
       tx as unknown as typeof db,
       row.category,

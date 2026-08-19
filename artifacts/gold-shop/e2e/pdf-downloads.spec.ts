@@ -6,8 +6,10 @@ import { expect, test, type APIResponse, type Page, type TestInfo } from "@playw
 const FIXTURE_PREFIX = "PDFE2E";
 const testAdminMobile = process.env.TEST_ADMIN_MOBILE;
 const testAdminPin = process.env.TEST_ADMIN_PIN;
-if (!testAdminMobile || !testAdminPin) {
-  throw new Error("PDF browser tests require an ephemeral TEST_ADMIN_MOBILE and TEST_ADMIN_PIN");
+const runId = process.env.PDF_E2E_RUN_ID;
+const recoveryProbeRunId = process.env.PDF_E2E_RECOVERY_PROBE_RUN_ID;
+if (!testAdminMobile || !testAdminPin || !runId || !recoveryProbeRunId) {
+  throw new Error("PDF browser tests require ephemeral admin credentials and registered PDF run IDs");
 }
 const TEST_ADMIN = {
   mobile: testAdminMobile,
@@ -67,6 +69,10 @@ async function login(page: Page): Promise<void> {
   await expectSuccessful(response, "log in with the configured PDF test admin");
 }
 
+function fixtureHeaders(runIdForFixture: string): Record<string, string> {
+  return { "X-Pdf-E2e-Run-Id": runIdForFixture };
+}
+
 async function removeOwnedFixtures(
   page: Page,
   invoiceIds: number[],
@@ -96,6 +102,7 @@ async function createInvoice(
   page: Page,
   customerName: string,
   itemCount: number,
+  runIdForFixture: string | null = runId,
 ): Promise<{ id: number; invoiceNumber: string }> {
   const items = Array.from({ length: itemCount }, (_, index) => ({
     description: index === 0
@@ -110,6 +117,7 @@ async function createInvoice(
     totalPrice: 1,
   }));
   const response = await page.request.post("/api/invoices", {
+    ...(runIdForFixture ? { headers: fixtureHeaders(runIdForFixture) } : {}),
     data: {
       customerName,
       paymentMethod: "cash",
@@ -130,8 +138,14 @@ async function createInvoice(
   return response.json() as Promise<{ id: number; invoiceNumber: string }>;
 }
 
-async function createPurchase(page: Page, supplierName: string, index: number): Promise<number> {
+async function createPurchase(
+  page: Page,
+  supplierName: string,
+  index: number,
+  runIdForFixture: string | null = runId,
+): Promise<number> {
   const response = await page.request.post("/api/stock/purchases", {
+    ...(runIdForFixture ? { headers: fixtureHeaders(runIdForFixture) } : {}),
     data: {
       category: "silver",
       supplierName,
@@ -143,6 +157,35 @@ async function createPurchase(page: Page, supplierName: string, index: number): 
   });
   await expectSuccessful(response, `create supplier row ${index + 1}`);
   return ((await response.json()) as CreatedRecord).id;
+}
+
+async function recoverAbandonedFixtures(page: Page): Promise<{ invoices: number; purchases: number; runIds: string[] }> {
+  const listed = await page.request.get("/api/test-fixtures/pdf/abandoned", {
+    headers: fixtureHeaders(runId),
+  });
+  await expectSuccessful(listed, "list abandoned PDF fixtures");
+  const { fixtures, runIds } = await listed.json() as {
+    fixtures: { runId: string; entityType: "invoice" | "stock_purchase"; entityId: number }[];
+    runIds: string[];
+  };
+  const invoices = fixtures.filter((fixture) => fixture.entityType === "invoice");
+  const purchases = fixtures.filter((fixture) => fixture.entityType === "stock_purchase");
+  await removeOwnedFixtures(page, invoices.map((fixture) => fixture.entityId), purchases.map((fixture) => fixture.entityId));
+  if (runIds.length > 0) {
+    const completed = await page.request.post("/api/test-fixtures/pdf/recovery-complete", {
+      headers: fixtureHeaders(runId),
+      data: { runIds },
+    });
+    await expectSuccessful(completed, "complete abandoned PDF fixture recovery");
+  }
+  return { invoices: invoices.length, purchases: purchases.length, runIds };
+}
+
+async function abandonRun(page: Page, runIdToAbandon: string): Promise<void> {
+  const abandoned = await page.request.post("/api/test-fixtures/pdf/abandon", {
+    headers: fixtureHeaders(runIdToAbandon),
+  });
+  await expectSuccessful(abandoned, "mark recovery probe as interrupted");
 }
 
 async function downloadPdf(
@@ -194,6 +237,42 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
   await login(page);
 
   try {
+    await test.step("a prior interrupted PDF run is recovered by registered IDs only", async () => {
+      const decoyInvoice = await createInvoice(page, `${FIXTURE_PREFIX} UNREGISTERED DECOY`, 1, null);
+      const decoyPurchase = await createPurchase(page, `${FIXTURE_PREFIX} UNREGISTERED DECOY`, 0, null);
+      invoiceIds.push(decoyInvoice.id);
+      purchaseIds.push(decoyPurchase);
+
+      await createInvoice(page, `${FIXTURE_PREFIX} RECOVERY PROBE`, 1, recoveryProbeRunId);
+      await createPurchase(page, `${FIXTURE_PREFIX} RECOVERY PROBE`, 0, recoveryProbeRunId);
+
+      const whileActive = await page.request.get("/api/test-fixtures/pdf/abandoned", {
+        headers: fixtureHeaders(runId),
+      });
+      await expectSuccessful(whileActive, "list abandoned PDF fixtures while the probe is active");
+      const activeListing = await whileActive.json() as { runIds: string[] };
+      expect(activeListing.runIds).not.toContain(recoveryProbeRunId);
+
+      const prematureRecovery = await page.request.post("/api/test-fixtures/pdf/recovery-complete", {
+        headers: fixtureHeaders(runId),
+        data: { runIds: [recoveryProbeRunId] },
+      });
+      expect(prematureRecovery.status(), "recovery must refuse a run that is still active").toBe(409);
+
+      await abandonRun(page, recoveryProbeRunId);
+      const recovered = await recoverAbandonedFixtures(page);
+      expect(recovered.invoices).toBeGreaterThanOrEqual(1);
+      expect(recovered.purchases).toBeGreaterThanOrEqual(1);
+      expect(recovered.runIds).toContain(recoveryProbeRunId);
+
+      const decoyInvoiceDelete = await page.request.delete(`/api/invoices/${decoyInvoice.id}`, {
+        headers: { "X-Allow-Invoice-Delete": "true" },
+      });
+      expect(decoyInvoiceDelete.status(), "unregistered invoice with the same prefix must survive recovery").toBe(204);
+      const decoyPurchaseDelete = await page.request.delete(`/api/stock/purchases/${decoyPurchase}`);
+      expect(decoyPurchaseDelete.status(), "unregistered purchase with the same prefix must survive recovery").toBe(204);
+    });
+
     const oversized = await createInvoice(page, oversizedCustomer, 24);
     invoiceIds.push(oversized.id);
     for (let index = 0; index < 10; index += 1) {
@@ -271,5 +350,9 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
     expect(pageErrors, `uncaught browser errors: ${pageErrors.join("\n")}`).toEqual([]);
   } finally {
     await removeOwnedFixtures(page, invoiceIds, purchaseIds);
+    const completed = await page.request.post("/api/test-fixtures/pdf/complete", {
+      headers: fixtureHeaders(runId),
+    });
+    await expectSuccessful(completed, "complete current PDF fixture run");
   }
 });

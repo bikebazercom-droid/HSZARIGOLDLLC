@@ -10,6 +10,7 @@ import invoicesRouter from "./invoices";
 import stockRouter from "./stock";
 import purchaseBillsRouter from "./purchase-bills";
 import settingsRouter from "./settings";
+import pdfTestFixturesRouter from "./pdf-test-fixtures";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -29,5 +30,6 @@ router.use(invoicesRouter);
 router.use(stockRouter);
 router.use(purchaseBillsRouter);
 router.use(settingsRouter);
+router.use(pdfTestFixturesRouter);
 
 export default router;

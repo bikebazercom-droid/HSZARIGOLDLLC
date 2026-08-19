@@ -5,6 +5,7 @@ import { requireAdmin } from "../middlewares/auth";
 import { broadcast } from "../lib/socket.js";
 import { applyStockDelta } from "./stock";
 import { consumeFifo, reverseInvoiceConsumption } from "../services/inventoryEngine";
+import { authorizePdfTestRun, registerPdfTestFixture, unregisterPdfTestFixture } from "./pdf-test-fixtures";
 import {
   ListInvoicesQueryParams,
   CreateInvoiceBody,
@@ -243,6 +244,11 @@ router.post("/invoices", async (req, res): Promise<void> => {
   }
 
   const { items, createdAt, ...invoiceData } = parsed.data;
+  const pdfTestRun = await authorizePdfTestRun(req);
+  if (pdfTestRun.requested && !pdfTestRun.runId) {
+    res.status(403).json({ error: "PDF test fixture ownership was rejected" });
+    return;
+  }
 
   let invoiceCreatedAt: Date | undefined;
   if (createdAt) {
@@ -376,6 +382,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
         : { backdated: false }),
     }),
   });
+  await registerPdfTestFixture(
+    tx as unknown as typeof db,
+    pdfTestRun.runId,
+    "invoice",
+    invoice.id,
+  );
 
   return { invoice, savedItems, hadDeductions: deductions.size > 0 };
   });
@@ -542,6 +554,8 @@ router.delete("/invoices/:id", requireAdmin, async (req, res): Promise<void> => 
     await reverseInvoiceConsumption(tx as unknown as typeof db, invoiceId);
     const [row] = await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId)).returning();
     if (!row) return null;
+    // The PDF test registry must only list records that still exist.
+    await unregisterPdfTestFixture(tx as unknown as typeof db, "invoice", invoiceId);
     // Write an immutable audit log entry so the deletion is traceable after the fact.
     await tx.insert(auditLogTable).values({
       actorId: req.session?.userId ?? null,

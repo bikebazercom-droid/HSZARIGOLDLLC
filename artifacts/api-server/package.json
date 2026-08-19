@@ -14,7 +14,7 @@
     "test:bill-delete-role-guard": "tsx scripts/test-bill-delete-role-guard.ts",
     "test:invoice-create-audit": "tsx scripts/test-invoice-create-audit.ts",
     "test:pdf-branding": "tsx scripts/test-pdf-branding.ts",
-    "test:pdf-browser-downloads": "flock --exclusive --wait 300 /tmp/gold-shop-pdf-e2e.lock tsx scripts/run-pdf-browser-test.ts",
+    "test:pdf-browser-downloads": "flock --exclusive --wait 300 /tmp/gold-shop-pdf-e2e.lock sh -c 'tsx scripts/test-pdf-fixture-recovery.ts && tsx scripts/run-pdf-browser-test.ts'",
     "test:category-statement-reconciliation": "flock --exclusive --wait 300 /tmp/gold-shop-category-statement-reconciliation.lock tsx scripts/test-category-statement-reconciliation.ts",
     "test:bill-delete-audit": "tsx scripts/test-bill-delete-audit.ts",
     "test:bill-payment-status-audit": "tsx scripts/test-bill-payment-status-audit.ts",
