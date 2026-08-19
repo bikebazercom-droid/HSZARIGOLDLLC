@@ -74,16 +74,17 @@ export function PdfInvoiceSignatureBlock() {
           alt="Official Hazari Gold seal"
           style={{
             position: "absolute",
-            bottom: "10px",
+            bottom: "30px",
             left: "50%",
             transform: "translateX(-50%)",
             width: "110px",
             height: "auto",
             opacity: 0.9,
             pointerEvents: "none",
+            zIndex: 0,
           }}
         />
-        Authorised Signature
+        <span style={{ position: "relative", zIndex: 1 }}>Authorised Signature</span>
       </div>
     </div>
   );
