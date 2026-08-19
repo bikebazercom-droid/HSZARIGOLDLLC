@@ -11,3 +11,4 @@
 - [Gold-shop TV board fully removed](gold-shop-tv-removed.md) — TV board and entire ExternalSync system permanently deleted; no /tv route, no sync service, no sync DB columns, no sync settings tab.
 - [Gold-shop audit validation overlap](gold-shop-audit-validation-overlap.md) — completion validation can run the standalone invoice audit beside the aggregate suite, causing fixture-number collisions.
 - [FIFO statement test isolation](fifo-statement-test-isolation.md) — statement reconciliation tests on shared data must remove stale tags, reserve an empty earliest period, and baseline live stock.
+- [Shared-DB browser test safety](shared-db-browser-test-safety.md) — destructive browser regressions need dev-target gating, serialization, ephemeral credentials, and owned-ID cleanup.

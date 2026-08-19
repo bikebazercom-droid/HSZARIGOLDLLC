@@ -24,6 +24,14 @@ args = "test:invoice-delete-audit"
 task = "workflow.run"
 args = "audit-guards"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "pdf-branding"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "pdf-browser-downloads"
+
 [[workflows.workflow]]
 name = "test:invoice-delete-audit"
 author = "agent"
@@ -46,6 +54,28 @@ args = "pnpm --filter @workspace/api-server run test:all-audit-guards"
 [workflows.workflow.metadata]
 isValidation = true
 
+[[workflows.workflow]]
+name = "pdf-branding"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run test:pdf-branding"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "pdf-browser-downloads"
+author = "agent"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run test:pdf-browser-downloads"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -56,6 +86,7 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+packages = ["chromium", "tesseract", "poppler"]
 
 [[ports]]
 localPort = 8080
