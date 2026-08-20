@@ -173,6 +173,126 @@ function assertClose(actual: number, expected: number, label: string, tolerance 
   assert(Math.abs(actual - expected) < tolerance, label, `expected ~${expected}, got ${actual}`);
 }
 
+type GateClient = Awaited<ReturnType<typeof pool.connect>>;
+type StockMutationRaceWinner = "create" | "return";
+
+async function waitForStockMutationWaiters(
+  gateClient: GateClient,
+  expectedCount: number,
+  label: string,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await gateClient.query<{ waiter_count: number }>(`
+      SELECT COUNT(*)::int AS waiter_count
+      FROM pg_locks AS waiting
+      JOIN pg_locks AS held
+        ON waiting.locktype = held.locktype
+       AND waiting.database IS NOT DISTINCT FROM held.database
+       AND waiting.classid IS NOT DISTINCT FROM held.classid
+       AND waiting.objid IS NOT DISTINCT FROM held.objid
+       AND waiting.objsubid IS NOT DISTINCT FROM held.objsubid
+      WHERE held.pid = pg_backend_pid()
+        AND held.locktype = 'advisory'
+        AND held.granted
+        AND waiting.pid <> held.pid
+        AND NOT waiting.granted
+    `);
+    if (Number(result.rows[0]?.waiter_count ?? 0) >= expectedCount) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    `${label}: timed out waiting for ${expectedCount} stock-mutation lock waiter(s)`,
+  );
+}
+
+async function awaitRaceResponses(
+  requests: [Promise<Response>, Promise<Response>],
+  label: string,
+): Promise<[Response, Response]> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.all(requests),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `${label}: requests did not finish within 10 seconds (possible deadlock)`,
+              ),
+            ),
+          10_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function runCreateReturnLockRace(args: {
+  winner: StockMutationRaceWinner;
+  label: string;
+  createRequest: (signal: AbortSignal) => Promise<Response>;
+  returnRequest: (signal: AbortSignal) => Promise<Response>;
+}): Promise<[createResponse: Response, returnResponse: Response]> {
+  const gateClient = await pool.connect();
+  const createController = new AbortController();
+  const returnController = new AbortController();
+  let createRequest: Promise<Response> | undefined;
+  let returnRequest: Promise<Response> | undefined;
+  let transactionOpen = false;
+
+  try {
+    await gateClient.query("BEGIN");
+    transactionOpen = true;
+    await gateClient.query(
+      "SELECT pg_advisory_xact_lock(hashtext('stock_mutation'))",
+    );
+
+    const queueRequest = (kind: StockMutationRaceWinner) => {
+      if (kind === "create") {
+        createRequest = args.createRequest(createController.signal);
+      } else {
+        returnRequest = args.returnRequest(returnController.signal);
+      }
+    };
+
+    queueRequest(args.winner);
+    await waitForStockMutationWaiters(
+      gateClient,
+      1,
+      `${args.label} ${args.winner} request`,
+    );
+
+    const loser: StockMutationRaceWinner =
+      args.winner === "create" ? "return" : "create";
+    queueRequest(loser);
+    await waitForStockMutationWaiters(
+      gateClient,
+      2,
+      `${args.label} ${loser} request`,
+    );
+
+    await gateClient.query("COMMIT");
+    transactionOpen = false;
+    return await awaitRaceResponses(
+      [createRequest!, returnRequest!],
+      args.label,
+    );
+  } catch (error) {
+    createController.abort();
+    returnController.abort();
+    if (transactionOpen) {
+      await gateClient.query("ROLLBACK").catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    gateClient.release();
+  }
+}
+
 // ── Stock setup ───────────────────────────────────────────────────────────────
 
 async function createStockPurchase(
@@ -1787,130 +1907,302 @@ async function run(): Promise<void> {
   assertClose(crossingLedger.reduce((sum, row) => sum + Number(row.aedDelta), 0), 0, "Crossing-return AED ledger reconciles to zero", 0.01);
   assertClose(crossingLedger.reduce((sum, row) => sum + Number(row.pureGoldGramsDelta), 0), 0, "Crossing-return pure ledger reconciles to zero", 0.0001);
 
-  console.log("\n─── Test: Concurrent wholesale create versus return lock order ───");
-  const [stockBeforeLockRace] = await db.select().from(stockLevelsTable)
-    .where(eq(stockLevelsTable.category, CATEGORY));
-  const lockRaceSource = await apiJson<{
-    id: number; items: Array<{ id: number }>;
-  }>("/wholesale/invoices", {
-    method: "POST",
-    body: JSON.stringify({
-      traderId: trader.id,
-      invoiceDate: "2025-12-01",
-      pricingType: "fixed",
-      idempotencyKey: `ws-lock-race-source-${Date.now()}`,
-      items: [{
-        description: "Create return lock source",
-        category: CATEGORY,
-        quantity: 1,
-        grossGrams: 10,
-        purityMultiplier: 1,
-        makingAed: 100,
-        rateAedPerGram: 400,
-      }],
-    }),
-  });
-  toClean.invoiceIds.push(lockRaceSource.id);
-  const [stockBeforeConcurrentMutation] = await db.select().from(stockLevelsTable)
-    .where(eq(stockLevelsTable.category, CATEGORY));
-
-  const concurrentResults = await Promise.allSettled([
-    apiJson<{
-      id: number; items: Array<{ id: number }>;
+  console.log(
+    "\n─── Test: Concurrent wholesale create versus return lock order ───",
+  );
+  for (const winner of ["create", "return"] as const) {
+    const label = `Create-versus-return (${winner} acquires the stock lock first)`;
+    const [stockBeforeSource] = await db
+      .select()
+      .from(stockLevelsTable)
+      .where(eq(stockLevelsTable.category, CATEGORY));
+    const [batchBeforeSource] = await db
+      .select()
+      .from(stockPurchasesTable)
+      .where(eq(stockPurchasesTable.id, stockPurchaseId));
+    const runSuffix = `${winner}-${Date.now()}`;
+    const lockRaceSource = await apiJson<{
+      id: number;
+      items: Array<{ id: number }>;
     }>("/wholesale/invoices", {
       method: "POST",
       body: JSON.stringify({
         traderId: trader.id,
-        invoiceDate: "2025-12-02",
+        invoiceDate: "2025-12-01",
         pricingType: "fixed",
-        idempotencyKey: `ws-lock-race-create-${Date.now()}`,
-        items: [{
-          description: "Concurrent wholesale create",
-          category: CATEGORY,
-          quantity: 1,
-          grossGrams: 3,
-          purityMultiplier: 1,
-          makingAed: 30,
-          rateAedPerGram: 400,
-        }],
+        idempotencyKey: `ws-lock-race-source-${runSuffix}`,
+        items: [
+          {
+            description: `Create return lock source (${winner} first)`,
+            category: CATEGORY,
+            quantity: 1,
+            grossGrams: 10,
+            purityMultiplier: 1,
+            makingAed: 100,
+            rateAedPerGram: 400,
+          },
+        ],
       }),
-    }),
-    apiJson<{ id: number }>(`/wholesale/invoices/${lockRaceSource.id}/return`, {
-      method: "POST",
-      body: JSON.stringify({
-        date: "2025-12-02",
-        idempotencyKey: `ws-lock-race-return-${Date.now()}`,
-        lines: [{ invoiceItemId: lockRaceSource.items[0]!.id, grossWeightGrams: 2 }],
-      }),
-    }),
-  ]);
-  const concurrentCreate = concurrentResults[0];
-  const concurrentReturn = concurrentResults[1];
-  assert(
-    concurrentCreate.status === "fulfilled",
-    `Concurrent wholesale create completes without deadlock${concurrentCreate.status === "rejected" ? `: ${String(concurrentCreate.reason)}` : ""}`,
-  );
-  assert(
-    concurrentReturn.status === "fulfilled",
-    `Concurrent wholesale return completes without deadlock${concurrentReturn.status === "rejected" ? `: ${String(concurrentReturn.reason)}` : ""}`,
-  );
-  if (concurrentCreate.status === "fulfilled") {
-    toClean.invoiceIds.push(concurrentCreate.value.id);
-  }
-  if (concurrentReturn.status === "fulfilled") {
-    toClean.returnIds.push(concurrentReturn.value.id);
-  }
-
-  if (concurrentCreate.status === "fulfilled" && concurrentReturn.status === "fulfilled") {
-    const [stockAfterConcurrentMutation] = await db.select().from(stockLevelsTable)
+    });
+    toClean.invoiceIds.push(lockRaceSource.id);
+    const [stockBeforeConcurrentMutation] = await db
+      .select()
+      .from(stockLevelsTable)
       .where(eq(stockLevelsTable.category, CATEGORY));
+    const [batchBeforeConcurrentMutation] = await db
+      .select()
+      .from(stockPurchasesTable)
+      .where(eq(stockPurchasesTable.id, stockPurchaseId));
+
+    const [createResponse, returnResponse] = await runCreateReturnLockRace({
+      winner,
+      label,
+      createRequest: (signal) =>
+        apiReq("/wholesale/invoices", {
+          method: "POST",
+          signal,
+          body: JSON.stringify({
+            traderId: trader.id,
+            invoiceDate: "2025-12-02",
+            pricingType: "fixed",
+            idempotencyKey: `ws-lock-race-create-${runSuffix}`,
+            items: [
+              {
+                description: `Concurrent wholesale create (${winner} first)`,
+                category: CATEGORY,
+                quantity: 1,
+                grossGrams: 3,
+                purityMultiplier: 1,
+                makingAed: 30,
+                rateAedPerGram: 400,
+              },
+            ],
+          }),
+        }),
+      returnRequest: (signal) =>
+        apiReq(`/wholesale/invoices/${lockRaceSource.id}/return`, {
+          method: "POST",
+          signal,
+          body: JSON.stringify({
+            date: "2025-12-02",
+            idempotencyKey: `ws-lock-race-return-${runSuffix}`,
+            lines: [
+              {
+                invoiceItemId: lockRaceSource.items[0]!.id,
+                grossWeightGrams: 2,
+              },
+            ],
+          }),
+        }),
+    });
+    assert(
+      true,
+      `${label}: both queued requests finish within the deadlock timeout`,
+    );
+    assertEq(createResponse.status, 201, `${label}: wholesale create succeeds`);
+    assertEq(returnResponse.status, 200, `${label}: physical return succeeds`);
+    if (createResponse.status !== 201 || returnResponse.status !== 200) {
+      throw new Error(
+        `${label}: expected create=201 and return=200, got ` +
+          `create=${createResponse.status} (${await createResponse.text()}), ` +
+          `return=${returnResponse.status} (${await returnResponse.text()})`,
+      );
+    }
+
+    const concurrentCreate = (await createResponse.json()) as {
+      id: number;
+      items: Array<{ id: number }>;
+    };
+    const concurrentReturn = (await returnResponse.json()) as { id: number };
+    toClean.invoiceIds.push(concurrentCreate.id);
+    toClean.returnIds.push(concurrentReturn.id);
+
+    const [
+      stockAfterConcurrentMutation,
+      batchAfterConcurrentMutation,
+      raceSourceConsumptions,
+      raceCreateConsumptions,
+      raceReturnRows,
+    ] = await Promise.all([
+      db
+        .select()
+        .from(stockLevelsTable)
+        .where(eq(stockLevelsTable.category, CATEGORY)),
+      db
+        .select()
+        .from(stockPurchasesTable)
+        .where(eq(stockPurchasesTable.id, stockPurchaseId)),
+      db
+        .select()
+        .from(wholesaleInventoryConsumptionsTable)
+        .where(
+          eq(
+            wholesaleInventoryConsumptionsTable.wholesaleInvoiceId,
+            lockRaceSource.id,
+          ),
+        ),
+      db
+        .select()
+        .from(wholesaleInventoryConsumptionsTable)
+        .where(
+          eq(
+            wholesaleInventoryConsumptionsTable.wholesaleInvoiceId,
+            concurrentCreate.id,
+          ),
+        ),
+      db
+        .select()
+        .from(wholesaleReturnsTable)
+        .where(eq(wholesaleReturnsTable.id, concurrentReturn.id)),
+    ]);
     assertClose(
-      Number(stockAfterConcurrentMutation?.weightGrams ?? "0"),
+      Number(stockAfterConcurrentMutation[0]?.weightGrams ?? "0"),
       Number(stockBeforeConcurrentMutation?.weightGrams ?? "0") - 1,
-      "Concurrent create (-3g) and return (+2g) reconcile stock atomically",
+      `${label}: stock exactly reflects -3g create plus +2g return`,
       0.0001,
     );
-    const raceSourceConsumptions = await db.select().from(wholesaleInventoryConsumptionsTable)
-      .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, lockRaceSource.id));
-    const raceCreateConsumptions = await db.select().from(wholesaleInventoryConsumptionsTable)
-      .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, concurrentCreate.value.id));
     assertClose(
-      raceSourceConsumptions.reduce((sum, row) => sum + Number(row.returnedGrams), 0),
+      Number(batchAfterConcurrentMutation[0]?.remainingWeightGrams ?? "0"),
+      Number(batchBeforeConcurrentMutation?.remainingWeightGrams ?? "0") - 1,
+      `${label}: FIFO batch exactly reflects the net 1g consumption`,
+      0.0001,
+    );
+    assertClose(
+      raceSourceConsumptions.reduce(
+        (sum, row) => sum + Number(row.consumedGrams),
+        0,
+      ),
+      10,
+      `${label}: return source retains its exact 10g FIFO consumption`,
+      0.0001,
+    );
+    assertClose(
+      raceSourceConsumptions.reduce(
+        (sum, row) => sum + Number(row.returnedGrams),
+        0,
+      ),
       2,
-      "Concurrent return restores its exact FIFO grams",
+      `${label}: return source records its exact 2g FIFO restoration`,
       0.0001,
     );
     assertClose(
-      raceCreateConsumptions.reduce((sum, row) => sum + Number(row.consumedGrams), 0),
+      raceCreateConsumptions.reduce(
+        (sum, row) => sum + Number(row.consumedGrams),
+        0,
+      ),
       3,
-      "Concurrent create records its exact FIFO consumption",
+      `${label}: concurrent create records its exact 3g FIFO consumption`,
+      0.0001,
+    );
+    assertClose(
+      raceCreateConsumptions.reduce(
+        (sum, row) => sum + Number(row.returnedGrams),
+        0,
+      ),
+      0,
+      `${label}: new invoice has no premature FIFO return`,
+      0.0001,
+    );
+    assertClose(
+      Number(raceReturnRows[0]?.totalReturnedGrossGrams ?? "0"),
+      2,
+      `${label}: physical return header records exactly 2g`,
       0.0001,
     );
 
-    const finalSourceReturn = await apiJson<{ id: number }>(`/wholesale/invoices/${lockRaceSource.id}/return`, {
-      method: "POST",
-      body: JSON.stringify({
-        date: "2025-12-03",
-        idempotencyKey: `ws-lock-race-source-final-${Date.now()}`,
-        lines: [{ invoiceItemId: lockRaceSource.items[0]!.id, grossWeightGrams: 8 }],
-      }),
-    });
+    const finalSourceReturn = await apiJson<{ id: number }>(
+      `/wholesale/invoices/${lockRaceSource.id}/return`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          date: "2025-12-03",
+          idempotencyKey: `ws-lock-race-source-final-${runSuffix}`,
+          lines: [
+            { invoiceItemId: lockRaceSource.items[0]!.id, grossWeightGrams: 8 },
+          ],
+        }),
+      },
+    );
     toClean.returnIds.push(finalSourceReturn.id);
-    const finalCreatedReturn = await apiJson<{ id: number }>(`/wholesale/invoices/${concurrentCreate.value.id}/return`, {
-      method: "POST",
-      body: JSON.stringify({
-        date: "2025-12-03",
-        idempotencyKey: `ws-lock-race-create-final-${Date.now()}`,
-        lines: [{ invoiceItemId: concurrentCreate.value.items[0]!.id, grossWeightGrams: 3 }],
-      }),
-    });
+    const finalCreatedReturn = await apiJson<{ id: number }>(
+      `/wholesale/invoices/${concurrentCreate.id}/return`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          date: "2025-12-03",
+          idempotencyKey: `ws-lock-race-create-final-${runSuffix}`,
+          lines: [
+            {
+              invoiceItemId: concurrentCreate.items[0]!.id,
+              grossWeightGrams: 3,
+            },
+          ],
+        }),
+      },
+    );
     toClean.returnIds.push(finalCreatedReturn.id);
-    const [stockAfterLockRaceCleanup] = await db.select().from(stockLevelsTable)
-      .where(eq(stockLevelsTable.category, CATEGORY));
+
+    const [
+      stockAfterLockRaceCleanup,
+      batchAfterLockRaceCleanup,
+      sourceConsumptionsAfterCleanup,
+      createConsumptionsAfterCleanup,
+    ] = await Promise.all([
+      db
+        .select()
+        .from(stockLevelsTable)
+        .where(eq(stockLevelsTable.category, CATEGORY)),
+      db
+        .select()
+        .from(stockPurchasesTable)
+        .where(eq(stockPurchasesTable.id, stockPurchaseId)),
+      db
+        .select()
+        .from(wholesaleInventoryConsumptionsTable)
+        .where(
+          eq(
+            wholesaleInventoryConsumptionsTable.wholesaleInvoiceId,
+            lockRaceSource.id,
+          ),
+        ),
+      db
+        .select()
+        .from(wholesaleInventoryConsumptionsTable)
+        .where(
+          eq(
+            wholesaleInventoryConsumptionsTable.wholesaleInvoiceId,
+            concurrentCreate.id,
+          ),
+        ),
+    ]);
     assertClose(
-      Number(stockAfterLockRaceCleanup?.weightGrams ?? "0"),
-      Number(stockBeforeLockRace?.weightGrams ?? "0"),
-      "Full returns after concurrent create/return restore stock baseline",
+      Number(stockAfterLockRaceCleanup[0]?.weightGrams ?? "0"),
+      Number(stockBeforeSource?.weightGrams ?? "0"),
+      `${label}: full returns restore the exact stock baseline`,
+      0.0001,
+    );
+    assertClose(
+      Number(batchAfterLockRaceCleanup[0]?.remainingWeightGrams ?? "0"),
+      Number(batchBeforeSource?.remainingWeightGrams ?? "0"),
+      `${label}: full returns restore the exact FIFO baseline`,
+      0.0001,
+    );
+    assertClose(
+      sourceConsumptionsAfterCleanup.reduce(
+        (sum, row) => sum + Number(row.returnedGrams),
+        0,
+      ),
+      10,
+      `${label}: source FIFO consumption is fully returned`,
+      0.0001,
+    );
+    assertClose(
+      createConsumptionsAfterCleanup.reduce(
+        (sum, row) => sum + Number(row.returnedGrams),
+        0,
+      ),
+      3,
+      `${label}: created FIFO consumption is fully returned`,
       0.0001,
     );
   }
