@@ -18,7 +18,14 @@ export const PDF_TEST_RUN_HEADER = "x-pdf-e2e-run-id";
 // the 32-hex browser-run IDs, and they are owned by the logged-in admin.
 const SUITE_RUN_ID_PATTERN = /^suite:[a-z0-9-]+:[a-f0-9]{32}$/;
 
-export type TestFixtureEntityType = "invoice" | "stock_purchase" | "purchase_bill" | "user";
+export type TestFixtureEntityType =
+  | "invoice"
+  | "stock_purchase"
+  | "purchase_bill"
+  | "user"
+  | "wholesale_trader"
+  | "wholesale_invoice"
+  | "wholesale_return";
 
 function runIdFromRequest(req: Request): string | null {
   const value = req.headers[PDF_TEST_RUN_HEADER];

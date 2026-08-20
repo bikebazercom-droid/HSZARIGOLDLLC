@@ -12,7 +12,7 @@
 - [FIFO statement test isolation](fifo-statement-test-isolation.md) — statement reconciliation tests on shared data must remove stale tags, reserve an empty earliest period, and baseline live stock.
 - [PDF e2e run registry](pdf-e2e-run-registry.md) — browser PDF fixtures owned via run-ID registry; recover only exact registered IDs, delete stale admins only by recorded owner ID, never prefix-wide.
 - [Shared-DB browser test safety](shared-db-browser-test-safety.md) — destructive browser regressions need dev-target gating, serialization, ephemeral credentials, and owned-ID cleanup.
-- [Suite run registry](suite-run-registry.md) — every destructive HTTP test suite registers created records by exact ID in the shared registry (`suite:` runs) and recovers abandoned runs at startup; never prefix-wide deletes.
+- [Suite run registry](suite-run-registry.md) — destructive suites register exact IDs atomically; recovery is namespaced/run-aware, and registered stock batches are FIFO-private to their owner.
 - [Purchase-bill location QR](purchase-bill-location-qr.md) — the invoice-style purchase-bill PDF bundles a static official-location QR; regenerate it when the business location changes.
 - [Browser PDF Arabic rendering](browser-pdf-arabic-rendering.md) — jsPDF shapes logical Amiri Arabic itself; `setR2L` double-reverses it, and extracted text may use presentation forms.
 - [Lossless PDFKit statement cells](pdfkit-statement-cells.md) — archival table text must use measured wrapping, bounded input, and page-fit guards; never ellipsis.

@@ -84,6 +84,7 @@ let suiteRunId = "";
 
 /** Deletes a single registered fixture via the script's own HTTP session. */
 async function deleteRegisteredFixture(entityType: SuiteEntityType, entityId: number): Promise<"deleted" | "missing" | "kept"> {
+  if (entityType.startsWith("wholesale_")) return "kept";
   const target =
     entityType === "invoice" ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } } :
     entityType === "stock_purchase" ? { path: `/stock/purchases/${entityId}`, headers: {} } :

@@ -19,8 +19,10 @@
  */
 
 import { pool, db } from "@workspace/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import {
+  pdfTestFixturesTable,
+  pdfTestRunsTable,
   wholesaleTradersTable,
   wholesaleInvoicesTable,
   wholesaleInvoiceItemsTable,
@@ -36,9 +38,18 @@ import {
   auditLogTable,
 } from "@workspace/db";
 import {
+  ensureRegistryProvisioned,
+  finalizeSuiteRun,
+  recoverAbandonedSuiteRuns,
+  startSuiteRun,
+  unregisterSuiteFixture,
+  type SuiteEntityType,
+} from "./suite-run-registry.js";
+import {
   applyPhysicalReturn,
   createWholesaleInvoice,
 } from "../src/services/wholesaleService.js";
+import { acquireStockMutationLock } from "../src/services/inventoryEngine.js";
 import ExcelJS from "exceljs";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -63,6 +74,8 @@ const WHOLESALE_CATEGORIES = [
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let _cookie = "";
+let adminUserId = 0;
+let suiteRunId = "";
 let passCount = 0;
 let failCount = 0;
 
@@ -78,7 +91,7 @@ const toClean: {
   invoiceIds: [],
   returnIds: [],
   stockPurchaseIds: [],
-  categories: [...WHOLESALE_CATEGORIES],
+  categories: [CATEGORY, ...WHOLESALE_CATEGORIES],
 };
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
@@ -86,6 +99,7 @@ const toClean: {
 async function apiReq(path: string, init: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(suiteRunId ? { "X-Pdf-E2e-Run-Id": suiteRunId } : {}),
     ...(init.headers as Record<string, string> | undefined),
   };
   if (_cookie) headers["Cookie"] = _cookie;
@@ -134,6 +148,8 @@ async function login(): Promise<void> {
   if (!res.ok) throw new Error(`Login failed (${res.status}): ${await res.text()}`);
   const setCookie = res.headers.get("set-cookie");
   if (setCookie) _cookie = setCookie.split(";")[0]!;
+  const user = await res.json() as { id: number };
+  adminUserId = user.id;
   console.log("  ✓ Logged in as admin");
 }
 
@@ -159,100 +175,488 @@ function assertClose(actual: number, expected: number, label: string, tolerance 
 
 // ── Stock setup ───────────────────────────────────────────────────────────────
 
-async function createStockPurchase(weightGrams: number, pricePerGram: number): Promise<number> {
+async function createStockPurchase(
+  weightGrams: number,
+  pricePerGram: number,
+  category = CATEGORY,
+  runId = suiteRunId,
+  trackForMainCleanup = true,
+  purchaseDate = "2025-01-01",
+): Promise<number> {
   const body = {
-    category: CATEGORY,
+    category,
     supplierName: "TEST-WHOLESALE-SUPPLIER",
-    purchaseDate: "2025-01-01",
+    purchaseDate,
     weightGrams,
     totalPriceAed: weightGrams * pricePerGram,
     narrative: "Wholesale regression test batch",
   };
-  const res = await apiJson<{ id: number }>("/stock/purchases", { method: "POST", body: JSON.stringify(body) });
-  toClean.stockPurchaseIds.push(res.id);
+  const res = await apiJson<{ id: number }>("/stock/purchases", {
+    method: "POST",
+    headers: runId ? { "X-Pdf-E2e-Run-Id": runId } : {},
+    body: JSON.stringify(body),
+  });
+  if (trackForMainCleanup) toClean.stockPurchaseIds.push(res.id);
   return res.id;
 }
 
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 
-async function cleanup(): Promise<void> {
-  console.log("\n─── Cleaning up fixtures ───");
-  // Remove only exact movement and audit rows owned by this run.
-  if (toClean.invoiceIds.length > 0) {
-    await db.delete(stockMovementsTable).where(and(
-      eq(stockMovementsTable.refType, "wholesale_invoice"),
-      inArray(stockMovementsTable.refId, toClean.invoiceIds),
-    ));
-    await db.delete(auditLogTable).where(and(
-      eq(auditLogTable.entityType, "wholesale_invoice"),
-      inArray(auditLogTable.entityId, toClean.invoiceIds),
-    ));
+type DeleteOutcome = "deleted" | "missing" | "kept";
+
+async function deleteWholesaleInvoiceFixture(invoiceId: number, runId: string): Promise<DeleteOutcome> {
+  try {
+    return await db.transaction(async (tx) => {
+      await acquireStockMutationLock(tx as unknown as typeof db);
+      const [invoice] = await tx.select({ id: wholesaleInvoicesTable.id })
+        .from(wholesaleInvoicesTable)
+        .where(eq(wholesaleInvoicesTable.id, invoiceId))
+        .for("update");
+      if (!invoice) return "missing";
+      const [ownedInvoice] = await tx.select({ id: pdfTestFixturesTable.id })
+        .from(pdfTestFixturesTable)
+        .where(and(
+          eq(pdfTestFixturesTable.runId, runId),
+          eq(pdfTestFixturesTable.entityType, "wholesale_invoice"),
+          eq(pdfTestFixturesTable.entityId, invoiceId),
+        ));
+      if (!ownedInvoice) return "kept";
+
+      const consumptions = await tx.select({
+        purchaseId: wholesaleInventoryConsumptionsTable.purchaseId,
+        consumedGrams: wholesaleInventoryConsumptionsTable.consumedGrams,
+        returnedGrams: wholesaleInventoryConsumptionsTable.returnedGrams,
+        isShortfall: wholesaleInventoryConsumptionsTable.isShortfall,
+        category: wholesaleInventoryConsumptionsTable.category,
+      })
+        .from(wholesaleInventoryConsumptionsTable)
+        .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, invoiceId));
+      const returns = await tx.select({ id: wholesaleReturnsTable.id })
+        .from(wholesaleReturnsTable)
+        .where(eq(wholesaleReturnsTable.invoiceId, invoiceId));
+      const returnIds = returns.map((row) => row.id);
+      if (returnIds.length > 0) {
+        const registeredReturns = await tx.select({ entityId: pdfTestFixturesTable.entityId })
+          .from(pdfTestFixturesTable)
+          .where(and(
+            eq(pdfTestFixturesTable.runId, runId),
+            eq(pdfTestFixturesTable.entityType, "wholesale_return"),
+            inArray(pdfTestFixturesTable.entityId, returnIds),
+          ));
+        const registeredReturnIds = new Set(registeredReturns.map((row) => row.entityId));
+        if (returnIds.some((returnId) => !registeredReturnIds.has(returnId))) {
+          return "kept";
+        }
+      }
+
+      const movements = await tx.select({
+        category: stockMovementsTable.category,
+        weightGrams: stockMovementsTable.weightGrams,
+      })
+        .from(stockMovementsTable)
+        .where(or(
+          and(
+            eq(stockMovementsTable.refType, "wholesale_invoice"),
+            eq(stockMovementsTable.refId, invoiceId),
+          ),
+          ...(returnIds.length > 0
+            ? [and(
+                eq(stockMovementsTable.refType, "wholesale_return"),
+                inArray(stockMovementsTable.refId, returnIds),
+              )]
+            : []),
+        ));
+
+      for (const consumption of consumptions) {
+        const netConsumed = Number(consumption.consumedGrams) - Number(consumption.returnedGrams);
+        if (consumption.purchaseId != null && netConsumed > 0.0001) {
+          const restored = await tx.execute<{ id: number }>(sql`
+            UPDATE stock_purchases
+            SET remaining_weight_grams = remaining_weight_grams::numeric + ${String(netConsumed)}::numeric
+            WHERE id = ${consumption.purchaseId}
+              AND remaining_weight_grams::numeric + ${String(netConsumed)}::numeric
+                  <= weight_grams::numeric + 0.0001
+            RETURNING id
+          `);
+          if (restored.rows.length !== 1) {
+            throw new Error(`Could not restore FIFO batch ${consumption.purchaseId} for wholesale invoice ${invoiceId}`);
+          }
+        } else if (consumption.purchaseId == null && !consumption.isShortfall && netConsumed > 0.0001) {
+          throw new Error(`Wholesale invoice ${invoiceId} has a missing non-shortfall FIFO source batch`);
+        }
+      }
+
+      const stockDeltas = new Map<string, number>();
+      for (const movement of movements) {
+        stockDeltas.set(
+          movement.category,
+          (stockDeltas.get(movement.category) ?? 0) + Number(movement.weightGrams),
+        );
+      }
+      for (const [category, fixtureDelta] of stockDeltas) {
+        const reversed = await tx.update(stockLevelsTable)
+          .set({
+            weightGrams: sql`${stockLevelsTable.weightGrams} - ${String(fixtureDelta)}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(stockLevelsTable.category, category))
+          .returning({ id: stockLevelsTable.id });
+        if (reversed.length !== 1) {
+          throw new Error(`Stock level ${category} is missing while recovering wholesale invoice ${invoiceId}`);
+        }
+      }
+
+      await tx.delete(stockMovementsTable).where(and(
+        eq(stockMovementsTable.refType, "wholesale_invoice"),
+        eq(stockMovementsTable.refId, invoiceId),
+      ));
+      await tx.delete(auditLogTable).where(and(
+        eq(auditLogTable.entityType, "wholesale_invoice"),
+        eq(auditLogTable.entityId, invoiceId),
+      ));
+      if (returnIds.length > 0) {
+        await tx.delete(stockMovementsTable).where(and(
+          eq(stockMovementsTable.refType, "wholesale_return"),
+          inArray(stockMovementsTable.refId, returnIds),
+        ));
+        await tx.delete(auditLogTable).where(and(
+          eq(auditLogTable.entityType, "wholesale_return"),
+          inArray(auditLogTable.entityId, returnIds),
+        ));
+      }
+
+      await tx.delete(traderLedgerEntriesTable)
+        .where(eq(traderLedgerEntriesTable.wholesaleInvoiceId, invoiceId));
+      await tx.delete(wholesaleReturnsTable).where(eq(wholesaleReturnsTable.invoiceId, invoiceId));
+      await tx.delete(wholesaleSettlementsTable).where(eq(wholesaleSettlementsTable.invoiceId, invoiceId));
+      await tx.delete(wholesaleInventoryConsumptionsTable)
+        .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, invoiceId));
+      await tx.delete(wholesaleInvoiceItemsTable).where(eq(wholesaleInvoiceItemsTable.invoiceId, invoiceId));
+      await tx.delete(wholesaleInvoicesTable).where(eq(wholesaleInvoicesTable.id, invoiceId));
+      return "deleted";
+    });
+  } catch (error) {
+    console.warn(`    cleanup wholesale invoice ${invoiceId} failed: ${error}`);
+    return "kept";
   }
-  if (toClean.returnIds.length > 0) {
-    await db.delete(stockMovementsTable).where(and(
-      eq(stockMovementsTable.refType, "wholesale_return"),
-      inArray(stockMovementsTable.refId, toClean.returnIds),
-    ));
-    await db.delete(auditLogTable).where(and(
-      eq(auditLogTable.entityType, "wholesale_return"),
-      inArray(auditLogTable.entityId, toClean.returnIds),
-    ));
+}
+
+async function deleteRegisteredFixture(
+  entityType: SuiteEntityType,
+  entityId: number,
+  runId = suiteRunId,
+): Promise<DeleteOutcome> {
+  if (entityType === "wholesale_invoice") {
+    if (!runId) return "kept";
+    return deleteWholesaleInvoiceFixture(entityId, runId);
   }
-  if (toClean.stockPurchaseIds.length > 0) {
-    await db.delete(stockMovementsTable).where(and(
-      eq(stockMovementsTable.refType, "stock_purchase"),
-      inArray(stockMovementsTable.refId, toClean.stockPurchaseIds),
-    ));
+  if (entityType === "wholesale_return") {
+    const [row] = await db.select({ id: wholesaleReturnsTable.id })
+      .from(wholesaleReturnsTable)
+      .where(eq(wholesaleReturnsTable.id, entityId));
+    // Returns are removed only through their registered parent invoice so stock,
+    // FIFO slices, ledger entries, and invoice totals cannot diverge.
+    return row ? "kept" : "missing";
+  }
+  if (entityType === "wholesale_trader") {
+    try {
+      const deleted = await db.transaction(async (tx) => {
+        const [row] = await tx.delete(wholesaleTradersTable)
+          .where(eq(wholesaleTradersTable.id, entityId))
+          .returning({ id: wholesaleTradersTable.id });
+        return row;
+      });
+      return deleted ? "deleted" : "missing";
+    } catch {
+      return "kept";
+    }
   }
 
-  // Delete wholesale data via DB (no delete endpoints for financial records)
+  const target =
+    entityType === "invoice"
+      ? { path: `/invoices/${entityId}`, headers: { "X-Allow-Invoice-Delete": "true" } }
+      : entityType === "stock_purchase"
+        ? { path: `/stock/purchases/${entityId}`, headers: {} }
+        : entityType === "purchase_bill"
+          ? { path: `/purchase-bills/${entityId}`, headers: { "x-allow-paid-delete": "true" } }
+          : { path: `/admin/users/${entityId}`, headers: {} };
+  try {
+    const res = await apiReq(target.path, { method: "DELETE", headers: target.headers });
+    if (res.ok) return "deleted";
+    if (res.status === 404) return "missing";
+    return "kept";
+  } catch {
+    return "kept";
+  }
+}
+
+async function recoverAbandonedWholesaleRuns() {
+  return recoverAbandonedSuiteRuns(deleteRegisteredFixture, new Date(), "wholesale");
+}
+
+async function cleanupRegisteredFixture(
+  entityType: SuiteEntityType,
+  entityId: number,
+  runId = suiteRunId,
+): Promise<void> {
+  const outcome = await deleteRegisteredFixture(entityType, entityId, runId);
+  if (outcome !== "kept" && runId) {
+    await unregisterSuiteFixture(runId, entityType, entityId);
+  }
+}
+
+async function cleanup(): Promise<void> {
+  console.log("\n─── Cleaning up fixtures ───");
   for (const invoiceId of toClean.invoiceIds) {
-    try {
-      // cascade deletes items, consumptions, settlements, returns via FK
-      await db.delete(wholesaleReturnsTable).where(eq(wholesaleReturnsTable.invoiceId, invoiceId));
-      await db.delete(traderLedgerEntriesTable).where(eq(traderLedgerEntriesTable.wholesaleInvoiceId, invoiceId));
-      await db.delete(wholesaleSettlementsTable).where(eq(wholesaleSettlementsTable.invoiceId, invoiceId));
-      await db.delete(wholesaleInventoryConsumptionsTable).where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, invoiceId));
-      await db.delete(wholesaleInvoiceItemsTable).where(eq(wholesaleInvoiceItemsTable.invoiceId, invoiceId));
-      await db.delete(wholesaleInvoicesTable).where(eq(wholesaleInvoicesTable.id, invoiceId));
-      console.log(`    cleaned invoice ${invoiceId}`);
-    } catch (e) {
-      console.warn(`    cleanup invoice ${invoiceId} failed: ${e}`);
-    }
+    await cleanupRegisteredFixture("wholesale_invoice", invoiceId);
+  }
+  for (const returnId of toClean.returnIds) {
+    await cleanupRegisteredFixture("wholesale_return", returnId);
+  }
+  for (const stockPurchaseId of toClean.stockPurchaseIds) {
+    await cleanupRegisteredFixture("stock_purchase", stockPurchaseId);
   }
   for (const traderId of toClean.traderIds) {
-    try {
-      await db.delete(traderLedgerEntriesTable).where(eq(traderLedgerEntriesTable.traderId, traderId));
-      await db.delete(wholesaleTradersTable).where(eq(wholesaleTradersTable.id, traderId));
-      console.log(`    cleaned trader ${traderId}`);
-    } catch (e) {
-      console.warn(`    cleanup trader ${traderId} failed: ${e}`);
-    }
+    await cleanupRegisteredFixture("wholesale_trader", traderId);
   }
-  // Delete only stock purchases created by this run.
-  for (const spId of toClean.stockPurchaseIds) {
-    try {
-      await db.execute(sql`
-        UPDATE stock_purchases SET remaining_weight_grams = weight_grams WHERE id = ${spId}
-      `);
-      await db.delete(stockPurchasesTable).where(eq(stockPurchasesTable.id, spId));
-      console.log(`    cleaned stock purchase ${spId}`);
-    } catch (e) {
-      console.warn(`    cleanup stock purchase ${spId} failed: ${e}`);
+}
+
+interface RecoveryBundle {
+  traderId: number;
+  invoiceId: number;
+  returnId: number;
+  stockPurchaseId: number;
+}
+
+async function createRecoveryBundle(runId: string, label: string): Promise<RecoveryBundle> {
+  const stockCategory = label === "CRASHED" ? "ten_tola_bar" : "kg_bar";
+  const invoiceCategory = label === "UNRELATED" ? "ten_tola_bar" : stockCategory;
+  const stockPurchaseId = await createStockPurchase(10, 400, stockCategory, runId, false, "0001-01-01");
+  const trader = await apiJson<{ id: number; name: string }>("/wholesale/traders", {
+    method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": runId },
+    body: JSON.stringify({
+      name: `WHOLESALE RECOVERY ${label}`,
+      phone: `+97150${String(Date.now()).slice(-7)}`,
+      isActive: true,
+    }),
+  });
+  const invoice = await apiJson<{
+    id: number;
+    items: { id: number }[];
+  }>("/wholesale/invoices", {
+    method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": runId },
+    body: JSON.stringify({
+      traderId: trader.id,
+      invoiceDate: "2025-06-01",
+      pricingType: "unfixed",
+      idempotencyKey: `recovery-${label.toLowerCase()}-${Date.now()}`,
+      items: [{
+        description: `Recovery ${label}`,
+        category: invoiceCategory,
+        quantity: 1,
+        grossGrams: 4,
+        purityMultiplier: 0.9999,
+        makingAed: 0,
+      }],
+    }),
+  });
+  const returned = await apiJson<{ id: number }>(`/wholesale/invoices/${invoice.id}/return`, {
+    method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": runId },
+    body: JSON.stringify({
+      date: "2025-06-02",
+      idempotencyKey: `recovery-return-${label.toLowerCase()}-${Date.now()}`,
+      lines: [{ invoiceItemId: invoice.items[0]!.id, grossWeightGrams: 1 }],
+    }),
+  });
+  return {
+    traderId: trader.id,
+    invoiceId: invoice.id,
+    returnId: returned.id,
+    stockPurchaseId,
+  };
+}
+
+async function recoveryBundleExists(bundle: RecoveryBundle): Promise<Record<keyof RecoveryBundle, boolean>> {
+  const [trader, invoice, returned, stockPurchase] = await Promise.all([
+    db.select({ id: wholesaleTradersTable.id })
+      .from(wholesaleTradersTable)
+      .where(eq(wholesaleTradersTable.id, bundle.traderId)),
+    db.select({ id: wholesaleInvoicesTable.id })
+      .from(wholesaleInvoicesTable)
+      .where(eq(wholesaleInvoicesTable.id, bundle.invoiceId)),
+    db.select({ id: wholesaleReturnsTable.id })
+      .from(wholesaleReturnsTable)
+      .where(eq(wholesaleReturnsTable.id, bundle.returnId)),
+    db.select({ id: stockPurchasesTable.id })
+      .from(stockPurchasesTable)
+      .where(eq(stockPurchasesTable.id, bundle.stockPurchaseId)),
+  ]);
+  return {
+    traderId: trader.length === 1,
+    invoiceId: invoice.length === 1,
+    returnId: returned.length === 1,
+    stockPurchaseId: stockPurchase.length === 1,
+  };
+}
+
+async function cleanupRecoveryBundle(runId: string, bundle: RecoveryBundle): Promise<void> {
+  await cleanupRegisteredFixture("wholesale_invoice", bundle.invoiceId, runId);
+  await cleanupRegisteredFixture("wholesale_return", bundle.returnId, runId);
+  await cleanupRegisteredFixture("stock_purchase", bundle.stockPurchaseId, runId);
+  await cleanupRegisteredFixture("wholesale_trader", bundle.traderId, runId);
+}
+
+async function testInterruptionRecoveryIsolation(): Promise<void> {
+  console.log("\n─── Test: interrupted-run recovery touches only registered wholesale IDs ───");
+  const crashedRunId = await startSuiteRun("wholesale-regression-crashed", adminUserId);
+  const unrelatedRunId = await startSuiteRun("wholesale-regression-unrelated", adminUserId);
+  let crashedBundle: RecoveryBundle | null = null;
+  let unrelatedBundle: RecoveryBundle | null = null;
+
+  try {
+    crashedBundle = await createRecoveryBundle(crashedRunId, "CRASHED");
+    unrelatedBundle = await createRecoveryBundle(unrelatedRunId, "UNRELATED");
+    const unrelatedConsumptions = await db.select({
+      purchaseId: wholesaleInventoryConsumptionsTable.purchaseId,
+    })
+      .from(wholesaleInventoryConsumptionsTable)
+      .where(eq(
+        wholesaleInventoryConsumptionsTable.wholesaleInvoiceId,
+        unrelatedBundle.invoiceId,
+      ));
+    assert(
+      unrelatedConsumptions.every((row) => row.purchaseId !== crashedBundle!.stockPurchaseId),
+      "Another run cannot consume this run's registered stock batch",
+      JSON.stringify(unrelatedConsumptions),
+    );
+
+    const registered = await db.select({
+      entityType: pdfTestFixturesTable.entityType,
+      entityId: pdfTestFixturesTable.entityId,
+    })
+      .from(pdfTestFixturesTable)
+      .where(eq(pdfTestFixturesTable.runId, crashedRunId));
+    const expected = [
+      ["wholesale_trader", crashedBundle.traderId],
+      ["wholesale_invoice", crashedBundle.invoiceId],
+      ["wholesale_return", crashedBundle.returnId],
+      ["stock_purchase", crashedBundle.stockPurchaseId],
+    ] as const;
+    assert(
+      expected.every(([entityType, entityId]) =>
+        registered.some((row) => row.entityType === entityType && row.entityId === entityId)),
+      "Trader, invoice, return, and stock IDs are registered by their create transactions",
+      JSON.stringify(registered),
+    );
+
+    const crossRunInvoice = await apiReq("/wholesale/invoices", {
+      method: "POST",
+      headers: { "X-Pdf-E2e-Run-Id": unrelatedRunId },
+      body: JSON.stringify({
+        traderId: crashedBundle.traderId,
+        invoiceDate: "2025-06-03",
+        pricingType: "unfixed",
+        items: [{
+          description: "Cross-run trader ownership probe",
+          category: "kg_bar",
+          quantity: 1,
+          grossGrams: 1,
+          purityMultiplier: 0.9999,
+          makingAed: 0,
+        }],
+      }),
+    });
+    assert(crossRunInvoice.status === 409, "Another run cannot create an invoice for this run's trader");
+    const unownedInvoice = await apiReq("/wholesale/invoices", {
+      method: "POST",
+      body: JSON.stringify({
+        traderId: crashedBundle.traderId,
+        invoiceDate: "2025-06-03",
+        pricingType: "unfixed",
+        items: [{
+          description: "Unowned trader mutation probe",
+          category: "kg_bar",
+          quantity: 1,
+          grossGrams: 1,
+          purityMultiplier: 0.9999,
+          makingAed: 0,
+        }],
+      }),
+    });
+    assert(unownedInvoice.status === 409, "An unregistered request cannot use a registered wholesale trader");
+
+    const [crashedItem] = await db.select({ id: wholesaleInvoiceItemsTable.id })
+      .from(wholesaleInvoiceItemsTable)
+      .where(eq(wholesaleInvoiceItemsTable.invoiceId, crashedBundle.invoiceId));
+    if (!crashedItem) throw new Error("Interrupted-run fixture item was not created");
+    const crossRunReturn = await apiReq(`/wholesale/invoices/${crashedBundle.invoiceId}/return`, {
+      method: "POST",
+      headers: { "X-Pdf-E2e-Run-Id": unrelatedRunId },
+      body: JSON.stringify({
+        date: "2025-06-03",
+        lines: [{ invoiceItemId: crashedItem.id, grossWeightGrams: 1 }],
+      }),
+    });
+    assert(crossRunReturn.status === 409, "Another run cannot attach a return to this run's invoice");
+    const unownedReturn = await apiReq(`/wholesale/invoices/${crashedBundle.invoiceId}/return`, {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2025-06-03",
+        lines: [{ invoiceItemId: crashedItem.id, grossWeightGrams: 1 }],
+      }),
+    });
+    assert(unownedReturn.status === 409, "An unregistered request cannot mutate a registered wholesale invoice");
+
+    await db.update(pdfTestRunsTable)
+      .set({ createdAt: sql`now() - interval '10 minutes'` })
+      .where(eq(pdfTestRunsTable.runId, crashedRunId));
+    const recovery = await recoverAbandonedWholesaleRuns();
+    assert(recovery.claimedRunIds.includes(crashedRunId), "Interrupted wholesale run is claimed");
+    assert(!recovery.claimedRunIds.includes(unrelatedRunId), "Fresh unrelated run is not claimed");
+
+    const crashedExists = await recoveryBundleExists(crashedBundle);
+    assert(
+      Object.values(crashedExists).every((exists) => !exists),
+      "Only the interrupted run's exact wholesale records are removed",
+      JSON.stringify(crashedExists),
+    );
+    const unrelatedExists = await recoveryBundleExists(unrelatedBundle);
+    assert(
+      Object.values(unrelatedExists).every(Boolean),
+      "Unrelated trader, invoice, return, and stock records remain untouched",
+      JSON.stringify(unrelatedExists),
+    );
+    const unrelatedRegistry = await db.select({ id: pdfTestFixturesTable.id })
+      .from(pdfTestFixturesTable)
+      .where(eq(pdfTestFixturesTable.runId, unrelatedRunId));
+    assert(unrelatedRegistry.length === 4, "Unrelated run keeps all four exact fixture registrations");
+  } finally {
+    if (unrelatedBundle) {
+      await cleanupRecoveryBundle(unrelatedRunId, unrelatedBundle);
     }
-  }
-  // Recalibrate only categories touched by this run.
-  for (const category of new Set(toClean.categories)) {
-    try {
-      await db.execute(sql`
-        UPDATE stock_levels
-        SET weight_grams = COALESCE((
-          SELECT SUM(remaining_weight_grams::numeric) FROM stock_purchases WHERE category = ${category}
-        ), 0),
-        updated_at = NOW()
-        WHERE category = ${category}
-      `);
-    } catch { /* best effort */ }
+    const [unrelatedRun] = await db.select({ id: pdfTestRunsTable.id })
+      .from(pdfTestRunsTable)
+      .where(eq(pdfTestRunsTable.runId, unrelatedRunId));
+    if (unrelatedRun) {
+      const finalized = await finalizeSuiteRun(unrelatedRunId, unrelatedBundle != null);
+      if (!finalized.cleaned) {
+        await db.update(pdfTestRunsTable)
+          .set({ status: "abandoned" })
+          .where(eq(pdfTestRunsTable.runId, unrelatedRunId));
+      }
+    }
+
+    // If setup failed before the simulated interruption, abandon and recover
+    // whatever exact IDs were already registered; no prefix-based cleanup.
+    for (const runId of [crashedRunId, unrelatedRunId]) {
+      await db.update(pdfTestRunsTable)
+        .set({ status: "abandoned" })
+        .where(eq(pdfTestRunsTable.runId, runId));
+    }
+    await recoverAbandonedWholesaleRuns();
   }
 }
 
@@ -260,8 +664,6 @@ async function cleanup(): Promise<void> {
 
 async function run(): Promise<void> {
   console.log("=== Wholesale Regression Test ===\n");
-
-  await login();
 
   // Create stock batch for test
   console.log("\n─── Setup: stock purchase 200g @ AED 400/g ───");
@@ -906,6 +1308,7 @@ async function run(): Promise<void> {
     invoiceDate: "2025-06-05",
     pricingType: "unfixed",
     idempotencyKey: `test-shortfall-invoice-${Date.now()}`,
+    fixtureRunId: suiteRunId,
     items: [{
       description: "Shortfall Return Test",
       category: shortfallCategory,
@@ -927,6 +1330,7 @@ async function run(): Promise<void> {
     invoiceId: shortfallInvoiceId,
     date: "2025-06-20",
     idempotencyKey: `test-shortfall-return-${Date.now()}`,
+    fixtureRunId: suiteRunId,
     lines: [{ invoiceItemId: shortfallItemId, grossWeightGrams: 5 }],
   });
   if (!shortfallReturn.result) throw new Error("Shortfall return was not created");
@@ -1576,22 +1980,44 @@ async function run(): Promise<void> {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  let suiteSucceeded = false;
   try {
+    await login();
+    await ensureRegistryProvisioned();
+    const recovery = await recoverAbandonedWholesaleRuns();
+    if (recovery.claimedRunIds.length > 0) {
+      console.log(
+        `  ✓ Recovered ${recovery.deleted} abandoned registered fixture(s) from ` +
+        `${recovery.claimedRunIds.length} prior run(s)${recovery.kept > 0 ? ` (${recovery.kept} kept)` : ""}`,
+      );
+    }
+    await testInterruptionRecoveryIsolation();
+    suiteRunId = await startSuiteRun("wholesale-regression", adminUserId);
     await run();
+    suiteSucceeded = failCount === 0;
   } catch (err) {
     console.error("\nFATAL TEST ERROR:", err);
     failCount++;
   } finally {
-    try {
-      await cleanup();
-    } catch (cleanErr) {
-      console.error("Cleanup error:", cleanErr);
+    if (suiteRunId) {
+      try {
+        await cleanup();
+      } catch (cleanErr) {
+        console.error("Cleanup error:", cleanErr);
+      }
+      const finalized = await finalizeSuiteRun(suiteRunId, suiteSucceeded);
+      if (!finalized.cleaned) {
+        console.warn(
+          `Retaining suite run registry for later recovery ` +
+          `(${finalized.remainingFixtures} registered fixture(s) still present).`,
+        );
+      }
     }
     await pool.end();
 
     console.log(`\n=== Results: ${passCount} passed, ${failCount} failed ===`);
     if (failCount > 0) {
-      process.exit(1);
+      process.exitCode = 1;
     }
   }
 }

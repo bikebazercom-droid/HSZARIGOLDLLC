@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth.js";
 import { broadcast } from "../lib/socket.js";
+import { authorizePdfTestRun, registerPdfTestFixture } from "./pdf-test-fixtures.js";
 import {
   ListWholesaleTradersResponse,
   GetWholesaleTraderResponse,
@@ -199,15 +200,29 @@ router.get("/wholesale/traders/:id", async (req, res): Promise<void> => {
 router.post("/wholesale/traders", async (req, res): Promise<void> => {
   const parsed = CreateWholesaleTraderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const testRun = await authorizePdfTestRun(req);
+  if (testRun.requested && !testRun.runId) {
+    res.status(403).json({ error: "PDF test fixture ownership was rejected" });
+    return;
+  }
   const { name, phone, email, address, trn, isActive } = parsed.data;
-  const [trader] = await db.insert(wholesaleTradersTable).values({
-    name: name.trim(),
-    phone: phone?.trim() || null,
-    email: email?.trim() || null,
-    address: address?.trim() || null,
-    trn: trn?.trim() || null,
-    isActive: isActive ?? true,
-  }).returning();
+  const trader = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(wholesaleTradersTable).values({
+      name: name.trim(),
+      phone: phone?.trim() || null,
+      email: email?.trim() || null,
+      address: address?.trim() || null,
+      trn: trn?.trim() || null,
+      isActive: isActive ?? true,
+    }).returning();
+    await registerPdfTestFixture(
+      tx as unknown as typeof db,
+      testRun.runId,
+      "wholesale_trader",
+      created.id,
+    );
+    return created;
+  });
   res.status(201).json(CreateWholesaleTraderResponse.parse(parseTrader(trader)));
 });
 
@@ -273,6 +288,11 @@ router.post("/wholesale/invoices", async (req, res): Promise<void> => {
   const parsed = CreateWholesaleInvoiceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const input = parsed.data;
+  const testRun = await authorizePdfTestRun(req);
+  if (testRun.requested && !testRun.runId) {
+    res.status(403).json({ error: "PDF test fixture ownership was rejected" });
+    return;
+  }
 
   // Validate trader
   const [trader] = await db.select().from(wholesaleTradersTable).where(eq(wholesaleTradersTable.id, input.traderId));
@@ -304,6 +324,7 @@ router.post("/wholesale/invoices", async (req, res): Promise<void> => {
       createdByUserId: req.session?.userId ?? null,
       createdByUserName: req.session?.fullName ?? null,
       idempotencyKey: input.idempotencyKey ?? null,
+      fixtureRunId: testRun.runId,
       items: input.items.map((it) => ({
         description: it.description,
         category: it.category,
@@ -336,6 +357,11 @@ router.post("/wholesale/invoices/:id/fix-rate", requireAdmin, async (req, res): 
   if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = FixWholesaleRateBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const testRun = await authorizePdfTestRun(req);
+  if (testRun.requested && !testRun.runId) {
+    res.status(403).json({ error: "PDF test fixture ownership was rejected" });
+    return;
+  }
 
   try {
     const { result } = await applyRateFix({
@@ -347,6 +373,7 @@ router.post("/wholesale/invoices/:id/fix-rate", requireAdmin, async (req, res): 
       actorId: req.session?.userId ?? null,
       actorName: req.session?.fullName ?? null,
       idempotencyKey: parsed.data.idempotencyKey ?? null,
+      fixtureRunId: testRun.runId,
     });
     if (!result) { res.status(404).json({ error: "Invoice not found" }); return; }
     res.json(FixWholesaleRateResponse.parse(parseInvoice(result.invoice, result.items)));
@@ -368,6 +395,11 @@ router.post("/wholesale/invoices/:id/return", requireAdmin, async (req, res): Pr
   if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = ReturnWholesaleGoodsBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const testRun = await authorizePdfTestRun(req);
+  if (testRun.requested && !testRun.runId) {
+    res.status(403).json({ error: "PDF test fixture ownership was rejected" });
+    return;
+  }
 
   try {
     const { result } = await applyPhysicalReturn({
@@ -381,6 +413,7 @@ router.post("/wholesale/invoices/:id/return", requireAdmin, async (req, res): Pr
       actorId: req.session?.userId ?? null,
       actorName: req.session?.fullName ?? null,
       idempotencyKey: parsed.data.idempotencyKey ?? null,
+      fixtureRunId: testRun.runId,
     });
     if (!result) { res.status(404).json({ error: "Invoice not found" }); return; }
     res.json(ReturnWholesaleGoodsResponse.parse(parseReturn(result.ret, result.lines)));

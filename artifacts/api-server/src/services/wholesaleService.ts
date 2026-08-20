@@ -16,11 +16,42 @@ import {
   traderLedgerEntriesTable,
   wholesaleTradersTable,
   auditLogTable,
+  pdfTestFixturesTable,
 } from "@workspace/db";
-import { acquireStockMutationLock } from "./inventoryEngine.js";
+import { acquireStockMutationLock, registeredStockOwnershipSql } from "./inventoryEngine.js";
 import { applyStockDelta } from "../routes/stock.js";
+import { registerPdfTestFixture } from "../routes/pdf-test-fixtures.js";
 
 type Tx = typeof db;
+
+async function assertWholesaleFixtureMutationOwnership(
+  tx: Tx,
+  fixtureRunId: string | null | undefined,
+  entityType: "wholesale_invoice" | "wholesale_trader",
+  entityId: number,
+): Promise<void> {
+  const registrations = await tx.select({ runId: pdfTestFixturesTable.runId })
+    .from(pdfTestFixturesTable)
+    .where(and(
+      eq(pdfTestFixturesTable.entityType, entityType),
+      eq(pdfTestFixturesTable.entityId, entityId),
+    ));
+  if (registrations.length === 0) {
+    if (fixtureRunId) {
+      throw Object.assign(
+        new Error("Wholesale test fixture parent is not owned by this run"),
+        { statusCode: 403 },
+      );
+    }
+    return;
+  }
+  if (!fixtureRunId || !registrations.some((row) => row.runId === fixtureRunId)) {
+    throw Object.assign(
+      new Error("Wholesale test fixture belongs to another run"),
+      { statusCode: 409 },
+    );
+  }
+}
 
 // ── Number sequencing ────────────────────────────────────────────────────────
 
@@ -89,9 +120,10 @@ export async function consumeFifoForWholesale(
     wholesaleItemId: number;
     category: string;
     grams: number;
+    fixtureRunId?: string | null;
   },
 ): Promise<{ cogsAed: number; shortfallGrams: number }> {
-  const { wholesaleInvoiceId, wholesaleItemId, category, grams } = args;
+  const { wholesaleInvoiceId, wholesaleItemId, category, grams, fixtureRunId } = args;
   if (!(grams > 0)) return { cogsAed: 0, shortfallGrams: 0 };
 
   await acquireStockMutationLock(tx);
@@ -100,6 +132,7 @@ export async function consumeFifoForWholesale(
     SELECT id, remaining_weight_grams::text AS remaining, price_per_gram::text AS rate
     FROM stock_purchases
     WHERE category = ${category} AND remaining_weight_grams::numeric > 0
+      ${registeredStockOwnershipSql(fixtureRunId)}
     ORDER BY purchase_date ASC, created_at ASC, id ASC
     FOR UPDATE
   `).then((r) => r.rows);
@@ -140,7 +173,9 @@ export async function consumeFifoForWholesale(
       SELECT CASE WHEN COALESCE(SUM(weight_grams::numeric), 0) > 0
                   THEN SUM(total_price_aed::numeric) / SUM(weight_grams::numeric)
                   ELSE 0 END::text AS rate
-      FROM stock_purchases WHERE category = ${category}
+      FROM stock_purchases
+      WHERE category = ${category}
+        ${registeredStockOwnershipSql(fixtureRunId)}
     `).then((r) => r.rows);
     const cost = Math.round(shortfallGrams * Number(avg?.rate ?? 0) * 100) / 100;
     await tx.insert(wholesaleInventoryConsumptionsTable).values({
@@ -176,6 +211,7 @@ export interface CreateInvoiceArgs {
   createdByUserId?: number | null;
   createdByUserName?: string | null;
   idempotencyKey?: string | null;
+  fixtureRunId?: string | null;
   items: Array<{
     description: string;
     category: string;
@@ -197,6 +233,12 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
       .where(eq(traderLedgerEntriesTable.idempotencyKey, `inv_create_${idempotencyKey}`))
       .limit(1);
     if (existing.length > 0 && existing[0].wholesaleInvoiceId) {
+      await assertWholesaleFixtureMutationOwnership(
+        db,
+        args.fixtureRunId,
+        "wholesale_invoice",
+        existing[0].wholesaleInvoiceId,
+      );
       const inv = await loadWholesaleInvoice(existing[0].wholesaleInvoiceId);
       if (inv) return { invoice: inv, idempotent: true };
     }
@@ -207,6 +249,12 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
     // first, then stock_levels and stock_purchases rows. Returns follow the
     // same order, preventing create-vs-return deadlocks.
     await acquireStockMutationLock(tx as unknown as Tx);
+    await assertWholesaleFixtureMutationOwnership(
+      tx as unknown as Tx,
+      args.fixtureRunId,
+      "wholesale_trader",
+      args.traderId,
+    );
 
     // Lock wholesale_invoices table for number sequencing
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('wholesale_invoice_number'))`);
@@ -326,6 +374,7 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
         wholesaleItemId: item.id,
         category: item.category,
         grams: Number(item.grossGrams),
+        fixtureRunId: args.fixtureRunId,
       });
     }
 
@@ -400,6 +449,12 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
         itemCount: savedItems.length,
       }),
     });
+    await registerPdfTestFixture(
+      tx as unknown as typeof db,
+      args.fixtureRunId ?? null,
+      "wholesale_invoice",
+      invoice.id,
+    );
 
     return { invoice, items: savedItems };
   });
@@ -429,6 +484,7 @@ export interface RateFixArgs {
   actorId?: number | null;
   actorName?: string | null;
   idempotencyKey?: string | null;
+  fixtureRunId?: string | null;
 }
 
 export async function applyRateFix(args: RateFixArgs) {
@@ -444,6 +500,12 @@ export async function applyRateFix(args: RateFixArgs) {
       .where(eq(traderLedgerEntriesTable.idempotencyKey, ikey))
       .limit(1);
     if (existing.length > 0) {
+      await assertWholesaleFixtureMutationOwnership(
+        db,
+        args.fixtureRunId,
+        "wholesale_invoice",
+        invoiceId,
+      );
       const inv = await loadWholesaleInvoice(invoiceId);
       if (inv) return { result: inv, idempotent: true };
     }
@@ -457,6 +519,12 @@ export async function applyRateFix(args: RateFixArgs) {
       .where(eq(wholesaleInvoicesTable.id, invoiceId))
       .for("update");
     if (!lockedInvoice) throw Object.assign(new Error("Invoice not found"), { statusCode: 404 });
+    await assertWholesaleFixtureMutationOwnership(
+      tx as unknown as Tx,
+      args.fixtureRunId,
+      "wholesale_invoice",
+      invoiceId,
+    );
     if (lockedInvoice.pricingType !== "unfixed") {
       throw Object.assign(new Error("Rate fix only applies to unfixed invoices"), { statusCode: 400 });
     }
@@ -600,6 +668,7 @@ export interface ReturnArgs {
   actorId?: number | null;
   actorName?: string | null;
   idempotencyKey?: string | null;
+  fixtureRunId?: string | null;
 }
 
 export async function applyPhysicalReturn(args: ReturnArgs) {
@@ -641,6 +710,12 @@ export async function applyPhysicalReturn(args: ReturnArgs) {
       .where(eq(traderLedgerEntriesTable.idempotencyKey, ikey))
       .limit(1);
     if (existing.length > 0 && existing[0].wholesaleReturnId) {
+      await assertWholesaleFixtureMutationOwnership(
+        db,
+        args.fixtureRunId,
+        "wholesale_invoice",
+        invoiceId,
+      );
       const ret = await loadWholesaleReturn(existing[0].wholesaleReturnId);
       if (ret) return { result: ret, idempotent: true };
     }
@@ -657,6 +732,12 @@ export async function applyPhysicalReturn(args: ReturnArgs) {
       .where(eq(wholesaleInvoicesTable.id, invoiceId))
       .for("update");
     if (!lockedInvoice) throw Object.assign(new Error("Invoice not found"), { statusCode: 404 });
+    await assertWholesaleFixtureMutationOwnership(
+      tx as unknown as Tx,
+      args.fixtureRunId,
+      "wholesale_invoice",
+      invoiceId,
+    );
 
     // Load and lock the items
     const itemIds = lines.map((l) => l.invoiceItemId);
@@ -914,6 +995,12 @@ export async function applyPhysicalReturn(args: ReturnArgs) {
         newStatus,
       }),
     });
+    await registerPdfTestFixture(
+      tx as unknown as typeof db,
+      args.fixtureRunId ?? null,
+      "wholesale_return",
+      wholesaleReturn.id,
+    );
 
     return { wholesaleReturn, lines: savedLines };
   });

@@ -16,7 +16,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { and, eq, inArray, like, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, like, lt, notLike, or, sql } from "drizzle-orm";
 
 function sqlNow() {
   return sql`now()`;
@@ -29,10 +29,25 @@ export { ensureRegistryProvisioned };
 export const SUITE_RUN_PREFIX = "suite:";
 
 /** Entity types the destructive HTTP suites create. */
-export type SuiteEntityType = "invoice" | "stock_purchase" | "purchase_bill" | "user";
+export type SuiteEntityType =
+  | "invoice"
+  | "stock_purchase"
+  | "purchase_bill"
+  | "user"
+  | "wholesale_trader"
+  | "wholesale_invoice"
+  | "wholesale_return";
 
 /** Deletion order matters: invoices first (frees consumed FIFO batches). */
-const RECOVERY_ORDER: SuiteEntityType[] = ["invoice", "stock_purchase", "purchase_bill", "user"];
+const RECOVERY_ORDER: SuiteEntityType[] = [
+  "invoice",
+  "wholesale_invoice",
+  "wholesale_return",
+  "stock_purchase",
+  "purchase_bill",
+  "wholesale_trader",
+  "user",
+];
 
 /**
  * Per-entity deleter supplied by the calling script (it owns the HTTP session).
@@ -44,6 +59,7 @@ const RECOVERY_ORDER: SuiteEntityType[] = ["invoice", "stock_purchase", "purchas
 export type SuiteFixtureDeleter = (
   entityType: SuiteEntityType,
   entityId: number,
+  runId: string,
 ) => Promise<"deleted" | "missing" | "kept">;
 
 /**
@@ -93,6 +109,8 @@ export interface SuiteRecoveryResult {
   reclaimedRunIds: string[];
 }
 
+export type SuiteRecoveryScope = "standard" | "wholesale";
+
 /**
  * Recovers abandoned suite runs. Only registered records are ever touched,
  * strictly by the exact IDs stored in the registry.
@@ -111,8 +129,15 @@ export interface SuiteRecoveryResult {
 export async function recoverAbandonedSuiteRuns(
   deleteFixture: SuiteFixtureDeleter,
   now: Date = new Date(),
+  scope: SuiteRecoveryScope = "standard",
 ): Promise<SuiteRecoveryResult> {
   const cutoff = new Date(now.getTime() - STALE_RUN_AGE_MS);
+  const namespaceCondition = scope === "wholesale"
+    ? like(pdfTestRunsTable.runId, `${SUITE_RUN_PREFIX}wholesale-regression%`)
+    : and(
+        like(pdfTestRunsTable.runId, `${SUITE_RUN_PREFIX}%`),
+        notLike(pdfTestRunsTable.runId, `${SUITE_RUN_PREFIX}wholesale-regression%`),
+      );
   // Claiming stamps createdAt as the lease time: a process killed mid-recovery
   // leaves its runs in "recovering", and they become reclaimable once the
   // lease is older than the stale gate — so their exact fixture IDs are never
@@ -120,7 +145,7 @@ export async function recoverAbandonedSuiteRuns(
   const claimed = await db.update(pdfTestRunsTable)
     .set({ status: "recovering", createdAt: sqlNow() })
     .where(and(
-      like(pdfTestRunsTable.runId, `${SUITE_RUN_PREFIX}%`),
+      namespaceCondition,
       or(
         eq(pdfTestRunsTable.status, "abandoned"),
         and(
@@ -148,7 +173,7 @@ export async function recoverAbandonedSuiteRuns(
   for (const type of RECOVERY_ORDER) {
     for (const fixture of fixtures) {
       if (fixture.entityType !== type) continue;
-      const outcome = await deleteFixture(type, fixture.entityId);
+      const outcome = await deleteFixture(type, fixture.entityId, fixture.runId);
       if (outcome === "kept") {
         kept += 1;
         continue;

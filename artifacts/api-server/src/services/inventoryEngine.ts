@@ -14,6 +14,21 @@ import { db } from "@workspace/db";
 
 type Tx = typeof db;
 
+export function registeredStockOwnershipSql(fixtureRunId?: string | null) {
+  const ownership = fixtureRunId
+    ? sql`AND fixture.run_id <> ${fixtureRunId}`
+    : sql``;
+  return sql`
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pdf_test_fixtures fixture
+      WHERE fixture.entity_type = 'stock_purchase'
+        AND fixture.entity_id = stock_purchases.id
+        ${ownership}
+    )
+  `;
+}
+
 // Global stock-mutation lock. Every transaction that acquires FOR UPDATE row
 // locks on stock_purchases (FIFO consumption, consumption reversal, unfixed
 // bill settlement repricing) takes this advisory lock FIRST. Because each of
@@ -33,9 +48,15 @@ export interface FifoResult {
 
 export async function consumeFifo(
   tx: Tx,
-  args: { invoiceId: number; invoiceItemId: number | null; category: string; grams: number },
+  args: {
+    invoiceId: number;
+    invoiceItemId: number | null;
+    category: string;
+    grams: number;
+    fixtureRunId?: string | null;
+  },
 ): Promise<FifoResult> {
-  const { invoiceId, invoiceItemId, category, grams } = args;
+  const { invoiceId, invoiceItemId, category, grams, fixtureRunId } = args;
   if (!(grams > 0)) return { cogsAed: 0, shortfallGrams: 0 };
 
   await acquireStockMutationLock(tx);
@@ -46,6 +67,7 @@ export async function consumeFifo(
     SELECT id, remaining_weight_grams::text AS remaining, price_per_gram::text AS rate
     FROM stock_purchases
     WHERE category = ${category} AND remaining_weight_grams::numeric > 0
+      ${registeredStockOwnershipSql(fixtureRunId)}
     ORDER BY purchase_date ASC, created_at ASC, id ASC
     FOR UPDATE
   `).then((r) => r.rows);
@@ -82,7 +104,9 @@ export async function consumeFifo(
       SELECT CASE WHEN COALESCE(SUM(weight_grams::numeric), 0) > 0
                   THEN SUM(total_price_aed::numeric) / SUM(weight_grams::numeric)
                   ELSE 0 END::text AS rate
-      FROM stock_purchases WHERE category = ${category}
+      FROM stock_purchases
+      WHERE category = ${category}
+        ${registeredStockOwnershipSql(fixtureRunId)}
     `).then((r) => r.rows);
     const cost = Math.round(shortfallGrams * Number(avg?.rate ?? 0) * 100) / 100;
     await tx.execute(sql`

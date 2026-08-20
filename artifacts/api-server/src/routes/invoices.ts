@@ -354,6 +354,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
   for (const ic of itemConsumptions) {
     const { shortfallGrams } = await consumeFifo(tx as unknown as typeof db, {
       invoiceId: invoice.id, invoiceItemId: ic.itemId, category: ic.category, grams: ic.grams,
+      fixtureRunId: pdfTestRun.runId,
     });
     if (shortfallGrams > 0) {
       stockWarnings.push(
