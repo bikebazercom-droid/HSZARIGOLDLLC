@@ -1,9 +1,13 @@
 import { Router, type IRouter } from "express";
-import { and, count, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable, auditLogTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
 import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding.js";
 import { createPurchaseBillPdf } from "../lib/purchaseBillPdf.js";
+import {
+  createPurchaseStatementPdf,
+  PURCHASE_STATEMENT_TEXT_LIMIT,
+} from "../lib/purchaseStatementPdf.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { applyStockDelta } from "./stock.js";
 import { authorizePdfTestRun, registerPdfTestFixture, unregisterPdfTestFixture } from "./pdf-test-fixtures.js";
@@ -266,6 +270,112 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
   y += 38;
 
   pdf.finish(y);
+});
+
+const PURCHASE_STATEMENT_CATEGORY = new Set(["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"]);
+
+function parsePurchaseStatementQuery(req: { query: unknown }) {
+  const query = req.query as Record<string, string | undefined>;
+  const supplier = query.supplier?.trim() || null;
+  const startDate = query.startDate?.trim() || null;
+  const endDate = query.endDate?.trim() || null;
+  const category = query.category?.trim() || null;
+  const isValidDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+
+  if ((startDate && !isValidDate(startDate)) || (endDate && !isValidDate(endDate))) {
+    return { error: "startDate/endDate must be a valid YYYY-MM-DD date" } as const;
+  }
+  if (supplier && supplier.length > PURCHASE_STATEMENT_TEXT_LIMIT) {
+    return { error: `supplier must not exceed ${PURCHASE_STATEMENT_TEXT_LIMIT} characters` } as const;
+  }
+  if (startDate && endDate && startDate > endDate) {
+    return { error: "startDate must not be after endDate" } as const;
+  }
+  if (category && category !== "all" && !PURCHASE_STATEMENT_CATEGORY.has(category)) {
+    return { error: "Invalid category" } as const;
+  }
+  return {
+    supplier,
+    startDate,
+    endDate,
+    category: category && category !== "all" ? category : null,
+  } as const;
+}
+
+// Raw PDF route (outside the OpenAPI spec): filtered purchase-bill statement.
+// It intentionally receives filters in the URL so the browser can download it
+// directly with window.open, like the existing invoice and liability exports.
+router.get("/purchase-bills/statement-pdf", requireAdmin, async (req, res): Promise<void> => {
+  const filters = parsePurchaseStatementQuery(req);
+  if ("error" in filters) {
+    res.status(400).json({ error: filters.error });
+    return;
+  }
+
+  const conditions = [];
+  if (filters.supplier) {
+    conditions.push(sql`LOWER(${purchaseBillsTable.supplierName}) = LOWER(${filters.supplier})`);
+  }
+  if (filters.startDate) conditions.push(gte(purchaseBillsTable.billDate, filters.startDate));
+  if (filters.endDate) conditions.push(lte(purchaseBillsTable.billDate, filters.endDate));
+  if (filters.category) conditions.push(eq(purchaseBillItemsTable.category, filters.category));
+
+  const rows = await db
+    .select({
+      billDate: purchaseBillsTable.billDate,
+      billNo: purchaseBillsTable.billNo,
+      supplierName: purchaseBillsTable.supplierName,
+      category: purchaseBillItemsTable.category,
+      grossWeightGrams: purchaseBillItemsTable.grossWeightGrams,
+      purityPercent: purchaseBillItemsTable.purityPercent,
+      pureWeightGrams: purchaseBillItemsTable.pureWeightGrams,
+      rateAedPerG: purchaseBillItemsTable.rateAedPerG,
+      lineTotalAed: purchaseBillItemsTable.lineTotalAed,
+    })
+    .from(purchaseBillsTable)
+    .innerJoin(purchaseBillItemsTable, eq(purchaseBillItemsTable.billId, purchaseBillsTable.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(asc(purchaseBillsTable.billDate), asc(purchaseBillsTable.id), asc(purchaseBillItemsTable.id));
+
+  const overLimitRow = rows.find((row) => (
+    row.billNo.length > PURCHASE_STATEMENT_TEXT_LIMIT
+    || row.supplierName.length > PURCHASE_STATEMENT_TEXT_LIMIT
+  ));
+  if (overLimitRow) {
+    res.status(422).json({
+      error: `Statement contains a bill reference or supplier name longer than the ${PURCHASE_STATEMENT_TEXT_LIMIT}-character export limit`,
+    });
+    return;
+  }
+
+  const generatedAt = new Date();
+  const statementPdf = createPurchaseStatementPdf(
+    rows.map((row) => ({
+      billDate: row.billDate,
+      billNo: row.billNo,
+      supplierName: row.supplierName,
+      category: row.category,
+      grossWeightGrams: Number(row.grossWeightGrams),
+      purityPercent: Number(row.purityPercent),
+      pureWeightGrams: Number(row.pureWeightGrams),
+      rateAedPerG: Number(row.rateAedPerG),
+      lineTotalAed: Number(row.lineTotalAed),
+    })),
+    filters,
+    generatedAt,
+  );
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="supplier-purchase-statement-${generatedAt.toISOString().slice(0, 10)}.pdf"`,
+  );
+  statementPdf.doc.pipe(res);
+  statementPdf.finish();
 });
 
 // Configurable capacity-warning threshold: emit a warning flag when the table

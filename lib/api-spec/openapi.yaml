@@ -1951,11 +1951,13 @@ components:
         billNo:
           type: string
           minLength: 1
+          maxLength: 300
         billDate:
           type: string
         supplierName:
           type: string
           minLength: 1
+          maxLength: 300
         supplierPhone:
           type: string
           maxLength: 100

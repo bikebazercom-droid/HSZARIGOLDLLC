@@ -1,0 +1,40 @@
+================================================================================
+FEATURE PRD: SUPPLIER PURCHASE BILLS STATEMENT PDF GENERATOR WITH FILTERS
+================================================================================
+
+Target Objective:
+Build a comprehensive Purchase Bills Statement Generator UI and PDF Export system that allows managers to filter purchase entries by Supplier, Category, and Date Range, and download a professional PDF Statement.
+
+--------------------------------------------------------------------------------
+1. UI CONTROLS & FILTERING (In Purchase Bills Page):
+--------------------------------------------------------------------------------
+- Add a "Download Purchase Statement" / "Export Statement PDF" button.
+- Provide Filter Controls:
+  * Supplier Filter: All Suppliers OR Select Specific Supplier (Auto-uppercase display).
+  * Category Filter: All Categories OR Select Specific Category (e.g., GOLD, TT Bar, KG Bar).
+  * Date Filter: Dropdown with All Time, Today, This Month, This Year, and Custom Date Range (Start Date - End Date).
+
+--------------------------------------------------------------------------------
+2. PDF STATEMENT GENERATION REQUIREMENTS:
+--------------------------------------------------------------------------------
+- Document Header:
+  * Top Center: "بسم الله الرحمن الرحيم"
+  * Top Left: Hazari Gold Logo & Full Address/TRN/Contact details.
+  * Title Badge: "SUPPLIER PURCHASE STATEMENT" (Include active filters info: Selected Supplier, Period, Category).
+
+- Summary Totals Section:
+  * Total Purchased Gross Weight (g / kg)
+  * Total Net Pure Weight (g)
+  * Total Purchase Spend / Cash Outflow (AED)
+
+- Itemized Data Table:
+  * Date | Bill/Ref No | Supplier Name | Category | Gross Wt (g) | Touch / Purity | Pure Wt (g) | Rate (AED/g) | Total Amount (AED)
+
+- Document Footer (Final Page Only):
+  * Single Authorised Signature line & Hazari Gold Official Seal/Stamp aligned to the Bottom-Right corner.
+  * Bottom Navy Blue Banner: "Thank you for your business!"
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please implement the Purchase Statement filtering modal/bar and backend/browser PDF generator now!
+================================================================================

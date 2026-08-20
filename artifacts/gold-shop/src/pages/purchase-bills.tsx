@@ -26,7 +26,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { endOfMonth, endOfYear, format, startOfMonth, startOfYear } from "date-fns";
 import { AlertTriangle, CheckCircle2, FileDown, FilePlus2, Lock, LockOpen, Plus, ShieldAlert, Trash2, X } from "lucide-react";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "@/pages/products/stock";
 
@@ -238,6 +238,11 @@ export default function PurchaseBillsPage() {
   const [paymentStatus, setPaymentStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
+  const [statementSupplier, setStatementSupplier] = useState("");
+  const [statementCategory, setStatementCategory] = useState("all");
+  const [statementPeriod, setStatementPeriod] = useState<"all" | "today" | "thisMonth" | "thisYear" | "custom">("all");
+  const [statementStartDate, setStatementStartDate] = useState("");
+  const [statementEndDate, setStatementEndDate] = useState("");
 
   const setLine = (i: number, patch: Partial<LineDraft>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -266,6 +271,46 @@ export default function PurchaseBillsPage() {
     queryClient.invalidateQueries({ queryKey: getListStockPurchasesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListStockSuppliersQueryKey() });
     if (includeAuditLog) refetchAuditLog();
+  };
+
+  const setStatementDatePreset = (period: "all" | "today" | "thisMonth" | "thisYear" | "custom") => {
+    setStatementPeriod(period);
+    if (period === "custom") return;
+    if (period === "all") {
+      setStatementStartDate("");
+      setStatementEndDate("");
+      return;
+    }
+    const now = new Date();
+    if (period === "today") {
+      const today = format(now, "yyyy-MM-dd");
+      setStatementStartDate(today);
+      setStatementEndDate(today);
+    } else if (period === "thisMonth") {
+      setStatementStartDate(format(startOfMonth(now), "yyyy-MM-dd"));
+      setStatementEndDate(format(endOfMonth(now), "yyyy-MM-dd"));
+    } else {
+      setStatementStartDate(format(startOfYear(now), "yyyy-MM-dd"));
+      setStatementEndDate(format(endOfYear(now), "yyyy-MM-dd"));
+    }
+  };
+
+  const downloadPurchaseStatement = () => {
+    if (statementPeriod === "custom" && (!statementStartDate || !statementEndDate)) {
+      toast({ title: "Choose both custom statement dates", variant: "destructive" });
+      return;
+    }
+    if (statementStartDate && statementEndDate && statementStartDate > statementEndDate) {
+      toast({ title: "Start date must be on or before the end date", variant: "destructive" });
+      return;
+    }
+    const params = new URLSearchParams();
+    if (statementSupplier) params.set("supplier", statementSupplier);
+    if (statementCategory !== "all") params.set("category", statementCategory);
+    if (statementStartDate) params.set("startDate", statementStartDate);
+    if (statementEndDate) params.set("endDate", statementEndDate);
+    const query = params.toString();
+    window.open(`${import.meta.env.BASE_URL}api/purchase-bills/statement-pdf${query ? `?${query}` : ""}`, "_blank");
   };
 
   const handleSave = () => {
@@ -492,6 +537,74 @@ export default function PurchaseBillsPage() {
 
         {/* ─── All Bills tab ─── */}
         <TabsContent value="bills">
+          <div className="mb-3 rounded-md border bg-card p-3" data-testid="purchase-statement-filters">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-semibold">Purchase Statement Filters</h2>
+                <p className="text-xs text-muted-foreground">Choose the supplier, category, and period to include in the exported PDF.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={downloadPurchaseStatement}>
+                <FileDown className="mr-1.5 h-4 w-4" /> Download Purchase Statement
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label>Supplier</Label>
+                <Select value={statementSupplier || "all"} onValueChange={(value) => setStatementSupplier(value === "all" ? "" : value)}>
+                  <SelectTrigger><SelectValue placeholder="All Suppliers" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Suppliers</SelectItem>
+                    {[...new Set((suppliers ?? []).map((supplier) => supplier.toUpperCase()))].sort().map((supplier) => (
+                      <SelectItem key={supplier} value={supplier}>{supplier}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select value={statementCategory} onValueChange={setStatementCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {STOCK_CATEGORIES.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>{category.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date Range</Label>
+                <Select value={statementPeriod} onValueChange={(value) => setStatementDatePreset(value as "all" | "today" | "thisMonth" | "thisYear" | "custom")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="thisMonth">This Month</SelectItem>
+                    <SelectItem value="thisYear">This Year</SelectItem>
+                    <SelectItem value="custom">Custom Date Range</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {statementPeriod === "custom" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label>Start Date</Label>
+                    <Input type="date" value={statementStartDate} onChange={(event) => setStatementStartDate(event.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>End Date</Label>
+                    <Input type="date" value={statementEndDate} onChange={(event) => setStatementEndDate(event.target.value)} />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-end">
+                  <p className="w-full rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    {statementPeriod === "all" ? "No date restriction" : `${statementStartDate} to ${statementEndDate}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
           {/* Paid-bill deletion lock toggle */}
           <div className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 mb-3 text-sm ${paidDeleteUnlocked ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
             <div className="flex items-center gap-2">
@@ -1189,7 +1302,12 @@ export default function PurchaseBillsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Bill No / Ref</Label>
-                <Input value={billNo} onChange={(e) => setBillNo(e.target.value)} placeholder="e.g. SUP-1042" />
+                <Input
+                  value={billNo}
+                  onChange={(e) => setBillNo(e.target.value)}
+                  placeholder="e.g. SUP-1042"
+                  maxLength={300}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Bill Date</Label>
@@ -1203,6 +1321,7 @@ export default function PurchaseBillsPage() {
                   onChange={(e) => setSupplierName(e.target.value.toUpperCase())}
                   placeholder="e.g. RAHIM"
                   className="uppercase"
+                  maxLength={300}
                 />
                 <datalist id="bill-supplier-names">
                   {suppliers?.map((s) => <option key={s} value={s} />)}

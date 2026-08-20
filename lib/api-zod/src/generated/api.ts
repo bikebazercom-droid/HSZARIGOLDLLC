@@ -944,7 +944,9 @@ export const ListPurchaseBillsResponse = zod.array(ListPurchaseBillsResponseItem
 /**
  * @summary Record a purchase bill; each line item creates a stock batch and posts to the ledgers
  */
+export const createPurchaseBillBodyBillNoMax = 300;
 
+export const createPurchaseBillBodySupplierNameMax = 300;
 
 export const createPurchaseBillBodySupplierPhoneMax = 100;
 
@@ -967,9 +969,9 @@ export const createPurchaseBillBodyItemsItemLineTotalAedMin = 0;
 
 
 export const CreatePurchaseBillBody = zod.object({
-  "billNo": zod.string().min(1),
+  "billNo": zod.string().min(1).max(createPurchaseBillBodyBillNoMax),
   "billDate": zod.string(),
-  "supplierName": zod.string().min(1),
+  "supplierName": zod.string().min(1).max(createPurchaseBillBodySupplierNameMax),
   "supplierPhone": zod.string().max(createPurchaseBillBodySupplierPhoneMax).optional(),
   "supplierEmail": zod.string().email().max(createPurchaseBillBodySupplierEmailMax).optional(),
   "supplierAddress": zod.string().max(createPurchaseBillBodySupplierAddressMax).optional(),

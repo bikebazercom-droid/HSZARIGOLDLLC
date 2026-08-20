@@ -35,6 +35,13 @@ function pdfPages(pdfPath: string): string[] {
   return text.split("\f").filter((page) => page.trim().length > 0);
 }
 
+function pdfRawText(pdfPath: string): string {
+  return execFileSync("pdftotext", ["-raw", pdfPath, "-"], {
+    encoding: "utf8",
+    maxBuffer: 4_000_000,
+  });
+}
+
 function pdfInfo(pdfPath: string): { pages: number; width: number; height: number } {
   const info = execFileSync("pdfinfo", [pdfPath], { encoding: "utf8" });
   const pages = Number(info.match(/^Pages:\s+(\d+)$/m)?.[1]);
@@ -264,12 +271,29 @@ async function createPurchaseBill(
   options: {
     purchaseType?: "fixed" | "unfixed";
     paymentStatus?: "paid" | "unpaid" | "unfixed";
+    billNo?: string;
+    items?: Array<{
+      category: string;
+      grossWeightGrams: number;
+      purityPercent: number;
+      rateAedPerG: number;
+      makingChargeAed: number;
+      lineTotalAed: number;
+    }>;
   } = {},
 ): Promise<{ id: number; billNo: string }> {
-  const billNo = `PB-${supplierName.replace(/[^A-Z0-9]/gi, "").slice(0, 22)}`;
+  const billNo = options.billNo ?? `PB-${supplierName.replace(/[^A-Z0-9]/gi, "").slice(0, 22)}`;
   const purchaseType = options.purchaseType ?? "fixed";
   const paymentStatus = options.paymentStatus ?? "unpaid";
   const initialRate = purchaseType === "unfixed" ? 0 : 320;
+  const items = options.items ?? [{
+    category: "995",
+    grossWeightGrams: 10,
+    purityPercent: 99.5,
+    rateAedPerG: initialRate,
+    makingChargeAed: 0,
+    lineTotalAed: initialRate * 10,
+  }];
   const response = await page.request.post("/api/purchase-bills", {
     headers: fixtureHeaders(runId),
     data: {
@@ -282,14 +306,7 @@ async function createPurchaseBill(
       purchaseType,
       paymentStatus,
       notes: "Invoice-style purchase bill PDF regression fixture",
-      items: [{
-        category: "995",
-        grossWeightGrams: 10,
-        purityPercent: 99.5,
-        rateAedPerG: initialRate,
-        makingChargeAed: 0,
-        lineTotalAed: initialRate * 10,
-      }],
+      items,
     },
   });
   await expectSuccessful(response, `create purchase bill ${billNo}`);
@@ -478,6 +495,32 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
     }
     const purchaseBill = await createPurchaseBill(page, `${runTag} VENDOR`);
     purchaseBillIds.push(purchaseBill.id);
+    const statementBillNo = `PB-${runTag}-LONG-REFERENCE-2026-AUG-0001`;
+    const statementSupplier = `${runTag} INTERNATIONAL PRECIOUS METALS WHOLESALE VENDOR`;
+    const statementItems = Array.from({ length: 18 }, (_, index) => {
+      const grossWeightGrams = index === 0 ? 10.1234 : 1 + index / 10_000;
+      const purityPercent = index === 0 ? 99.512 : 99.5;
+      const rateAedPerG = index === 0 ? 320.1234 : 300 + index / 10_000;
+      return {
+        category: "995",
+        grossWeightGrams,
+        purityPercent,
+        rateAedPerG,
+        makingChargeAed: 0,
+        lineTotalAed: Number((grossWeightGrams * rateAedPerG).toFixed(2)),
+      };
+    });
+    const statementPurchaseBill = await createPurchaseBill(page, statementSupplier, {
+      billNo: statementBillNo,
+      items: statementItems,
+    });
+    purchaseBillIds.push(statementPurchaseBill.id);
+    const boundarySupplier = (`${runTag}-` + "W".repeat(300)).slice(0, 300);
+    const boundaryBillNo = (`PB-${runTag}-` + "W".repeat(300)).slice(0, 300);
+    const boundaryStatementBill = await createPurchaseBill(page, boundarySupplier, {
+      billNo: boundaryBillNo,
+    });
+    purchaseBillIds.push(boundaryStatementBill.id);
     const settledUnfixedBill = await createPurchaseBill(
       page,
       `${runTag} UNFIXED`,
@@ -490,6 +533,67 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
     );
     await expectSuccessful(settled, `settle unfixed purchase bill ${settledUnfixedBill.billNo}`);
     expect(((await settled.json()) as { totalAed: number }).totalAed).toBe(3184);
+
+    await test.step("purchase statement filters validate and open the selected PDF export", async () => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/purchase-bills");
+      const panel = page.getByTestId("purchase-statement-filters");
+      await expect(panel).toBeVisible();
+      const selects = panel.getByRole("combobox");
+      await expect(selects).toHaveCount(3);
+      await expect(selects.nth(0)).toContainText("All Suppliers");
+      await expect(selects.nth(1)).toContainText("All Categories");
+      await expect(selects.nth(2)).toContainText("All Time");
+      await expect(panel.getByText("No date restriction")).toBeVisible();
+      const downloadButton = panel.getByRole("button", { name: "Download Purchase Statement" });
+      await expect(downloadButton).toBeVisible();
+
+      await selects.nth(2).click();
+      await page.getByRole("option", { name: "Today", exact: true }).click();
+      const presetRange = panel.getByText(/^\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/);
+      await expect(presetRange).toBeVisible();
+      const [presetStart, presetEnd] = (await presetRange.textContent())!.split(" to ");
+      expect(presetStart).toBe(presetEnd);
+
+      await selects.nth(2).click();
+      await page.getByRole("option", { name: "Custom Date Range", exact: true }).click();
+      const dateInputs = panel.locator('input[type="date"]');
+      await expect(dateInputs).toHaveCount(2);
+      await dateInputs.nth(0).fill("2026-08-18");
+      await dateInputs.nth(1).fill("");
+      await downloadButton.click();
+      await expect(page.getByText("Choose both custom statement dates", { exact: true })).toBeVisible();
+
+      await dateInputs.nth(0).fill("2026-08-19");
+      await dateInputs.nth(1).fill("2026-08-18");
+      await downloadButton.click();
+      await expect(page.getByText("Start date must be on or before the end date", { exact: true })).toBeVisible();
+
+      await dateInputs.nth(0).fill("2026-08-18");
+      await selects.nth(1).click();
+      await page.getByRole("option", { name: "995", exact: true }).click();
+      const pdfResponsePromise = page.context().waitForEvent("response", {
+        predicate: (response) => response.url().includes("/api/purchase-bills/statement-pdf?"),
+      });
+      const popupPromise = page.waitForEvent("popup");
+      await downloadButton.click();
+      const [pdfResponse, popup] = await Promise.all([pdfResponsePromise, popupPromise]);
+      expect(pdfResponse.status()).toBe(200);
+      expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
+      const exportUrl = new URL(pdfResponse.url());
+      expect(exportUrl.searchParams.get("category")).toBe("995");
+      expect(exportUrl.searchParams.get("startDate")).toBe("2026-08-18");
+      expect(exportUrl.searchParams.get("endDate")).toBe("2026-08-18");
+      await popup.close();
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(downloadButton).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      const panelBox = await panel.boundingBox();
+      expect(panelBox).not.toBeNull();
+      expect(panelBox!.width).toBeLessThanOrEqual(390);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    });
 
     await test.step("oversized invoice remains one complete A4 page", async () => {
       await page.goto(`/invoices/${oversized.id}`);
@@ -579,7 +683,6 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(text).toContain(PURCHASE_BILL_SUPPLIER_CONTACT.address);
       for (const requiredText of [
         "Bill / Ref No:",
-        purchaseBill.billNo,
         "SUPPLIER / VENDOR DETAILS",
         `${runTag} VENDOR`,
         "Supplier / Party Name",
@@ -599,6 +702,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       ]) {
         expect(text).toContain(requiredText);
       }
+      expect(normalized(pdfRawText(path))).toContain(normalized(purchaseBill.billNo));
       for (const requiredOcr of [
         "CUSTOMERSSIGNATURE",
         "CHECKEDBY",
@@ -615,6 +719,83 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(firstPageQrDarkFraction(path), "purchase-bill location QR must be visible in the header").toBeGreaterThan(0.08);
     });
 
+    await test.step("filtered supplier purchase statement preserves precision and multi-page branding", async () => {
+      const params = new URLSearchParams({
+        supplier: statementSupplier,
+        category: "995",
+        startDate: "2026-08-18",
+        endDate: "2026-08-18",
+      });
+      const response = await page.request.get(`/api/purchase-bills/statement-pdf?${params}`);
+      await expectSuccessful(response, "download filtered supplier purchase statement");
+      expect(response.headers()["content-type"]).toContain("application/pdf");
+      expect(response.headers()["content-disposition"]).toContain("supplier-purchase-statement-");
+
+      const path = testInfo.outputPath("supplier-purchase-statement.pdf");
+      writeFileSync(path, await response.body());
+      const info = pdfInfo(path);
+      expect(info.width).toBeGreaterThan(info.height);
+      expect(info.pages).toBeGreaterThan(1);
+      const pages = pdfPages(path);
+      const text = pages.join("\n");
+      expectArabicBismillah(text);
+      for (const requiredText of [
+        "SUPPLIER PURCHASE STATEMENT",
+        "Supplier",
+        "Category",
+        "995",
+        "Period",
+        "2026-08-18 to 2026-08-18",
+        "Total Purchased Gross Weight",
+        "Total Net Pure Weight",
+        "Total Purchase Spend / Cash Outflow",
+        "Itemized Purchase Bills",
+        "Touch / Purity",
+        "10.1234",
+        "99.512%",
+        "10.0740",
+        "320.1234",
+      ]) {
+        expect(text).toContain(requiredText);
+      }
+      const rawText = normalized(pdfRawText(path));
+      expect(rawText).toContain(normalized(statementBillNo));
+      expect(rawText).toContain(normalized(statementSupplier));
+      expect(text).not.toContain("…");
+      for (const pageText of pages) {
+        expect(pageText).toContain("Bill / Ref No");
+        expect(pageText).toContain("Total Amount (AED)");
+      }
+      for (const continuationPage of pages.slice(0, -1)) {
+        expect(continuationPage).not.toContain("Authorised Signature");
+        expect(continuationPage).not.toContain("Thank you for your business!");
+      }
+      expect(pages.at(-1)).toContain("Authorised Signature");
+      expect(pages.at(-1)).toContain("Thank you for your business!");
+      const visual = finalPageVisualMetrics(path);
+      expect(visual.navyAtBottom, "purchase statement thank-you banner must be flush with the bottom edge").toBe(true);
+      expect(visual.goldAtBottom, "purchase statement gold rule must reach the absolute bottom edge").toBe(true);
+      expect(visual.authorisedStampDarkFraction, "purchase statement seal must be visible above the authorised signature").toBeGreaterThan(0.04);
+
+      const boundaryParams = new URLSearchParams({ supplier: boundarySupplier });
+      const boundaryResponse = await page.request.get(`/api/purchase-bills/statement-pdf?${boundaryParams}`);
+      await expectSuccessful(boundaryResponse, "download maximum-length purchase statement");
+      const boundaryPath = testInfo.outputPath("maximum-length-purchase-statement.pdf");
+      writeFileSync(boundaryPath, await boundaryResponse.body());
+      const boundaryRawText = normalized(pdfRawText(boundaryPath));
+      expect(boundaryRawText).toContain(normalized(boundarySupplier));
+      expect(boundaryRawText).toContain(normalized(boundaryBillNo));
+      expect(pdfPages(boundaryPath).join("\n")).not.toContain("…");
+
+      const rejectedResponse = await page.request.get(
+        `/api/purchase-bills/statement-pdf?supplier=${"W".repeat(301)}`,
+      );
+      expect(rejectedResponse.status()).toBe(400);
+      expect((await rejectedResponse.json()) as { error: string }).toEqual({
+        error: "supplier must not exceed 300 characters",
+      });
+    });
+
     await test.step("settled unfixed purchase bill keeps stored pure-weight totals", async () => {
       const response = await page.request.get(`/api/purchase-bills/${settledUnfixedBill.id}/pdf`);
       await expectSuccessful(response, `download settled unfixed purchase bill ${settledUnfixedBill.billNo}`);
@@ -622,7 +803,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       writeFileSync(path, await response.body());
 
       const text = pdfPages(path).join("\n");
-      expect(normalized(text)).toContain(normalized(settledUnfixedBill.billNo));
+      expect(normalized(pdfRawText(path))).toContain(normalized(settledUnfixedBill.billNo));
       expect(text).toContain("99.500%");
       expect(text).toContain("PAID IN CASH");
       expect(text).toContain("GOLD VALUE @ 320.000 / gram (AED)");

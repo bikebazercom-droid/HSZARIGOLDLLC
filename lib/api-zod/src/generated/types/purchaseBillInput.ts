@@ -10,10 +10,16 @@ import type { PurchaseBillInputPurchaseType } from './purchaseBillInputPurchaseT
 import type { PurchaseBillItemInput } from './purchaseBillItemInput';
 
 export interface PurchaseBillInput {
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
   billNo: string;
   billDate: string;
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
   supplierName: string;
   /** @maxLength 100 */
   supplierPhone?: string;

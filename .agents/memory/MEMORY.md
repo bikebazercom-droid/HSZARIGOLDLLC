@@ -15,3 +15,4 @@
 - [Suite run registry](suite-run-registry.md) — every destructive HTTP test suite registers created records by exact ID in the shared registry (`suite:` runs) and recovers abandoned runs at startup; never prefix-wide deletes.
 - [Purchase-bill location QR](purchase-bill-location-qr.md) — the invoice-style purchase-bill PDF bundles a static official-location QR; regenerate it when the business location changes.
 - [Browser PDF Arabic rendering](browser-pdf-arabic-rendering.md) — jsPDF shapes logical Amiri Arabic itself; `setR2L` double-reverses it, and extracted text may use presentation forms.
+- [Lossless PDFKit statement cells](pdfkit-statement-cells.md) — archival table text must use measured wrapping, bounded input, and page-fit guards; never ellipsis.
