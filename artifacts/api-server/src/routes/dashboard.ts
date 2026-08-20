@@ -276,18 +276,22 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
       SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN net_cost ELSE 0 END), 0)::text AS main_cogs,
              COALESCE(SUM(CASE WHEN category = 'silver' THEN net_cost ELSE 0 END), 0)::text AS silver_cogs
       FROM (
-        SELECT category, cost_aed::numeric AS net_cost
-        FROM inventory_consumptions
-        WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
+        SELECT ic.category, ic.cost_aed::numeric AS net_cost
+        FROM inventory_consumptions ic
+        JOIN invoices i ON i.id = ic.invoice_id
+        WHERE ${dashboardCategoryIsVisibleSql(sql`ic.category`)}
+          AND ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
         UNION ALL
-        SELECT category,
-               CASE WHEN consumed_grams::numeric > 0
-                    THEN cost_aed::numeric
-                         * GREATEST(consumed_grams::numeric - returned_grams::numeric, 0)
-                         / consumed_grams::numeric
+        SELECT wic.category,
+               CASE WHEN wic.consumed_grams::numeric > 0
+                    THEN wic.cost_aed::numeric
+                         * GREATEST(wic.consumed_grams::numeric - wic.returned_grams::numeric, 0)
+                         / wic.consumed_grams::numeric
                     ELSE 0 END AS net_cost
-        FROM wholesale_inventory_consumptions
-        WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
+        FROM wholesale_inventory_consumptions wic
+        JOIN wholesale_invoices wi ON wi.id = wic.wholesale_invoice_id
+        WHERE ${dashboardCategoryIsVisibleSql(sql`wic.category`)}
+          AND ${dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`)}
       ) costs
     `).then((r) => r.rows[0]),
     db.execute<{ category: string; purchased_grams: string }>(sql`
@@ -1001,7 +1005,7 @@ function parseStatementQuery(req: { query: unknown }): { startDate: string | nul
   return { startDate: rawStart, endDate: rawEnd, category: rawCategory && rawCategory !== "all" ? rawCategory : null };
 }
 
-async function loadStatementData(startDate: string | null, endDate: string | null, category: string | null) {
+export async function loadStatementData(startDate: string | null, endDate: string | null, category: string | null) {
   const bucketExpr = sql`(CASE WHEN TRIM(ii.description) = '995' THEN '995'
         WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
         ELSE ii.category END)`;
@@ -1025,6 +1029,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   }
   const salesWhere = sql.join(
     [
+      dashboardRetailInvoiceIsVisibleSql(sql`i.id`),
       dashboardCategoryIsVisibleSql(bucketExpr),
       ...(startDate ? [sql`i.created_at >= ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz`] : []),
       ...(endExclusive ? [sql`i.created_at < ${endExclusive}::timestamptz`] : []),
@@ -1034,6 +1039,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   );
   const wholesaleDeliveryWhere = sql.join(
     [
+      dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`),
       dashboardCategoryIsVisibleSql(sql`wii.category`),
       ...(startDate ? [sql`wi.invoice_date >= ${startDate}`] : []),
       ...(endDate ? [sql`wi.invoice_date <= ${endDate}`] : []),
@@ -1043,6 +1049,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   );
   const wholesaleFixWhere = sql.join(
     [
+      dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`),
       dashboardCategoryIsVisibleSql(sql`wii.category`),
       ...(startDate ? [sql`ws.settlement_date >= ${startDate}`] : []),
       ...(endDate ? [sql`ws.settlement_date <= ${endDate}`] : []),
@@ -1052,6 +1059,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   );
   const wholesaleReturnWhere = sql.join(
     [
+      dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`),
       dashboardCategoryIsVisibleSql(sql`wii.category`),
       ...(startDate ? [sql`wr.return_date >= ${startDate}`] : []),
       ...(endDate ? [sql`wr.return_date <= ${endDate}`] : []),
@@ -1083,8 +1091,10 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       FROM invoice_items ii
       JOIN invoices i ON i.id = ii.invoice_id
       JOIN LATERAL (
-        SELECT COALESCE(SUM(total_price::numeric), 0) AS sum_items
-        FROM invoice_items WHERE invoice_id = i.id
+        SELECT COALESCE(SUM(denominator_ii.total_price::numeric), 0) AS sum_items
+        FROM invoice_items denominator_ii
+        WHERE denominator_ii.invoice_id = i.id
+          AND ${dashboardCategoryIsVisibleSql(sql`denominator_ii.category`)}
       ) s ON TRUE
       LEFT JOIN LATERAL (
         SELECT SUM(cost_aed::numeric) AS exact_cogs,
