@@ -186,7 +186,7 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
 
   return (
     <Dialog open={invoiceId !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[100vw] sm:max-w-5xl h-[100dvh] sm:h-[90vh] p-0 flex flex-col gap-0 overflow-hidden bg-muted/30 print:p-0 print:border-none print:shadow-none print:bg-white print:overflow-visible">
+      <DialogContent className="h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-5xl p-0 flex flex-col gap-0 overflow-hidden bg-muted/30 sm:h-[90vh] print:p-0 print:border-none print:shadow-none print:bg-white print:overflow-visible">
         <DialogHeader className="p-4 border-b bg-background no-print shadow-sm z-10 shrink-0 print:hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -220,7 +220,7 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto p-4 sm:p-8 print:p-0 print:overflow-visible relative" data-invoice-scroll>
+        <div className="relative min-h-0 flex-1 overflow-auto p-4 sm:p-8 print:p-0 print:overflow-visible" data-invoice-scroll>
           <style>{`
             @media print {
               body > *:not([data-radix-portal]) {

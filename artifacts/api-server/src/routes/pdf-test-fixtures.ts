@@ -1,6 +1,13 @@
 import { Router, type IRouter, type Request } from "express";
 import { and, eq, ne, notLike } from "drizzle-orm";
-import { db, pdfTestFixturesTable, pdfTestRunsTable, usersTable } from "@workspace/db";
+import {
+  db,
+  pdfTestFixturesTable,
+  pdfTestRunsTable,
+  usersTable,
+  wholesaleInvoicesTable,
+  wholesaleTradersTable,
+} from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -171,6 +178,98 @@ router.post("/test-fixtures/pdf/abandon", requireAdmin, async (req, res): Promis
     .returning({ runId: pdfTestRunsTable.runId });
   if (!abandoned) {
     res.sendStatus(404);
+    return;
+  }
+  res.sendStatus(204);
+});
+
+router.delete("/test-fixtures/pdf/wholesale-traders/:id", requireAdmin, async (req, res): Promise<void> => {
+  const currentRunId = runIdFromRequest(req);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const traderId = Number.parseInt(rawId, 10);
+  const requestedOwnerRunId = typeof req.query.runId === "string" ? req.query.runId : currentRunId;
+  if (
+    !currentRunId
+    || !requestedOwnerRunId
+    || !/^[a-f0-9]{32}$/.test(requestedOwnerRunId)
+    || !Number.isSafeInteger(traderId)
+    || traderId <= 0
+    || !(await isEphemeralPdfAdmin(req.session.userId))
+  ) {
+    res.sendStatus(403);
+    return;
+  }
+
+  const outcome = await db.transaction(async (tx) => {
+    const [currentRun] = await tx.select({
+      runId: pdfTestRunsTable.runId,
+      ownerUserId: pdfTestRunsTable.ownerUserId,
+      status: pdfTestRunsTable.status,
+    })
+      .from(pdfTestRunsTable)
+      .where(eq(pdfTestRunsTable.runId, currentRunId))
+      .for("update");
+    if (
+      !currentRun
+      || currentRun.ownerUserId !== req.session.userId
+      || currentRun.status !== "active"
+    ) {
+      return "forbidden" as const;
+    }
+
+    const ownerRun = requestedOwnerRunId === currentRunId
+      ? currentRun
+      : (await tx.select({
+          runId: pdfTestRunsTable.runId,
+          status: pdfTestRunsTable.status,
+        })
+          .from(pdfTestRunsTable)
+          .where(eq(pdfTestRunsTable.runId, requestedOwnerRunId))
+          .for("update"))[0];
+    if (
+      !ownerRun
+      || (requestedOwnerRunId === currentRunId
+        ? ownerRun.status !== "active"
+        : ownerRun.status !== "abandoned")
+    ) {
+      return "forbidden" as const;
+    }
+
+    const [registered] = await tx.select({ id: pdfTestFixturesTable.id })
+      .from(pdfTestFixturesTable)
+      .where(and(
+        eq(pdfTestFixturesTable.runId, requestedOwnerRunId),
+        eq(pdfTestFixturesTable.entityType, "wholesale_trader"),
+        eq(pdfTestFixturesTable.entityId, traderId),
+      ))
+      .for("update");
+    if (!registered) return "not_found" as const;
+
+    const [linkedInvoice] = await tx.select({ id: wholesaleInvoicesTable.id })
+      .from(wholesaleInvoicesTable)
+      .where(eq(wholesaleInvoicesTable.traderId, traderId))
+      .limit(1);
+    if (linkedInvoice) return "conflict" as const;
+
+    await tx.delete(wholesaleTradersTable).where(eq(wholesaleTradersTable.id, traderId));
+    await tx.delete(pdfTestFixturesTable).where(and(
+      eq(pdfTestFixturesTable.runId, requestedOwnerRunId),
+      eq(pdfTestFixturesTable.entityType, "wholesale_trader"),
+      eq(pdfTestFixturesTable.entityId, traderId),
+    ));
+    return "deleted" as const;
+  });
+
+  if (outcome === "forbidden") {
+    res.sendStatus(403);
+    return;
+  }
+  if (outcome === "not_found") {
+    res.sendStatus(404);
+    return;
+  }
+  if (outcome === "conflict") {
+    res.status(409).json({ error: "Delete registered wholesale invoices before their trader fixture" });
     return;
   }
   res.sendStatus(204);

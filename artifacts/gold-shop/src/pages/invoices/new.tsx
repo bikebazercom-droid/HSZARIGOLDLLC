@@ -1222,7 +1222,7 @@ export default function NewInvoice() {
 
         {/* Modal for adding a new trader */}
         <Dialog open={isAddingWholesaleTrader} onOpenChange={setIsAddingWholesaleTrader}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[500px] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Add New Wholesaler</DialogTitle>
               <DialogDescription>

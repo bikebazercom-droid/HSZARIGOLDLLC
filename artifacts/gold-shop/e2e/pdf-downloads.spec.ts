@@ -26,6 +26,7 @@ const TEST_ADMIN = {
 
 type CreatedRecord = { id: number };
 type Rgb = [number, number, number];
+type OwnedFixture = { id: number; runId: string };
 
 function pdfPages(pdfPath: string): string[] {
   const text = execFileSync("pdftotext", ["-layout", pdfPath, "-"], {
@@ -175,6 +176,8 @@ async function removeOwnedFixtures(
   invoiceIds: number[],
   purchaseIds: number[],
   purchaseBillIds: number[] = [],
+  wholesaleInvoices: OwnedFixture[] = [],
+  wholesaleTraders: OwnedFixture[] = [],
 ): Promise<void> {
   const errors: string[] = [];
   for (const id of [...purchaseBillIds].reverse()) {
@@ -193,10 +196,26 @@ async function removeOwnedFixtures(
       errors.push(`invoice ${id}: ${deleted.status()} ${await deleted.text()}`);
     }
   }
+  for (const fixture of [...wholesaleInvoices].reverse()) {
+    const deleted = await page.request.delete(`/api/wholesale/invoices/${fixture.id}`);
+    if (![204, 404].includes(deleted.status())) {
+      errors.push(`wholesale invoice ${fixture.id}: ${deleted.status()} ${await deleted.text()}`);
+    }
+  }
   for (const id of [...purchaseIds].reverse()) {
     const deleted = await page.request.delete(`/api/stock/purchases/${id}`);
     if (![204, 404].includes(deleted.status())) {
       errors.push(`purchase ${id}: ${deleted.status()} ${await deleted.text()}`);
+    }
+  }
+  for (const fixture of [...wholesaleTraders].reverse()) {
+    const query = new URLSearchParams({ runId: fixture.runId });
+    const deleted = await page.request.delete(
+      `/api/test-fixtures/pdf/wholesale-traders/${fixture.id}?${query}`,
+      { headers: fixtureHeaders(runId) },
+    );
+    if (![204, 404].includes(deleted.status())) {
+      errors.push(`wholesale trader ${fixture.id}: ${deleted.status()} ${await deleted.text()}`);
     }
   }
   if (errors.length > 0) {
@@ -352,23 +371,42 @@ function firstPageQrDarkFraction(pdfPath: string): number {
   }
 }
 
-async function recoverAbandonedFixtures(page: Page): Promise<{ invoices: number; purchases: number; runIds: string[] }> {
+async function recoverAbandonedFixtures(page: Page): Promise<{
+  invoices: number;
+  purchases: number;
+  wholesaleInvoices: number;
+  wholesaleTraders: number;
+  runIds: string[];
+}> {
   const listed = await page.request.get("/api/test-fixtures/pdf/abandoned", {
     headers: fixtureHeaders(runId),
   });
   await expectSuccessful(listed, "list abandoned PDF fixtures");
   const { fixtures, runIds } = await listed.json() as {
-    fixtures: { runId: string; entityType: "invoice" | "stock_purchase" | "purchase_bill"; entityId: number }[];
+    fixtures: {
+      runId: string;
+      entityType:
+        | "invoice"
+        | "stock_purchase"
+        | "purchase_bill"
+        | "wholesale_invoice"
+        | "wholesale_trader";
+      entityId: number;
+    }[];
     runIds: string[];
   };
   const invoices = fixtures.filter((fixture) => fixture.entityType === "invoice");
   const purchases = fixtures.filter((fixture) => fixture.entityType === "stock_purchase");
   const purchaseBills = fixtures.filter((fixture) => fixture.entityType === "purchase_bill");
+  const wholesaleInvoices = fixtures.filter((fixture) => fixture.entityType === "wholesale_invoice");
+  const wholesaleTraders = fixtures.filter((fixture) => fixture.entityType === "wholesale_trader");
   await removeOwnedFixtures(
     page,
     invoices.map((fixture) => fixture.entityId),
     purchases.map((fixture) => fixture.entityId),
     purchaseBills.map((fixture) => fixture.entityId),
+    wholesaleInvoices.map((fixture) => ({ id: fixture.entityId, runId: fixture.runId })),
+    wholesaleTraders.map((fixture) => ({ id: fixture.entityId, runId: fixture.runId })),
   );
   if (runIds.length > 0) {
     const completed = await page.request.post("/api/test-fixtures/pdf/recovery-complete", {
@@ -377,7 +415,13 @@ async function recoverAbandonedFixtures(page: Page): Promise<{ invoices: number;
     });
     await expectSuccessful(completed, "complete abandoned PDF fixture recovery");
   }
-  return { invoices: invoices.length, purchases: purchases.length, runIds };
+  return {
+    invoices: invoices.length,
+    purchases: purchases.length,
+    wholesaleInvoices: wholesaleInvoices.length,
+    wholesaleTraders: wholesaleTraders.length,
+    runIds,
+  };
 }
 
 async function abandonRun(page: Page, runIdToAbandon: string): Promise<void> {
@@ -435,7 +479,7 @@ function expectStatementBranding(pages: string[], ocrPages: string[]): void {
   expect(ocrPages.at(-1)).toContain("GRANDTOTAL");
 }
 
-test("browser PDF downloads keep branding, frames, continuation headings, totals, and signatures", async ({ page }, testInfo) => {
+test("browser PDF downloads and wholesale preview keep their registered journeys stable", async ({ page }, testInfo) => {
   const runTag = `${FIXTURE_PREFIX}${Date.now().toString(36).toUpperCase()}`;
   const oversizedCustomer = `${runTag} OVERSIZED`;
   const salesCustomer = `${runTag} SALE`;
@@ -444,6 +488,8 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
   const invoiceIds: number[] = [];
   const purchaseIds: number[] = [];
   const purchaseBillIds: number[] = [];
+  const wholesaleInvoiceIds: number[] = [];
+  const wholesaleTraderIds: number[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   await login(page);
@@ -592,6 +638,218 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       const panelBox = await panel.boundingBox();
       expect(panelBox).not.toBeNull();
       expect(panelBox!.width).toBeLessThanOrEqual(390);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    });
+
+    await test.step("wholesale registration selects the trader and opens a frozen same-page PDF preview", async () => {
+      const traderName = `${runTag} GOLD TRADING`;
+      const traderContact = `SAMIR ${runTag}`;
+      const traderPhone = "+971 50 765 4321";
+      const traderEmail = `${runTag.toLowerCase()}@example.test`;
+      const traderAddress = `SHOP 42 ${runTag} GOLD SOUQ DEIRA DUBAI UAE`;
+
+      await page.route("**/api/wholesale/**", async (route) => {
+        if (route.request().method() === "POST") {
+          await route.continue({
+            headers: {
+              ...route.request().headers(),
+              ...fixtureHeaders(runId),
+            },
+          });
+          return;
+        }
+        await route.continue();
+      });
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/invoices/new");
+      await page.getByRole("tab", { name: "Wholesale / Trader", exact: true }).click();
+      await expect(page).toHaveURL(/\/invoices\/new$/);
+
+      const traderField = page.getByText("Trader", { exact: true }).locator("..");
+      const traderSelect = traderField.getByRole("combobox");
+      await traderSelect.click();
+      await page.getByRole("option", { name: "Add New Wholesaler", exact: true }).click();
+
+      const registrationDialog = page.getByRole("dialog", { name: "Add New Wholesaler" });
+      await expect(registrationDialog).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await registrationDialog.evaluate(async (element) => {
+        await Promise.all(element.getAnimations().map(async (animation) => {
+          try {
+            await animation.finished;
+          } catch {
+            // A responsive layout change may cancel an in-flight open animation.
+          }
+        }));
+      });
+      const registrationBox = await registrationDialog.boundingBox();
+      expect(registrationBox).not.toBeNull();
+      expect(registrationBox!.x).toBeGreaterThanOrEqual(0);
+      expect(registrationBox!.x + registrationBox!.width).toBeLessThanOrEqual(391);
+      expect(registrationBox!.height).toBeLessThanOrEqual(844);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+      await registrationDialog.getByLabel(/Company \/ Firm Name/).fill(traderName);
+      await registrationDialog.getByLabel(/Full Name \(Contact Person\)/).fill(traderContact);
+      await registrationDialog.getByLabel("Phone Number").fill(traderPhone);
+      await registrationDialog.getByLabel("Email Address").fill(traderEmail);
+      await registrationDialog.getByLabel("Full Address / Location Details").fill(traderAddress);
+
+      const traderResponsePromise = page.waitForResponse((response) => (
+        new URL(response.url()).pathname.endsWith("/api/wholesale/traders")
+        && response.request().method() === "POST"
+      ));
+      await registrationDialog.getByRole("button", { name: "Save Trader", exact: true }).click();
+      const traderResponse = await traderResponsePromise;
+      expect(traderResponse.status()).toBe(201);
+      const trader = await traderResponse.json() as {
+        id: number;
+        name: string;
+        contactPerson: string | null;
+        phone: string | null;
+        email: string | null;
+        address: string | null;
+      };
+      wholesaleTraderIds.push(trader.id);
+      expect(trader).toMatchObject({
+        name: traderName,
+        contactPerson: traderContact,
+        phone: traderPhone,
+        email: traderEmail,
+        address: traderAddress,
+      });
+      await expect(registrationDialog).toBeHidden();
+      await expect(traderSelect).toContainText(traderName);
+      await expect(page).toHaveURL(/\/invoices\/new$/);
+
+      const beforeInvoice = await page.request.get(`/api/wholesale/invoices?traderId=${trader.id}`);
+      await expectSuccessful(beforeInvoice, "check that saving a trader did not create an invoice");
+      expect(await beforeInvoice.json()).toEqual([]);
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      const itemRow = page.locator("table tbody tr").first();
+      await itemRow.getByRole("combobox").click();
+      await page.getByRole("option", { name: "GOLD 9999", exact: true }).click();
+      const itemNumberInputs = itemRow.locator('input[type="number"]');
+      await itemNumberInputs.nth(0).fill("12.3456");
+      await itemNumberInputs.nth(1).fill("7.50");
+
+      await page.getByRole("button", { name: "Fixed Gold", exact: true }).click();
+      const metalRateField = page.getByText("Metal Rate (AED/g)", { exact: true }).locator("..");
+      await metalRateField.locator('input[type="number"]').fill("410.25");
+      await page.getByPlaceholder("Optional delivery notes").fill(`Frozen preview ${runTag}`);
+
+      const invoiceResponsePromise = page.waitForResponse((response) => (
+        new URL(response.url()).pathname.endsWith("/api/wholesale/invoices")
+        && response.request().method() === "POST"
+      ));
+      await page.getByRole("button", { name: "Generate Wholesale Invoice", exact: true }).click();
+      const invoiceResponse = await invoiceResponsePromise;
+      expect(invoiceResponse.status()).toBe(201);
+      const invoice = await invoiceResponse.json() as {
+        id: number;
+        invoiceNumber: string;
+        pricingType: "fixed" | "unfixed";
+        paymentMode: "cash" | "card" | "bank_transfer" | null;
+        traderName: string;
+        traderContactPerson: string | null;
+        traderPhone: string | null;
+        traderEmail: string | null;
+        traderAddress: string | null;
+      };
+      wholesaleInvoiceIds.push(invoice.id);
+      expect(invoice).toMatchObject({
+        pricingType: "fixed",
+        paymentMode: null,
+        traderName,
+        traderContactPerson: traderContact,
+        traderPhone,
+        traderEmail,
+        traderAddress,
+      });
+      await expect(page).toHaveURL(/\/invoices\/new$/);
+
+      const changedTrader = await page.request.patch(`/api/wholesale/traders/${trader.id}`, {
+        data: {
+          contactPerson: "CHANGED AFTER INVOICE",
+          phone: "+971 50 000 0000",
+          email: "changed-after-invoice@example.test",
+          address: "CHANGED AFTER INVOICE",
+        },
+      });
+      await expectSuccessful(changedTrader, "change the live trader after taking the invoice snapshot");
+      const frozenInvoiceResponse = await page.request.get(`/api/wholesale/invoices/${invoice.id}`);
+      await expectSuccessful(frozenInvoiceResponse, "reload the frozen wholesale invoice");
+      expect(await frozenInvoiceResponse.json()).toMatchObject({
+        traderName,
+        traderContactPerson: traderContact,
+        traderPhone,
+        traderEmail,
+        traderAddress,
+        pricingType: "fixed",
+        paymentMode: null,
+      });
+
+      const previewDialog = page.getByRole("dialog", { name: `Invoice ${invoice.invoiceNumber}` });
+      await expect(previewDialog).toBeVisible();
+      const previewDocument = previewDialog.locator("[data-invoice-doc]");
+      await expect(previewDocument).toContainText(traderName);
+      await expect(previewDocument).toContainText(traderContact);
+      await expect(previewDocument).toContainText(traderPhone);
+      await expect(previewDocument).toContainText(traderEmail);
+      await expect(previewDocument).toContainText(traderAddress);
+      await expect(previewDocument.getByText("Pricing Type:", { exact: true }).first()).toBeVisible();
+      await expect(previewDocument.getByText("Fixed Gold Pricing", { exact: true }).first()).toBeVisible();
+      await expect(previewDocument.getByText("Payment Mode:", { exact: true }).first()).toBeVisible();
+      await expect(previewDocument.getByText("Ledger Posting (Legacy)", { exact: true }).first()).toBeVisible();
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await previewDialog.evaluate(async (element) => {
+        await Promise.all(element.getAnimations().map(async (animation) => {
+          try {
+            await animation.finished;
+          } catch {
+            // A responsive layout change may cancel an in-flight open animation.
+          }
+        }));
+      });
+      const previewBox = await previewDialog.boundingBox();
+      expect(previewBox).not.toBeNull();
+      expect(previewBox!.x).toBeGreaterThanOrEqual(0);
+      expect(previewBox!.x + previewBox!.width).toBeLessThanOrEqual(391);
+      expect(previewBox!.height).toBeLessThanOrEqual(844);
+      const previewScroll = previewDialog.locator("[data-invoice-scroll]");
+      const previewScrollBox = await previewScroll.boundingBox();
+      expect(previewScrollBox).not.toBeNull();
+      expect(previewScrollBox!.x).toBeGreaterThanOrEqual(0);
+      expect(previewScrollBox!.x + previewScrollBox!.width).toBeLessThanOrEqual(391);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+      const wholesalePdfPath = await downloadPdf(
+        page,
+        "Download PDF",
+        "wholesale-invoice-preview.pdf",
+        testInfo,
+      );
+      const wholesalePdfInfo = pdfInfo(wholesalePdfPath);
+      expect(wholesalePdfInfo.pages).toBe(1);
+      expect(wholesalePdfInfo.width).toBeLessThan(wholesalePdfInfo.height);
+      const wholesaleOcr = normalized(ocrPdf(wholesalePdfPath));
+      for (const { label, text } of [
+        { label: "trader company prefix", text: `${runTag} GOLD` },
+        { label: "trader company suffix", text: "TRADING" },
+        { label: "trader contact", text: "SAMIR" },
+        { label: "trader phone", text: traderPhone },
+        { label: "trader email domain", text: "example.test" },
+        { label: "trader address shop", text: "SHOP 42" },
+        { label: "trader address market", text: "GOLD SOUQ DEIRA" },
+        { label: "trader address city", text: "DUBAI UAE" },
+        { label: "pricing type", text: "Fixed Gold Pricing" },
+        { label: "payment mode", text: "Ledger Posting (Legacy)" },
+      ]) {
+        expect(wholesaleOcr, `wholesale PDF is missing ${label}: ${text}`).toContain(normalized(text));
+      }
       await page.setViewportSize({ width: 1440, height: 1000 });
     });
 
@@ -840,9 +1098,37 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(ocr).toContain("GRANDTOTAL");
     });
 
+    await test.step("registered wholesale invoice and trader IDs are cleaned exactly", async () => {
+      const invoiceIdsToVerify = [...wholesaleInvoiceIds];
+      const traderIdsToVerify = [...wholesaleTraderIds];
+      await removeOwnedFixtures(
+        page,
+        [],
+        [],
+        [],
+        invoiceIdsToVerify.map((id) => ({ id, runId })),
+        traderIdsToVerify.map((id) => ({ id, runId })),
+      );
+      for (const id of invoiceIdsToVerify) {
+        expect((await page.request.get(`/api/wholesale/invoices/${id}`)).status()).toBe(404);
+      }
+      for (const id of traderIdsToVerify) {
+        expect((await page.request.get(`/api/wholesale/traders/${id}`)).status()).toBe(404);
+      }
+      wholesaleInvoiceIds.length = 0;
+      wholesaleTraderIds.length = 0;
+    });
+
     expect(pageErrors, `uncaught browser errors: ${pageErrors.join("\n")}`).toEqual([]);
   } finally {
-    await removeOwnedFixtures(page, invoiceIds, purchaseIds, purchaseBillIds);
+    await removeOwnedFixtures(
+      page,
+      invoiceIds,
+      purchaseIds,
+      purchaseBillIds,
+      wholesaleInvoiceIds.map((id) => ({ id, runId })),
+      wholesaleTraderIds.map((id) => ({ id, runId })),
+    );
     const completed = await page.request.post("/api/test-fixtures/pdf/complete", {
       headers: fixtureHeaders(runId),
     });

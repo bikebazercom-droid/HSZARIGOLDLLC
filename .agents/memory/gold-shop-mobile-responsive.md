@@ -12,3 +12,9 @@ The app (dashboard, invoices list/new/detail, /tv) was made mobile-responsive wi
 **How to apply:** Any new print/PDF-exported document component should follow the same wrapper pattern — fixed width + own `overflow-x-auto` wrapper — rather than trying to make the print layout itself responsive.
 
 Other pages (dashboard, invoices list, invoice line-item entry table) use plain Tailwind responsive classes: headers stack `flex-col sm:flex-row`, data tables sit in `overflow-x-auto` wrappers (not `overflow-hidden`, which clips content instead of scrolling it), and side-by-side detail cards use `grid-cols-1 lg:grid-cols-2`.
+
+**Dialogs with print-preview content need their own viewport containment.** Give the modal shell a viewport-relative width and height with a small gutter, and give its flex-based scrolling body `min-h-0`; otherwise the document’s intrinsic A4 height can expand or clip the dialog on phones.
+
+**Why:** The preview document must retain its fixed print dimensions, but the surrounding mobile dialog must stay inside the visible viewport and let only its inner body scroll.
+
+**How to apply:** Preserve the document’s own horizontal-scroll wrapper; constrain the dialog separately and use a shrinkable (`min-h-0`) flex child for the dialog scroll area.
