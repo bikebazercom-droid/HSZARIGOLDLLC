@@ -1,9 +1,21 @@
-import { pgTable, serial, timestamp, numeric, text, boolean } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  integer,
+  numeric,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const pricesTable = pgTable("prices", {
   id: serial("id").primaryKey(),
+  singletonKey: integer("singleton_key").notNull().default(1),
   goldPricePerGram: numeric("gold_price_per_gram", { precision: 12, scale: 4 }).notNull().default("320.00"),
   silverPricePerGram: numeric("silver_price_per_gram", { precision: 12, scale: 4 }).notNull().default("4.50"),
   goldJewelryRate: numeric("gold_jewelry_rate", { precision: 12, scale: 4 }).notNull().default("320.00"),
@@ -19,7 +31,10 @@ export const pricesTable = pgTable("prices", {
   customDescriptions: text("custom_descriptions").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   manualInvoiceMode: boolean("manual_invoice_mode").notNull().default(false),
-});
+}, (table) => [
+  uniqueIndex("prices_singleton_key_unique").on(table.singletonKey),
+  check("prices_singleton_key_check", sql`${table.singletonKey} = 1`),
+]);
 
 export const insertPricesSchema = createInsertSchema(pricesTable).omit({ id: true, updatedAt: true });
 export type InsertPrices = z.infer<typeof insertPricesSchema>;

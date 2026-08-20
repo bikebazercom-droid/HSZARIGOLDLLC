@@ -270,8 +270,8 @@ export default function Prices() {
   }
 
   const assetCards: Array<{ label: string; sublabel: string; image: string; fieldKey: RateKey }> = [
-    { label: "TT. BAR",           sublabel: "Purity 0.9999 — Rate per 1 Gram",              image: tenTolaBarImg,    fieldKey: "ttBar24kRate" },
-    { label: "GOLD",              sublabel: "Purity 0.9999 — Rate per 1 Gram",              image: singleGoldBarImg, fieldKey: "gold9999Rate" },
+    { label: "TEN TOLA BAR",      sublabel: "Purity 0.9999 — Rate per 1 Gram",              image: tenTolaBarImg,    fieldKey: "ttBar24kRate" },
+    { label: "GOLD 9999",         sublabel: "Purity 0.9999 — Rate per 1 Gram",              image: singleGoldBarImg, fieldKey: "gold9999Rate" },
     { label: "GOLD KG",           sublabel: "Purity 0.9999 — Rate per 1 Gram",              image: singleGoldBarImg, fieldKey: "goldKg9999Rate" },
     { label: "KG BAR",            sublabel: "Purity 0.995 — Rate per 1 Gram",               image: goldKiloBrickImg, fieldKey: "kgBarRate" },
     { label: "Silver (0.999)",    sublabel: "Purity 0.999 — Rate per 1 Gram",               image: goldBarStackImg,  fieldKey: "silverPricePerGram" },

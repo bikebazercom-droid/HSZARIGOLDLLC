@@ -437,7 +437,7 @@ paths:
           description: Stock category bucket ("995" is its own bucket; gold_jewelry_22k covers all jewelry karats)
           schema:
             type: string
-            enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+            enum: [gold_9999, ten_tola_bar, kg_bar, "995", gold_jewelry_22k, silver]
       responses:
         "200":
           description: List of invoices
@@ -820,7 +820,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+            enum: [gold_9999, ten_tola_bar, kg_bar, "995", gold_jewelry_22k, silver]
       responses:
         "200":
           description: Sales report rows and summary matching the active filters
@@ -1695,7 +1695,7 @@ components:
           description: "spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed."
         weightGrams:
           type: ["number", "null"]
-          description: Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.
+          description: Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.
         weightLabel:
           type: string
           description: Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).
@@ -1787,7 +1787,7 @@ components:
       properties:
         category:
           type: string
-          enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+          enum: [gold_9999, ten_tola_bar, kg_bar, "995", gold_jewelry_22k, silver]
         supplierName:
           type: string
           minLength: 1
@@ -1872,7 +1872,7 @@ components:
       properties:
         category:
           type: string
-          enum: [gold, tt_bar, kg_bar, "995", gold_jewelry_22k, silver]
+          enum: [gold_9999, ten_tola_bar, kg_bar, "995", gold_jewelry_22k, silver]
         grossWeightGrams:
           type: number
           exclusiveMinimum: 0

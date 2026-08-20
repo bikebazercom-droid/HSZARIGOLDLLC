@@ -44,7 +44,7 @@ interface LineDraft {
   rate: string;
   making: string;
 }
-const emptyLine = (): LineDraft => ({ category: "gold", grossWeight: "", purity: "100", rate: "", making: "" });
+const emptyLine = (): LineDraft => ({ category: "gold_9999", grossWeight: "", purity: "100", rate: "", making: "" });
 
 function lineCalc(l: LineDraft) {
   const gross = parseFloat(l.grossWeight) || 0;

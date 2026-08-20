@@ -1,4 +1,5 @@
 import { createBrandedPdf, PDF_BRAND } from "./pdfBranding.js";
+import { STOCK_CATEGORY_LABEL } from "./stockCategories.js";
 
 export interface PurchaseStatementRow {
   billDate: string;
@@ -21,14 +22,7 @@ export interface PurchaseStatementFilters {
   endDate: string | null;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  gold: "GOLD",
-  tt_bar: "TT Bar",
-  kg_bar: "KG Bar",
-  "995": "995",
-  gold_jewelry_22k: "Gold Jewelry 22K",
-  silver: "Silver",
-};
+const CATEGORY_LABEL: Record<string, string> = STOCK_CATEGORY_LABEL;
 
 function formatNumber(value: number, fractionDigits: number): string {
   return value.toLocaleString("en-AE", {

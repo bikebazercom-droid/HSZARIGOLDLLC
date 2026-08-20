@@ -12,10 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 
-const PRESET_CATEGORIES = ["gold_jewelry", "tt_bar", "kg_bar", "silver"];
+const PRESET_CATEGORIES = ["gold_jewelry", "ten_tola_bar", "kg_bar", "silver"];
 const CATEGORY_LABELS: Record<string, string> = {
   gold_jewelry: "Gold Jewelry",
-  tt_bar: "TT Bar",
+  ten_tola_bar: "TEN TOLA BAR",
   kg_bar: "KG Bar",
   silver: "Silver",
 };

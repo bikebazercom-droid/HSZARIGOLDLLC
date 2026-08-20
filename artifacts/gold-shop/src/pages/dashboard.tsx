@@ -25,8 +25,8 @@ import {
 
 const STATEMENT_CATEGORIES: [string, string][] = [
   ["all", "All Categories"],
-  ["gold", "GOLD"],
-  ["tt_bar", "TT Bar"],
+  ["gold_9999", "GOLD 9999"],
+  ["ten_tola_bar", "TEN TOLA BAR"],
   ["kg_bar", "KG Bar"],
   ["995", "995"],
   ["gold_jewelry_22k", "Gold Jewelry 22K"],

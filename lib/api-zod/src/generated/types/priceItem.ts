@@ -14,7 +14,7 @@ export interface PriceItem {
   /** spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed. */
   formulaType: PriceItemFormulaType;
   /**
-     * Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.
+     * Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.
      * @nullable
      */
   weightGrams?: number | null;

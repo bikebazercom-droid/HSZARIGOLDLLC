@@ -9,8 +9,8 @@ import { consumeFifo } from "../src/services/inventoryEngine";
 function itemStockCategory(description: string, category: string | null): string | null {
   if (description.trim() === "995") return "995";
   switch (category) {
-    case "gold": return "gold";
-    case "tt_bar": return "tt_bar";
+    case "gold_9999": return "gold_9999";
+    case "ten_tola_bar": return "ten_tola_bar";
     case "kg_bar": return "kg_bar";
     case "silver": return "silver";
     case "gold_jewelry": return "gold_jewelry_22k";

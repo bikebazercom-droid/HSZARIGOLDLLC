@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { tenTolaPurityMultiplier } from "@/lib/invoice-category-rates";
 
 interface LineItem {
   id: string;
@@ -71,8 +72,8 @@ interface PricesData {
 // Names use the "(purity)" suffix convention so staff can see the fineness
 // at a glance and the rate resolver can match unambiguously.
 const LIVE_ASSET_DESCRIPTIONS = [
-  "TT. BAR (0.9999)",
-  "GOLD (0.9999)",
+  "TEN TOLA BAR (0.9999)",
+  "GOLD 9999 (0.9999)",
   "KG BAR (0.9999)",
   "KG BAR (0.995)",
   "995",
@@ -85,8 +86,8 @@ const LIVE_ASSET_DESCRIPTIONS = [
 // Visual-only display labels for the dropdown — underlying values (above) stay
 // canonical so rate resolution is unaffected.
 const DESC_DISPLAY_LABEL: Record<string, string> = {
-  "TT. BAR (0.9999)": "TT. BAR",
-  "GOLD (0.9999)":    "GOLD",
+  "TEN TOLA BAR (0.9999)": "TEN TOLA BAR",
+  "GOLD 9999 (0.9999)":    "GOLD 9999",
   "KG BAR (0.9999)":  "GOLD KG",
   "KG BAR (0.995)":   "KG BAR",
 };
@@ -100,9 +101,9 @@ const DESC_DISPLAY_LABEL: Record<string, string> = {
 // selected (see calcItem), never by this initial suggestion.
 const DESC_TO_PURITY: Record<string, string> = {
   // ── Canonical item names ─────────────────────────────────────────────────
-  "TT. BAR (0.995)":  "0.995",
-  "TT. BAR (0.9999)": "0.9999",
-  "GOLD (0.9999)":    "0.9999",
+  "TEN TOLA BAR (0.995)":  "0.995",
+  "TEN TOLA BAR (0.9999)": "0.9999",
+  "GOLD 9999 (0.9999)":    "0.9999",
   "KG BAR (0.995)":   "0.995",
   "995":              "0.995",
   "KG BAR (0.9999)":  "0.9999",
@@ -111,6 +112,9 @@ const DESC_TO_PURITY: Record<string, string> = {
   "Gold Jewelry 18K": "0.750",
   "Silver":           "0.999",
   // ── Legacy aliases (backward compatibility with existing invoices) ────────
+  "TT. BAR (0.995)": "0.995",
+  "TT. BAR (0.9999)": "0.9999",
+  "GOLD (0.9999)": "0.9999",
   "TT. BAR": "0.995",
   "KG BAR":  "0.995",
   "GOLD":    "0.9999",
@@ -146,10 +150,11 @@ const JEWELRY_DESCS = new Set([
   "Gold Jewelry", "22K Gold Jewelry", "Jewellery 22K 1GM",
 ]);
 const GOLD_DESCS = new Set([
-  "GOLD (0.9999)", "KG BAR (0.9999)", "GOLD KG (0.9999)",
+  "GOLD 9999 (0.9999)", "GOLD (0.9999)", "KG BAR (0.9999)", "GOLD KG (0.9999)",
   "GOLD 999.99", "GOLD", "24K GOLD", "Gold 9999 1GM", "Gold 9999 1KG",
 ]);
 const TT_BAR_DESCS = new Set([
+  "TEN TOLA BAR (0.995)", "TEN TOLA BAR (0.9999)",
   "TT. BAR (0.995)", "TT. BAR (0.9999)", "TT. BAR", "TT. BAR (0.999)",
   "TT. BAR 995", "TT. BAR 24K", "Ten Tola Bar TTB", "995",
 ]);
@@ -161,8 +166,8 @@ const SILVER_DESCS = new Set(["Silver", "Silver (0.999)", "Silver 999"]);
 
 function descToCategory(desc: string): string {
   if (JEWELRY_DESCS.has(desc)) return "gold_jewelry";
-  if (GOLD_DESCS.has(desc))    return "gold";
-  if (TT_BAR_DESCS.has(desc))  return "tt_bar";
+  if (GOLD_DESCS.has(desc))    return "gold_9999";
+  if (TT_BAR_DESCS.has(desc))  return "ten_tola_bar";
   if (KG_BAR_DESCS.has(desc))  return "kg_bar";
   if (SILVER_DESCS.has(desc))  return "silver";
   return "custom";
@@ -221,9 +226,7 @@ function getRateForDesc(
   if (rawAedPerGram && rawAedPerGram > 0) {
     // Bars & bullion (no labor)
     if (TT_BAR_DESCS.has(description)) {
-      if (description === "TT. BAR (0.9999)") return roundTo(rawAedPerGram * 0.9999, 2);
-      if (description === "TT. BAR (0.999)" || description === "TT. BAR 24K") return roundTo(rawAedPerGram * 0.999, 2);
-      return roundTo(rawAedPerGram * 0.995, 2);   // (0.995) and legacy "TT. BAR"
+      return roundTo(rawAedPerGram * tenTolaPurityMultiplier(description), 2);
     }
     if (KG_BAR_DESCS.has(description)) return roundTo(rawAedPerGram * 0.995, 2);
     if (GOLD_DESCS.has(description))   return roundTo(rawAedPerGram * 0.9999, 2);
@@ -246,7 +249,7 @@ function getRateForDesc(
     if (description === "Gold Jewelry 18K" || description === "Gold 18K (0.750)" || description === "Gold Jewelry 18k") return prices.gold18kRate;
     return prices.gold22kRate;
   }
-  if (description === "TT. BAR (0.9999)") return prices.ttBar24kRate;
+  if (description === "TEN TOLA BAR (0.9999)" || description === "TT. BAR (0.9999)") return prices.ttBar24kRate;
   if (description === "KG BAR (0.9999)" || description === "GOLD KG (0.9999)") return prices.goldKg9999Rate;
   if (GOLD_DESCS.has(description)) return prices.gold9999Rate;
   if (TT_BAR_DESCS.has(description)) return prices.ttBarRate;

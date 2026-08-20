@@ -16,18 +16,22 @@ import {
   GetInvoiceResponse,
   GetMonthlySalesResponse,
 } from "@workspace/api-zod";
+import {
+  normalizeCategoryValue,
+  normalizeInventoryDescription,
+} from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
 // Map an invoice line item to its inventory stock category. "995" is its own
-// stock bucket even though the pricing engine treats it as a tt_bar; jewelry
+// stock bucket even though the pricing engine treats it as a ten_tola_bar; jewelry
 // karats all draw from the single gold_jewelry_22k stock pool. Unknown/custom
 // items are not stock-tracked (returns null → no deduction).
 function itemStockCategory(description: string, category: string | null | undefined): string | null {
   if (description.trim() === "995") return "995";
-  switch (category) {
-    case "gold": return "gold";
-    case "tt_bar": return "tt_bar";
+  switch (normalizeCategoryValue(category)) {
+    case "gold_9999": return "gold_9999";
+    case "ten_tola_bar": return "ten_tola_bar";
     case "kg_bar": return "kg_bar";
     case "silver": return "silver";
     case "gold_jewelry": return "gold_jewelry_22k";
@@ -301,8 +305,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
         items.map((item) => ({
           invoiceId: invoice.id,
           productId: item.productId ?? null,
-          description: item.description,
-          category: item.category ?? null,
+          description: normalizeInventoryDescription(item.description, item.category),
+          category: normalizeCategoryValue(item.category) ?? null,
           quantity: String(item.quantity),
           weight: item.weight != null ? String(item.weight) : null,
           grossWeight: item.grossWeight != null ? String(item.grossWeight) : null,

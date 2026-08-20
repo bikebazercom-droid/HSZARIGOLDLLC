@@ -739,7 +739,7 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
     method: "POST",
     headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
-      category: "gold",
+      category: "gold_9999",
       supplierName: "TEST-G-FIXTURE",
       purchaseDate: "2000-01-01",
       weightGrams: 200,
@@ -760,7 +760,7 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
   }
   const goldAfterPurchase =
     ((await levelsAfterPurchaseRes.json()) as { category: string; weightGrams: number }[])
-      .find((l) => l.category === "gold")?.weightGrams ?? 0;
+      .find((l) => l.category === "gold_9999")?.weightGrams ?? 0;
   console.log(`  Gold level after purchase, before invoice: ${goldAfterPurchase}g`);
 
   // Track invoice id so finally block can attempt emergency cleanup if needed.
@@ -786,7 +786,7 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
         items: [
           {
             description: "Test gold item",
-            category: "gold",
+            category: "gold_9999",
             quantity: 1,
             grossWeight: 10,
             weight: 10,
@@ -916,7 +916,7 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
     if (!levelsAfterDeleteRes.ok) throw new Error(`stock/levels fetch after delete failed`);
     const goldAfterDelete =
       ((await levelsAfterDeleteRes.json()) as { category: string; weightGrams: number }[])
-        .find((l) => l.category === "gold")?.weightGrams ?? 0;
+        .find((l) => l.category === "gold_9999")?.weightGrams ?? 0;
     console.log(
       `  Surface gold: before invoice=${goldAfterPurchase}g, after delete=${goldAfterDelete}g`,
     );
@@ -930,12 +930,12 @@ async function testG_DeleteWithAbsentBatchesSucceedsAndWritesAuditEntry(): Promi
     const [saleMov, reversalMov] = await Promise.all([
       db.execute<{ weight_grams: string }>(sql`
         SELECT weight_grams::text FROM stock_movements
-        WHERE category = 'gold' AND ref_type = 'invoice' AND ref_id = ${inv.id} AND type = 'sale'
+        WHERE category = 'gold_9999' AND ref_type = 'invoice' AND ref_id = ${inv.id} AND type = 'sale'
         ORDER BY id DESC LIMIT 1
       `),
       db.execute<{ weight_grams: string }>(sql`
         SELECT weight_grams::text FROM stock_movements
-        WHERE category = 'gold' AND ref_type = 'invoice' AND ref_id = ${inv.id} AND type = 'sale_reversal'
+        WHERE category = 'gold_9999' AND ref_type = 'invoice' AND ref_id = ${inv.id} AND type = 'sale_reversal'
         ORDER BY id DESC LIMIT 1
       `),
     ]);

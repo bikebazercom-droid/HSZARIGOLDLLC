@@ -216,7 +216,7 @@ async function createInvoice(
       : index === itemCount - 1
         ? "FINALMARKER PDF REGRESSION ITEM"
         : `PDF REGRESSION ITEM ${String(index + 1).padStart(2, "0")}`,
-    category: "gold",
+    category: "gold_9999",
     quantity: 1,
     grossWeight: 0,
     unitPrice: 1,

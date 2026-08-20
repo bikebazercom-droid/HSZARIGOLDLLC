@@ -10,7 +10,7 @@ const TROY = 31.1034768;
 // ── Default core items (seeded when the table is empty) ───────────────────────
 const CORE_DEFAULTS: InsertPriceItem[] = [
   {
-    name: "TT. BAR 995",
+    name: "TEN TOLA BAR 995",
     displayOrder: 1,
     formulaType: "spot_bar",
     weightGrams: "116.64",        // Dubai convention: 1 Tola = 11.664g → 10 Tola = 116.64g
@@ -21,7 +21,7 @@ const CORE_DEFAULTS: InsertPriceItem[] = [
     isCore: true,
   },
   {
-    name: "TT. BAR 9999",
+    name: "TEN TOLA BAR 9999",
     displayOrder: 2,
     formulaType: "spot_bar",
     weightGrams: "116.64",        // Dubai convention: 1 Tola = 11.664g → 10 Tola = 116.64g

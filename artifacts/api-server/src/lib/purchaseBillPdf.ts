@@ -8,6 +8,7 @@ import {
   PDF_BRAND,
   registerPdfArabicFont,
 } from "./pdfBranding.js";
+import { STOCK_CATEGORY_LABEL } from "./stockCategories.js";
 
 export interface PurchaseBillPdfItem {
   category: string;
@@ -47,14 +48,7 @@ const TABLE_ROW_BOTTOM = 666;
 const SIGNATURE_LINE_Y = PAGE_HEIGHT - BANNER_HEIGHT - 42;
 const FINAL_CONTENT_BOTTOM = 674;
 
-const CATEGORY_LABEL: Record<string, string> = {
-  gold: "GOLD",
-  tt_bar: "TT Bar",
-  kg_bar: "KG Bar",
-  "995": "995",
-  gold_jewelry_22k: "Gold Jewelry 22K",
-  silver: "Silver",
-};
+const CATEGORY_LABEL: Record<string, string> = STOCK_CATEGORY_LABEL;
 
 function resolveAsset(filename: string): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));

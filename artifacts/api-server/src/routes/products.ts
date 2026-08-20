@@ -12,6 +12,7 @@ import {
   CreateProductResponse,
   UpdateProductResponse,
 } from "@workspace/api-zod";
+import { normalizeCategoryValue } from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,7 @@ router.post("/products", async (req, res): Promise<void> => {
   const { pricePerUnit, stock, ...rest } = parsed.data;
   const [product] = await db.insert(productsTable).values({
     ...rest,
+    category: normalizeCategoryValue(rest.category) ?? rest.category,
     pricePerUnit: pricePerUnit != null ? String(pricePerUnit) : null,
     stock: stock != null ? String(stock) : null,
   }).returning();
@@ -82,6 +84,9 @@ router.put("/products/:id", async (req, res): Promise<void> => {
     .update(productsTable)
     .set({
       ...restUpdate,
+      ...(restUpdate.category
+        ? { category: normalizeCategoryValue(restUpdate.category) ?? restUpdate.category }
+        : {}),
       pricePerUnit: ppu != null ? String(ppu) : null,
       stock: stk != null ? String(stk) : null,
     })

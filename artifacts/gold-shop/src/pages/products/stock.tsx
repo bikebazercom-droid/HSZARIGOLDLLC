@@ -28,8 +28,8 @@ import {
 } from "@/components/pdf-branding";
 
 export const STOCK_CATEGORIES = [
-  { id: "gold", label: "GOLD" },
-  { id: "tt_bar", label: "TT Bar" },
+  { id: "gold_9999", label: "GOLD 9999" },
+  { id: "ten_tola_bar", label: "TEN TOLA BAR" },
   { id: "kg_bar", label: "KG Bar" },
   { id: "995", label: "995" },
   { id: "gold_jewelry_22k", label: "Gold Jewelry 22K" },
@@ -59,7 +59,7 @@ export function PurchaseDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
   const { data: suppliers } = useListStockSuppliers({ query: { queryKey: getListStockSuppliersQueryKey() } });
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
-  const [category, setCategory] = useState<string>("gold");
+  const [category, setCategory] = useState<string>("gold_9999");
   const [supplierName, setSupplierName] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(todayStr);
   const [weightUnit, setWeightUnit] = useState<"g" | "kg">("g");
@@ -86,7 +86,7 @@ export function PurchaseDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
   };
 
   const reset = () => {
-    setCategory("gold"); setSupplierName(""); setPurchaseDate(todayStr);
+    setCategory("gold_9999"); setSupplierName(""); setPurchaseDate(todayStr);
     setWeightUnit("g"); setWeightInput(""); setRateInput(""); setTotalPrice(""); setNarrative("");
   };
 

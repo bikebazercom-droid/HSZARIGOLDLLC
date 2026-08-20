@@ -13,6 +13,9 @@
  *   2b. Admin user sends DELETE /api/purchase-bills/:id on a missing id → 404
  *       (confirms the guard passes and the handler runs; absence gives 404, not 403)
  *
+ *   3. Staff can read prices for invoice creation but cannot update them;
+ *      an admin can submit the same no-op-safe rate update.
+ *
  * ── How to run ────────────────────────────────────────────────────────────
  *   pnpm --filter @workspace/api-server run test:bill-delete-role-guard
  *
@@ -111,7 +114,7 @@ async function createTestBill(): Promise<{ id: number; billNo: string }> {
       notes: "Created by test-bill-delete-role-guard",
       items: [
         {
-          category: "gold",
+          category: "gold_9999",
           grossWeightGrams: 10,
           purityPercent: 99.9,
           rateAedPerG: 200,
@@ -216,6 +219,37 @@ async function test2b_AdminMissingBillIs404(): Promise<void> {
   );
 }
 
+/**
+ * Test 3: Staff need GET /prices for invoice creation, but financial
+ * configuration changes through PUT /prices are admin-only.
+ */
+async function test3_PricesUpdateIsAdminOnly(): Promise<void> {
+  console.log("\nTest 3: Staff GET /prices → 200, staff PUT → 403, admin PUT → 200");
+
+  await loginAs(STAFF_MOBILE, STAFF_PIN, "staff");
+  const staffGet = await apiReq("/prices");
+  assert(staffGet.status === 200, `Staff must be able to read prices for invoices (got ${staffGet.status})`);
+  const current = (await staffGet.json()) as { gold9999Rate: number };
+
+  const staffPut = await apiReq("/prices", {
+    method: "PUT",
+    body: JSON.stringify({ gold9999Rate: current.gold9999Rate }),
+  });
+  assert(staffPut.status === 403, `Staff price update must be rejected with 403 (got ${staffPut.status})`);
+
+  await loginAs(ADMIN_MOBILE, ADMIN_PIN, "admin");
+  const adminPut = await apiReq("/prices", {
+    method: "PUT",
+    body: JSON.stringify({ gold9999Rate: current.gold9999Rate }),
+  });
+  assert(adminPut.status === 200, `Admin price update must be accepted (got ${adminPut.status})`);
+  const updated = (await adminPut.json()) as { gold9999Rate: number };
+  assert(
+    updated.gold9999Rate === current.gold9999Rate,
+    `Admin no-op update must preserve GOLD 9999 rate (${current.gold9999Rate})`,
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -252,6 +286,7 @@ async function main(): Promise<void> {
       await test1_StaffIsBlocked();
       await test2_AdminCanDelete();
       await test2b_AdminMissingBillIs404();
+      await test3_PricesUpdateIsAdminOnly();
     } finally {
       // Remove the temporary staff user.
       await loginAs(ADMIN_MOBILE, ADMIN_PIN, "admin");

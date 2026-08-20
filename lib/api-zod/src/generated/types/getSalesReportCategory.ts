@@ -10,8 +10,8 @@ export type GetSalesReportCategory = typeof GetSalesReportCategory[keyof typeof 
 
 
 export const GetSalesReportCategory = {
-  gold: 'gold',
-  tt_bar: 'tt_bar',
+  gold_9999: 'gold_9999',
+  ten_tola_bar: 'ten_tola_bar',
   kg_bar: 'kg_bar',
   NUMBER_995: '995',
   gold_jewelry_22k: 'gold_jewelry_22k',

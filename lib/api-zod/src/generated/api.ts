@@ -274,7 +274,7 @@ export const GetPublicPriceItemsResponseItem = zod.object({
   "name": zod.string(),
   "displayOrder": zod.number(),
   "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
-  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.'),
   "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
   "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
   "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
@@ -295,7 +295,7 @@ export const ListPriceItemsResponseItem = zod.object({
   "name": zod.string(),
   "displayOrder": zod.number(),
   "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
-  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.'),
   "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
   "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
   "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
@@ -328,7 +328,7 @@ export const CreatePriceItemResponse = zod.object({
   "name": zod.string(),
   "displayOrder": zod.number(),
   "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
-  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.'),
   "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
   "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
   "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
@@ -364,7 +364,7 @@ export const UpdatePriceItemResponse = zod.object({
   "name": zod.string(),
   "displayOrder": zod.number(),
   "formulaType": zod.enum(['spot_per_gram', 'spot_bar', 'manual']).describe('spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed.'),
-  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.'),
+  "weightGrams": zod.number().nullish().describe('Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.'),
   "weightLabel": zod.string().describe('Display label for the WEIGHT column (e.g. TTB, 1KG, 1GM).'),
   "purityFactor": zod.number().describe('Multiplier applied to the raw spot base (e.g. 0.9999, 0.9200, 0.9950).'),
   "premiumOffsetAed": zod.number().describe('Fixed AED amount added after the spot formula (positive = premium, negative = discount).'),
@@ -586,7 +586,7 @@ export const ListInvoicesQueryParams = zod.object({
   "paymentMethod": zod.coerce.string().optional(),
   "startDate": zod.coerce.string().optional(),
   "endDate": zod.coerce.string().optional(),
-  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']).optional().describe('Stock category bucket (\"995\" is its own bucket; gold_jewelry_22k covers all jewelry karats)')
+  "category": zod.enum(['gold_9999', 'ten_tola_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']).optional().describe('Stock category bucket (\"995\" is its own bucket; gold_jewelry_22k covers all jewelry karats)')
 })
 
 export const ListInvoicesResponseItem = zod.object({
@@ -871,7 +871,7 @@ export const createStockPurchaseBodyTotalPriceAedMin = 0;
 
 
 export const CreateStockPurchaseBody = zod.object({
-  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
+  "category": zod.enum(['gold_9999', 'ten_tola_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
   "supplierName": zod.string().min(1),
   "purchaseDate": zod.string(),
   "weightGrams": zod.number().gt(createStockPurchaseBodyWeightGramsExclusiveMin),
@@ -979,7 +979,7 @@ export const CreatePurchaseBillBody = zod.object({
   "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({
-  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
+  "category": zod.enum(['gold_9999', 'ten_tola_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
   "grossWeightGrams": zod.number().gt(createPurchaseBillBodyItemsItemGrossWeightGramsExclusiveMin),
   "purityPercent": zod.number().gt(createPurchaseBillBodyItemsItemPurityPercentExclusiveMin).max(createPurchaseBillBodyItemsItemPurityPercentMax),
   "rateAedPerG": zod.number().min(createPurchaseBillBodyItemsItemRateAedPerGMin),
@@ -1207,7 +1207,7 @@ export const GetSalesReportQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "startDate": zod.coerce.string().optional(),
   "endDate": zod.coerce.string().optional(),
-  "category": zod.enum(['gold', 'tt_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']).optional()
+  "category": zod.enum(['gold_9999', 'ten_tola_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']).optional()
 })
 
 export const GetSalesReportResponse = zod.object({

@@ -61,7 +61,7 @@ const ADMIN_PIN    = process.env["TEST_ADMIN_PIN"]    ?? "1234";
 const ADMIN_ROLE   = "admin";
 
 // Stock lot used for FIFO reversal test (10 g at 200 AED/g = 2 000 AED)
-const TEST_CATEGORY    = "gold";
+const TEST_CATEGORY    = "gold_9999";
 const TEST_LOT_GRAMS   = 10;
 const TEST_LOT_AED     = 2000;
 const TEST_ITEM_GRAMS  = 5; // Invoice will sell half the lot

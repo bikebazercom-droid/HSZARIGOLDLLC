@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 import { invoicesTable } from "./invoices";
 
 // One row per supplier purchase transaction (Purchase / Stock Entry drawer).
-// Categories: gold, tt_bar, kg_bar, 995, gold_jewelry_22k, silver
+// Categories: gold_9999, ten_tola_bar, kg_bar, 995, gold_jewelry_22k, silver
 export const stockPurchasesTable = pgTable("stock_purchases", {
   id: serial("id").primaryKey(),
   category: text("category").notNull(),

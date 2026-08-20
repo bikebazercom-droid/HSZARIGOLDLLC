@@ -23,13 +23,14 @@ import {
   UpdatePurchaseBillPaymentStatusParams,
   UpdatePurchaseBillPaymentStatusResponse,
 } from "@workspace/api-zod";
+import {
+  STOCK_CATEGORIES,
+  STOCK_CATEGORY_LABEL,
+} from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
-const CAT_LABEL: Record<string, string> = {
-  gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
-  gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
-};
+const CAT_LABEL: Record<string, string> = STOCK_CATEGORY_LABEL;
 
 function parseItem(row: typeof purchaseBillItemsTable.$inferSelect) {
   return {
@@ -272,7 +273,7 @@ router.get("/purchase-bills/supplier-liability/pdf", requireAdmin, async (_req, 
   pdf.finish(y);
 });
 
-const PURCHASE_STATEMENT_CATEGORY = new Set(["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"]);
+const PURCHASE_STATEMENT_CATEGORY = new Set<string>(STOCK_CATEGORIES);
 
 function parsePurchaseStatementQuery(req: { query: unknown }) {
   const query = req.query as Record<string, string | undefined>;

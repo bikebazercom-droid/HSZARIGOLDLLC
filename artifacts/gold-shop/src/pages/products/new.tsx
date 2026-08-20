@@ -12,10 +12,10 @@ import * as z from "zod";
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const PRESET_CATEGORIES = ["gold_jewelry", "tt_bar", "kg_bar", "silver"];
+const PRESET_CATEGORIES = ["gold_jewelry", "ten_tola_bar", "kg_bar", "silver"];
 const CATEGORY_LABELS: Record<string, string> = {
   gold_jewelry: "Gold Jewelry",
-  tt_bar: "TT Bar",
+  ten_tola_bar: "TEN TOLA BAR",
   kg_bar: "KG Bar",
   silver: "Silver",
 };

@@ -5,14 +5,15 @@ import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummary
 import { requireAdmin } from "../middlewares/auth";
 import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding";
 import ExcelJS from "exceljs";
+import { STOCK_CATEGORY_LABEL } from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
-const CATEGORY_ORDER = ["gold_jewelry", "gold", "tt_bar", "kg_bar", "silver", "custom"] as const;
+const CATEGORY_ORDER = ["gold_jewelry", "gold_9999", "ten_tola_bar", "kg_bar", "silver", "custom"] as const;
 const CATEGORY_SUMMARY_LABEL: Record<string, string> = {
   gold_jewelry: "22K Gold Jewelry",
-  gold: "24K GOLD",
-  tt_bar: "TT. BAR",
+  gold_9999: "GOLD 9999",
+  ten_tola_bar: "TEN TOLA BAR",
   kg_bar: "KG. BAR",
   silver: "Silver",
   custom: "Custom",
@@ -132,11 +133,6 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   });
 });
 
-const STOCK_CATEGORY_LABEL: Record<string, string> = {
-  gold: "GOLD", tt_bar: "TT Bar", kg_bar: "KG Bar", "995": "995",
-  gold_jewelry_22k: "Gold Jewelry 22K", silver: "Silver",
-};
-
 // All-time live totals for the dashboard profit/stock summary. Not date-filtered:
 // Card 1 shows remaining stock (purchased − sold) and its value at purchase
 // cost (total purchase spend − COGS of everything sold so far); Card 2 shows
@@ -144,7 +140,7 @@ const STOCK_CATEGORY_LABEL: Record<string, string> = {
 // are already inside invoice totals, so they are not added again).
 router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
   // Silver is tracked in its own dedicated card; everything else (gold,
-  // tt_bar, kg_bar, 995, gold_jewelry_22k, custom) rolls up into the main box.
+  // ten_tola_bar, kg_bar, 995, gold_jewelry_22k, custom) rolls up into the main box.
   // Cost values come straight from the FIFO batch ledger: remaining stock is
   // valued at each surviving lot's own purchase rate, and COGS is the exact
   // sum of consumed batch slices — no averaging.
@@ -296,16 +292,16 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
 
   // Per-category stats from item-level aggregation
   const todayGoldJewelry = getCatStats(todayCatRows, "gold_jewelry");
-  const todayGold = getCatStats(todayCatRows, "gold");
+  const todayGold = getCatStats(todayCatRows, "gold_9999");
   const todayKgBar = getCatStats(todayCatRows, "kg_bar");
-  const todayTtBar = getCatStats(todayCatRows, "tt_bar");
+  const todayTtBar = getCatStats(todayCatRows, "ten_tola_bar");
   const todaySilver = getCatStats(todayCatRows, "silver");
   const todayTotalGoldGrams = todayGoldJewelry.grams + todayGold.grams + todayKgBar.grams + todayTtBar.grams;
 
   const monthlyGoldJewelry = getCatStats(monthlyCatRows, "gold_jewelry");
-  const monthlyGold = getCatStats(monthlyCatRows, "gold");
+  const monthlyGold = getCatStats(monthlyCatRows, "gold_9999");
   const monthlyKgBar = getCatStats(monthlyCatRows, "kg_bar");
-  const monthlyTtBar = getCatStats(monthlyCatRows, "tt_bar");
+  const monthlyTtBar = getCatStats(monthlyCatRows, "ten_tola_bar");
   const monthlySilver = getCatStats(monthlyCatRows, "silver");
   const monthlyTotalGoldGrams = monthlyGoldJewelry.grams + monthlyGold.grams + monthlyKgBar.grams + monthlyTtBar.grams;
 
@@ -360,7 +356,7 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       monthlyGoldJewelryCount: monthlyGoldJewelry.count,
       monthlyGoldJewelryAmount: monthlyGoldJewelry.amount,
       monthlyGoldJewelryGrams: monthlyGoldJewelry.grams,
-      // Pure Gold (GOLD)
+      // Pure Gold (GOLD 9999)
       todayGoldCount: todayGold.count,
       todayGoldAmount: todayGold.amount,
       todayGoldGrams: todayGold.grams,
@@ -374,7 +370,7 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       monthlyKgBarCount: monthlyKgBar.count,
       monthlyKgBarAmount: monthlyKgBar.amount,
       monthlyKgBarGrams: monthlyKgBar.grams,
-      // TT Bar
+      // TEN TOLA BAR
       todayTtBarCount: todayTtBar.count,
       todayTtBarAmount: todayTtBar.amount,
       todayTtBarGrams: todayTtBar.grams,
@@ -530,14 +526,14 @@ async function getInvoicesForDownload(category: string, period: string) {
 
 const categoryLabel: Record<string, string> = {
   gold_jewelry: "Gold Jewelry",
-  gold: "Gold",
+  gold_9999: "GOLD 9999",
   kg_bar: "KG Bar",
-  tt_bar: "TT Bar",
+  ten_tola_bar: "TEN TOLA BAR",
   silver: "Silver",
   all: "All",
 };
 
-// CSV download: /api/dashboard/download?category=gold_jewelry|gold|kg_bar|tt_bar|silver|all&period=today|monthly
+// CSV download: /api/dashboard/download?category=gold_jewelry|gold_9999|kg_bar|ten_tola_bar|silver|all&period=today|monthly
 router.get("/dashboard/download", async (req, res): Promise<void> => {
   const category = (req.query.category as string) || "all";
   const period = (req.query.period as string) || "today";

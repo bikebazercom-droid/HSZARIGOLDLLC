@@ -517,7 +517,7 @@ export interface PriceItem {
   /** spot_per_gram: baseSpot×purity+offset (per-gram items). spot_bar: baseSpot×weightGrams×purity+offset (fixed-weight bars). manual: fixed manualRateAed. */
   formulaType: PriceItemFormulaType;
   /**
-     * Weight in grams for spot_bar items (e.g. 116.638 for TT Bar). Null otherwise.
+     * Weight in grams for spot_bar items (e.g. 116.638 for TEN TOLA BAR). Null otherwise.
      * @nullable
      */
   weightGrams?: number | null;
@@ -586,8 +586,8 @@ export type StockPurchaseInputCategory = typeof StockPurchaseInputCategory[keyof
 
 
 export const StockPurchaseInputCategory = {
-  gold: 'gold',
-  tt_bar: 'tt_bar',
+  gold_9999: 'gold_9999',
+  ten_tola_bar: 'ten_tola_bar',
   kg_bar: 'kg_bar',
   NUMBER_995: '995',
   gold_jewelry_22k: 'gold_jewelry_22k',
@@ -662,8 +662,8 @@ export type PurchaseBillItemInputCategory = typeof PurchaseBillItemInputCategory
 
 
 export const PurchaseBillItemInputCategory = {
-  gold: 'gold',
-  tt_bar: 'tt_bar',
+  gold_9999: 'gold_9999',
+  ten_tola_bar: 'ten_tola_bar',
   kg_bar: 'kg_bar',
   NUMBER_995: '995',
   gold_jewelry_22k: 'gold_jewelry_22k',
@@ -822,8 +822,8 @@ export type ListInvoicesCategory = typeof ListInvoicesCategory[keyof typeof List
 
 
 export const ListInvoicesCategory = {
-  gold: 'gold',
-  tt_bar: 'tt_bar',
+  gold_9999: 'gold_9999',
+  ten_tola_bar: 'ten_tola_bar',
   kg_bar: 'kg_bar',
   NUMBER_995: '995',
   gold_jewelry_22k: 'gold_jewelry_22k',
@@ -863,8 +863,8 @@ export type GetSalesReportCategory = typeof GetSalesReportCategory[keyof typeof 
 
 
 export const GetSalesReportCategory = {
-  gold: 'gold',
-  tt_bar: 'tt_bar',
+  gold_9999: 'gold_9999',
+  ten_tola_bar: 'ten_tola_bar',
   kg_bar: 'kg_bar',
   NUMBER_995: '995',
   gold_jewelry_22k: 'gold_jewelry_22k',

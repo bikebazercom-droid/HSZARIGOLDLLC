@@ -129,7 +129,7 @@ async function createTestBill(label: string): Promise<{ id: number; billNo: stri
       notes: "Created by test-bill-delete-audit",
       items: [
         {
-          category: "gold",
+          category: "gold_9999",
           grossWeightGrams: 10,
           purityPercent: 99.9,
           rateAedPerG: 200,

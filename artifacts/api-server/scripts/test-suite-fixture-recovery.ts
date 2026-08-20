@@ -99,7 +99,7 @@ async function createStockPurchase(runId: string): Promise<number> {
     method: "POST",
     headers: { "X-Pdf-E2e-Run-Id": runId },
     body: JSON.stringify({
-      category: "gold",
+      category: "gold_9999",
       supplierName: "TEST-SUITE-RECOVERY-SUPPLIER",
       purchaseDate: "0001-01-05",
       weightGrams: 5,

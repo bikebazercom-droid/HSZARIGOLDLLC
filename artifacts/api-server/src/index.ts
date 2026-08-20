@@ -4,6 +4,8 @@ import { logger } from "./lib/logger.js";
 import { seedAdminUser } from "./lib/seed.js";
 import { initSocketIO } from "./lib/socket.js";
 import { startAuditLogCleanup } from "./services/auditLogCleanup.js";
+import { migrateCategoryNames } from "./lib/categoryMigration.js";
+import { migratePricesSingleton } from "./lib/pricesSingletonMigration.js";
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -21,14 +23,22 @@ if (Number.isNaN(port) || port <= 0) {
 const httpServer = createServer(app);
 initSocketIO(httpServer);
 
-seedAdminUser().catch((err) => logger.error({ err }, "Failed to seed admin user"));
-startAuditLogCleanup();
-
 httpServer.on("error", (err) => {
   logger.error({ err }, "HTTP server error");
   process.exit(1);
 });
 
-httpServer.listen(port, () => {
-  logger.info({ port }, "Server listening");
+async function startServer(): Promise<void> {
+  await migratePricesSingleton();
+  await migrateCategoryNames();
+  await seedAdminUser();
+  startAuditLogCleanup();
+  httpServer.listen(port, () => {
+    logger.info({ port }, "Server listening");
+  });
+}
+
+startServer().catch((err) => {
+  logger.fatal({ err }, "Server startup failed");
+  process.exit(1);
 });

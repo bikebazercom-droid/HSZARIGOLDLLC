@@ -311,7 +311,7 @@ async function cleanUp(baseline: Record<string, number>): Promise<void> {
         `Cleanup left ${leftoverInvoices.length} invoices and ${leftoverPurchases.length} purchases for ${FIXTURE_PREFIX}`,
       );
     }
-    for (const key of ["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"]) {
+    for (const key of ["gold_9999", "ten_tola_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"]) {
       if (Math.abs((restoredLevels[key] ?? 0) - (baseline[key] ?? 0)) >= 0.001) {
         errors.push(`Stock level ${key} was not restored to its pre-test balance`);
       }
@@ -346,16 +346,16 @@ async function main(): Promise<void> {
     try {
     // The reserved earliest AD dates isolate totals and guarantee these lots
     // are first in FIFO order after the preflight check above.
-    const goldFirst = await createPurchase("gold", 10, 1000, "0001-01-01", "GOLD-OLD");
-    const goldSecond = await createPurchase("gold", 10, 2000, "0001-01-02", "GOLD-NEW");
-    await createPurchase("tt_bar", 8, 800, "0001-01-03", "TT");
+    const goldFirst = await createPurchase("gold_9999", 10, 1000, "0001-01-01", "GOLD-OLD");
+    const goldSecond = await createPurchase("gold_9999", 10, 2000, "0001-01-02", "GOLD-NEW");
+    await createPurchase("ten_tola_bar", 8, 800, "0001-01-03", "TT");
     await createPurchase("995", 6, 720, "0001-01-04", "995");
     await createPurchase("gold_jewelry_22k", 4, 1600, "0001-01-05", "JEWELRY");
     await createPurchase("silver", 20, 200, "0001-01-06", "SILVER");
 
-    const goldSale = await createInvoice("GOLD-SPLIT", "0001-01-10T10:00:00.000Z", "Gold bar", "gold", 15, 4500);
-    await createInvoice("TT", "0001-01-11T10:00:00.000Z", "TT Bar", "tt_bar", 3, 450);
-    await createInvoice("995", "0001-01-12T10:00:00.000Z", "995", "tt_bar", 2, 360);
+    const goldSale = await createInvoice("GOLD-SPLIT", "0001-01-10T10:00:00.000Z", "Gold bar", "gold_9999", 15, 4500);
+    await createInvoice("TT", "0001-01-11T10:00:00.000Z", "TT Bar", "ten_tola_bar", 3, 450);
+    await createInvoice("995", "0001-01-12T10:00:00.000Z", "995", "ten_tola_bar", 2, 360);
     await createInvoice("JEWELRY", "0001-01-13T10:00:00.000Z", "22K chain", "gold_jewelry", 1, 600);
     await createInvoice("SILVER", "0001-01-14T10:00:00.000Z", "Silver", "silver", 5, 100);
 
@@ -367,8 +367,8 @@ async function main(): Promise<void> {
     console.log("\nTest 1: Category mapping and exact FIFO profit");
     const january = await getStatement("?startDate=0001-01-01&endDate=0001-01-31");
     const expected: Record<string, { key: string } & CategoryRow> = {
-      GOLD: { key: "gold", purchased: 20, sold: 15, remaining: 5 },
-      "TT Bar": { key: "tt_bar", purchased: 8, sold: 3, remaining: 5 },
+      "GOLD 9999": { key: "gold_9999", purchased: 20, sold: 15, remaining: 5 },
+      "TEN TOLA BAR": { key: "ten_tola_bar", purchased: 8, sold: 3, remaining: 5 },
       "995": { key: "995", purchased: 6, sold: 2, remaining: 4 },
       "Gold Jewelry 22K": { key: "gold_jewelry_22k", purchased: 4, sold: 1, remaining: 3 },
       Silver: { key: "silver", purchased: 20, sold: 5, remaining: 15 },
@@ -400,11 +400,11 @@ async function main(): Promise<void> {
     }
 
     console.log("\nTest 2: Period/category filters do not turn live stock into historical stock");
-    const goldOnly = await getStatement("?startDate=0001-01-10&endDate=0001-01-10&category=gold");
-    const filteredGold = category(goldOnly, "GOLD");
+    const goldOnly = await getStatement("?startDate=0001-01-10&endDate=0001-01-10&category=gold_9999");
+    const filteredGold = category(goldOnly, "GOLD 9999");
     equal(filteredGold.purchased, 0, "period filter excludes earlier gold purchases");
     equal(filteredGold.sold, 15, "period filter includes the gold sale");
-    equal(filteredGold.remaining, (baseline.gold ?? 0) + 5, "gold remaining balance stays the current live vault balance");
+    equal(filteredGold.remaining, (baseline.gold_9999 ?? 0) + 5, "gold remaining balance stays the current live vault balance");
     equal(goldOnly.financial["Total Cash Outflow - Purchases Debit (AED)"], 0, "filtered purchase cash total is zero");
     equal(goldOnly.financial["Total Cash Inflow - Sales Revenue Credit (AED)"], 4500, "category-filtered revenue is exact");
     equal(goldOnly.financial["Purchase Cost of Goods Sold - COGS (AED)"], 2000, "category-filtered FIFO COGS is exact");
@@ -441,7 +441,7 @@ async function main(): Promise<void> {
       if (categoryPage) {
         const categoryTableComplete = [
           "Category Name", "Metal Purchased / In", "Metal Sold / Out",
-          "Net Remaining Vault Balance", "995", "GOLD", "TT Bar", "KG Bar",
+          "Net Remaining Vault Balance", "995", "GOLD 9999", "TEN TOLA BAR", "KG Bar",
           "Gold Jewelry 22K", "Silver", "TOTAL PHYSICAL METAL",
         ].every((text) => categoryPage.includes(text));
         assert(categoryTableComplete, "category table headers, mapped rows, and total stay readable together");

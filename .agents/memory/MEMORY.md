@@ -16,3 +16,4 @@
 - [Purchase-bill location QR](purchase-bill-location-qr.md) — the invoice-style purchase-bill PDF bundles a static official-location QR; regenerate it when the business location changes.
 - [Browser PDF Arabic rendering](browser-pdf-arabic-rendering.md) — jsPDF shapes logical Amiri Arabic itself; `setR2L` double-reverses it, and extracted text may use presentation forms.
 - [Lossless PDFKit statement cells](pdfkit-statement-cells.md) — archival table text must use measured wrapping, bounded input, and page-fit guards; never ellipsis.
+- [Category rename pricing aliases](category-rename-pricing-aliases.md) — canonical inventory description renames must be tested in both live-rate and stored-rate dispatch paths.

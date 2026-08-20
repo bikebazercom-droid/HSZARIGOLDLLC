@@ -12,10 +12,11 @@ import {
   ListStockSuppliersResponse,
   ListStockMovementsResponse,
 } from "@workspace/api-zod";
+import { STOCK_CATEGORIES } from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
-export const STOCK_CATEGORIES = ["gold", "tt_bar", "kg_bar", "995", "gold_jewelry_22k", "silver"] as const;
+export { STOCK_CATEGORIES };
 
 // Adjust the live aggregated stock level for a category by a signed delta and
 // write a movement-log row. tx can be a transaction or the root db.

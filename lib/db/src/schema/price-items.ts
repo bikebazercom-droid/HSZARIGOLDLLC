@@ -6,7 +6,7 @@ import {
 // "spot_per_gram" : price = baseAedPerGram × purityFactor + premiumOffsetAed
 //                  (per-gram items: GOLD 9999, JEWELLERY 22K/21K/18K)
 // "spot_bar"      : price = baseAedPerGram × weightGrams × purityFactor + premiumOffsetAed
-//                  (fixed-weight bars: TT BAR, KG BAR)
+//                  (fixed-weight bars: TEN TOLA BAR, KG BAR)
 // "manual"        : price = manualRateAed  (admin-set fixed price, no spot link)
 // ─────────────────────────────────────────────────────────────────────────────
 export const priceItemsTable = pgTable("price_items", {
