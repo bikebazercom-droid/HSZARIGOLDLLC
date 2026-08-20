@@ -3894,6 +3894,76 @@ export function useGetWholesaleInvoice<TData = Awaited<ReturnType<typeof getWhol
 
 
 
+export const getDeleteWholesaleInvoiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/invoices/${id}`
+}
+
+/**
+ * @summary Delete a wholesale invoice, reverse FIFO stock, remove all ledger entries, and record audit log (admin only)
+ */
+export const deleteWholesaleInvoice = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWholesaleInvoiceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWholesaleInvoiceMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleInvoice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleInvoice>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWholesaleInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWholesaleInvoice>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWholesaleInvoice(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWholesaleInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWholesaleInvoice>>>
+
+    export type DeleteWholesaleInvoiceMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a wholesale invoice, reverse FIFO stock, remove all ledger entries, and record audit log (admin only)
+ */
+export const useDeleteWholesaleInvoice = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleInvoice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWholesaleInvoice>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWholesaleInvoiceMutationOptions(options));
+    }
+
 export const getFixWholesaleRateUrl = (id: number,) => {
 
 

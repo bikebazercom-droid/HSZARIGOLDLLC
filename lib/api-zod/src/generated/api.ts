@@ -1599,6 +1599,16 @@ export const GetWholesaleInvoiceResponse = zod.object({
 
 
 /**
+ * @summary Delete a wholesale invoice, reverse FIFO stock, remove all ledger entries, and record audit log (admin only)
+ */
+export const DeleteWholesaleInvoiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteWholesaleInvoiceResponse = zod.void()
+
+
+/**
  * @summary Partially or fully fix the rate for an unfixed wholesale invoice (admin only)
  */
 export const FixWholesaleRateParams = zod.object({

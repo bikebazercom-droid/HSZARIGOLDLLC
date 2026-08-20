@@ -38,6 +38,7 @@ import {
   ReturnWholesaleGoodsParams,
   GetWholesaleDashboardQueryParams,
   GetTraderStatementQueryParams,
+  DeleteWholesaleInvoiceParams,
 } from "@workspace/api-zod";
 import {
   createWholesaleInvoice,
@@ -45,6 +46,7 @@ import {
   applyRateFix,
   applyPhysicalReturn,
   loadWholesaleReturn,
+  deleteWholesaleInvoice,
 } from "../services/wholesaleService.js";
 import {
   createWholesaleInvoicePdf,
@@ -282,6 +284,41 @@ router.get("/wholesale/invoices/:id", async (req, res): Promise<void> => {
   const loaded = await loadWholesaleInvoice(params.data.id);
   if (!loaded) { res.status(404).json({ error: "Invoice not found" }); return; }
   res.json(GetWholesaleInvoiceResponse.parse(parseInvoice(loaded.invoice, loaded.items)));
+});
+
+// ── Delete Wholesale Invoice (admin only) ────────────────────────────────────
+
+router.delete("/wholesale/invoices/:id", requireAdmin, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const params = DeleteWholesaleInvoiceParams.safeParse({ id: parseInt(raw, 10) });
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  try {
+    const result = await deleteWholesaleInvoice({
+      invoiceId: params.data.id,
+      actorId: req.session?.userId ?? null,
+      actorName: req.session?.fullName ?? null,
+    });
+
+    if (result.notFound) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+
+    broadcast("STOCK_MUTATION");
+    broadcast("WHOLESALE_MUTATION");
+    res.sendStatus(204);
+  } catch (err: unknown) {
+    const e = err as { statusCode?: number; message?: string };
+    if (typeof e?.statusCode === "number") {
+      res.status(e.statusCode).json({ error: e.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.post("/wholesale/invoices", async (req, res): Promise<void> => {

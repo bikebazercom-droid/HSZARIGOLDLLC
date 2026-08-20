@@ -17,6 +17,8 @@ import {
   wholesaleTradersTable,
   auditLogTable,
   pdfTestFixturesTable,
+  stockMovementsTable,
+  stockPurchasesTable,
 } from "@workspace/db";
 import { acquireStockMutationLock, registeredStockOwnershipSql } from "./inventoryEngine.js";
 import { applyStockDelta } from "../routes/stock.js";
@@ -1205,6 +1207,355 @@ async function restoreFifoSlicesForReturn(
     );
   }
   return restoredCogsAed;
+}
+
+// ── Delete wholesale invoice ──────────────────────────────────────────────────
+
+export interface DeleteWholesaleInvoiceArgs {
+  invoiceId: number;
+  actorId?: number | null;
+  actorName?: string | null;
+}
+
+// Helper: throw a 409 conflict that rolls back the transaction.
+function conflict409(msg: string): never {
+  throw Object.assign(new Error(msg), { statusCode: 409 });
+}
+
+export async function deleteWholesaleInvoice(args: DeleteWholesaleInvoiceArgs): Promise<{
+  deleted: boolean;
+  notFound: boolean;
+}> {
+  const { invoiceId, actorId, actorName } = args;
+
+  return db.transaction(async (tx) => {
+    // ── Step 1: Advisory stock-mutation lock (must be first) ─────────────────
+    await acquireStockMutationLock(tx as unknown as Tx);
+
+    // ── Step 2: SELECT invoice FOR UPDATE ────────────────────────────────────
+    const [lockedInvoice] = await tx.select()
+      .from(wholesaleInvoicesTable)
+      .where(eq(wholesaleInvoicesTable.id, invoiceId))
+      .for("update");
+    if (!lockedInvoice) {
+      return { deleted: false, notFound: true };
+    }
+
+    // ── Step 3: Lock items FOR UPDATE ────────────────────────────────────────
+    const items = await tx.select()
+      .from(wholesaleInvoiceItemsTable)
+      .where(eq(wholesaleInvoiceItemsTable.invoiceId, invoiceId))
+      .for("update")
+      .orderBy(wholesaleInvoiceItemsTable.id);
+    const itemIds = items.map((it) => it.id);
+
+    // ── Step 4: Lock consumption rows FOR UPDATE ─────────────────────────────
+    // Use raw SQL for FOR UPDATE on a WHERE that filters by invoice id;
+    // Drizzle's .for("update") works on table-level, not per-row filtered.
+    const consumptions = await tx.execute<{
+      id: number;
+      wholesale_item_id: number;
+      purchase_id: string | null;
+      is_shortfall: boolean;
+      consumed_grams: string;
+      returned_grams: string;
+      cost_aed: string;
+      category: string;
+    }>(sql`
+      SELECT id, wholesale_item_id, purchase_id, is_shortfall,
+             consumed_grams::text, returned_grams::text, cost_aed::text, category
+      FROM wholesale_inventory_consumptions
+      WHERE wholesale_invoice_id = ${invoiceId}
+      ORDER BY id
+      FOR UPDATE
+    `).then((r) => r.rows);
+
+    // ── Step 5: Lock returns FOR UPDATE before reading their ids ─────────────
+    // Prevents a concurrent return from being inserted and missed by the delete.
+    const returns = await tx.select({ id: wholesaleReturnsTable.id })
+      .from(wholesaleReturnsTable)
+      .where(eq(wholesaleReturnsTable.invoiceId, invoiceId))
+      .for("update")
+      .orderBy(wholesaleReturnsTable.id);
+    const returnIds = returns.map((r) => r.id);
+
+    // ── Step 6: Lock settlements FOR UPDATE before reading their ids ─────────
+    const settlements = await tx.select({ id: wholesaleSettlementsTable.id })
+      .from(wholesaleSettlementsTable)
+      .where(eq(wholesaleSettlementsTable.invoiceId, invoiceId))
+      .for("update")
+      .orderBy(wholesaleSettlementsTable.id);
+    const settlementIds = settlements.map((s) => s.id);
+
+    // ── Step 7: Lock source stock_purchase batches FOR UPDATE ─────────────────
+    // Lock in ascending id order to match every other path that locks batches
+    // (FIFO consume, return restore) and prevent deadlock.
+    const purchaseIds = [...new Set(
+      consumptions
+        .filter((c) => c.purchase_id != null && !c.is_shortfall)
+        .map((c) => parseInt(c.purchase_id!, 10))
+        .filter((id) => !Number.isNaN(id)),
+    )].sort((a, b) => a - b);
+
+    // Fetch current batch state (already locked above by FOR UPDATE)
+    const batchMap = new Map<number, { weightGrams: number; remainingWeightGrams: number }>();
+    if (purchaseIds.length) {
+      const batches = await tx.select({
+        id: stockPurchasesTable.id,
+        weightGrams: stockPurchasesTable.weightGrams,
+        remainingWeightGrams: stockPurchasesTable.remainingWeightGrams,
+      })
+        .from(stockPurchasesTable)
+        .where(inArray(stockPurchasesTable.id, purchaseIds))
+        .for("update")
+        .orderBy(stockPurchasesTable.id);
+      for (const b of batches) {
+        batchMap.set(b.id, {
+          weightGrams: Number(b.weightGrams),
+          remainingWeightGrams: Number(b.remainingWeightGrams),
+        });
+      }
+    }
+
+    // ── Step 8: PREFLIGHT validation — all checks before any writes ───────────
+
+    // (a) Per-consumption row: values must be finite and non-negative;
+    //     returnedGrams ≤ consumedGrams; non-shortfall null-source rows are 409.
+    for (const c of consumptions) {
+      const consumed = Number(c.consumed_grams);
+      const returned = Number(c.returned_grams);
+      if (!Number.isFinite(consumed) || consumed < 0) {
+        conflict409(
+          `Consumption row ${c.id} on invoice ${invoiceId}: consumed_grams (${c.consumed_grams}) is invalid`,
+        );
+      }
+      if (!Number.isFinite(returned) || returned < 0) {
+        conflict409(
+          `Consumption row ${c.id} on invoice ${invoiceId}: returned_grams (${c.returned_grams}) is invalid`,
+        );
+      }
+      if (returned > consumed + 0.0001) {
+        conflict409(
+          `Consumption row ${c.id} on invoice ${invoiceId}: returned_grams (${returned}) exceeds consumed_grams (${consumed})`,
+        );
+      }
+      const net = consumed - returned;
+      if (net > 0.0001) {
+        if (c.purchase_id == null && !c.is_shortfall) {
+          conflict409(
+            `Consumption row ${c.id} on invoice ${invoiceId}: non-shortfall row has null purchase_id with ${net.toFixed(4)}g unreturned`,
+          );
+        }
+        if (c.purchase_id != null) {
+          const purchaseId = parseInt(c.purchase_id, 10);
+          if (!batchMap.has(purchaseId)) {
+            conflict409(
+              `Consumption row ${c.id} on invoice ${invoiceId}: source batch ${purchaseId} no longer exists`,
+            );
+          }
+        }
+      }
+    }
+
+    // (b) Per-item: sum of consumed minus returned must equal
+    //     item.grossGrams minus item.returnedGrossGrams (within 0.001g tolerance).
+    //     This detects corrupted or truncated FIFO history.
+    for (const item of items) {
+      const itemConsumptions = consumptions.filter(
+        (c) => c.wholesale_item_id === item.id,
+      );
+      const totalConsumed = itemConsumptions.reduce(
+        (s, c) => s + Number(c.consumed_grams), 0,
+      );
+      const totalReturned = itemConsumptions.reduce(
+        (s, c) => s + Number(c.returned_grams), 0,
+      );
+      const netFromConsumptions = totalConsumed - totalReturned;
+      const expectedNet = Number(item.grossGrams) - Number(item.returnedGrossGrams);
+      if (Math.abs(netFromConsumptions - expectedNet) > 0.001) {
+        conflict409(
+          `Item ${item.id} on invoice ${invoiceId}: FIFO consumption history is inconsistent — ` +
+          `net consumed=${netFromConsumptions.toFixed(4)}g but item net=${expectedNet.toFixed(4)}g ` +
+          `(grossGrams=${item.grossGrams}, returnedGrossGrams=${item.returnedGrossGrams})`,
+        );
+      }
+    }
+
+    // (c) Aggregate net restore per purchase batch must not exceed original weight.
+    //     Sum up all net-consume slices per purchase id and compare with
+    //     weight_grams minus remaining_weight_grams (the already-consumed headroom).
+    const netRestoreByPurchase = new Map<number, number>();
+    for (const c of consumptions) {
+      if (c.purchase_id == null || c.is_shortfall) continue;
+      const purchaseId = parseInt(c.purchase_id, 10);
+      const net = Number(c.consumed_grams) - Number(c.returned_grams);
+      if (net <= 0) continue;
+      netRestoreByPurchase.set(purchaseId, (netRestoreByPurchase.get(purchaseId) ?? 0) + net);
+    }
+    for (const [purchaseId, netRestore] of netRestoreByPurchase) {
+      const batch = batchMap.get(purchaseId)!;
+      const headroom = batch.weightGrams - batch.remainingWeightGrams;
+      if (netRestore > headroom + 0.001) {
+        conflict409(
+          `Cannot restore ${netRestore.toFixed(4)}g to batch ${purchaseId}: ` +
+          `only ${headroom.toFixed(4)}g of headroom available ` +
+          `(weight=${batch.weightGrams}, remaining=${batch.remainingWeightGrams})`,
+        );
+      }
+    }
+
+    // (d) Stock-movement net per category must exactly equal the negative of
+    //     the unreturned gross quantity derived from item records.
+    //     Mismatch means movements were corrupted or the invoice was partially
+    //     reverse-deleted by another path.
+    const invoiceMovements = await tx.select({
+      category: stockMovementsTable.category,
+      weightGrams: stockMovementsTable.weightGrams,
+    })
+      .from(stockMovementsTable)
+      .where(and(
+        eq(stockMovementsTable.refType, "wholesale_invoice"),
+        eq(stockMovementsTable.refId, invoiceId),
+      ));
+    const returnMovements = returnIds.length
+      ? await tx.select({
+          category: stockMovementsTable.category,
+          weightGrams: stockMovementsTable.weightGrams,
+        })
+          .from(stockMovementsTable)
+          .where(and(
+            eq(stockMovementsTable.refType, "wholesale_return"),
+            inArray(stockMovementsTable.refId, returnIds),
+          ))
+      : [];
+
+    // Net movement by category from stock_movements (negative = out, positive = in from returns)
+    const movementNetByCategory = new Map<string, number>();
+    for (const m of [...invoiceMovements, ...returnMovements]) {
+      movementNetByCategory.set(
+        m.category,
+        (movementNetByCategory.get(m.category) ?? 0) + Number(m.weightGrams),
+      );
+    }
+
+    // Expected net by category from item records: negative of (grossGrams - returnedGrossGrams)
+    // i.e. what should be in stock_levels delta when we reverse the net delivery.
+    const expectedNetByCategory = new Map<string, number>();
+    for (const item of items) {
+      const cat = item.category;
+      const net = Number(item.grossGrams) - Number(item.returnedGrossGrams);
+      expectedNetByCategory.set(cat, (expectedNetByCategory.get(cat) ?? 0) + net);
+    }
+
+    // Validate: for each category the movement net must equal -expectedNet
+    const allCategories = new Set([
+      ...movementNetByCategory.keys(),
+      ...expectedNetByCategory.keys(),
+    ]);
+    for (const category of allCategories) {
+      const movementNet = movementNetByCategory.get(category) ?? 0;
+      const expectedNet = expectedNetByCategory.get(category) ?? 0;
+      // movement net = -(delivery) + (returns), expected = -(grossGrams - returnedGrossGrams)
+      // Both should equal -expectedNet when all books are consistent
+      if (Math.abs(movementNet - (-expectedNet)) > 0.001) {
+        conflict409(
+          `Stock movement history for category '${category}' on invoice ${invoiceId} is inconsistent: ` +
+          `movement net=${movementNet.toFixed(4)}g but item-derived net=${(-expectedNet).toFixed(4)}g`,
+        );
+      }
+    }
+
+    // ── Step 9: Exact guarded FIFO restoration (after all preflight passes) ──
+    // Restore net (consumedGrams - returnedGrams) to each source batch.
+    // We already validated headroom in preflight so this is guaranteed safe.
+    // Use exact arithmetic — no LEAST/GREATEST silent capping.
+    for (const [purchaseId, netRestore] of netRestoreByPurchase) {
+      if (netRestore <= 0.0001) continue;
+      await tx.execute(sql`
+        UPDATE stock_purchases
+        SET remaining_weight_grams = remaining_weight_grams::numeric + ${String(netRestore)}::numeric
+        WHERE id = ${purchaseId}
+      `);
+    }
+
+    // ── Step 10: Reverse net stock-level movements ───────────────────────────
+    // movementNetByCategory holds the signed sum of movements; reversing it
+    // (negating) restores the stock level. Delivery movements are negative so
+    // -movementNet is positive (goods back in). Return movements were positive
+    // so -movementNet is negative (removes the already-restored return credit).
+    for (const [category, movementNet] of movementNetByCategory) {
+      if (Math.abs(movementNet) < 0.0001) continue;
+      await applyStockDelta(
+        tx as unknown as Tx,
+        category,
+        -movementNet,
+        "sale_reversal",
+        "wholesale_invoice",
+        invoiceId,
+        `Deleted wholesale invoice ${lockedInvoice.invoiceNumber}`,
+      );
+    }
+
+    // ── Step 11: Delete all trader ledger entries (explicit — schema SET NULL) ─
+    // Delete by every FK that references invoice/item/settlement/return so no
+    // orphan ledger rows remain after the invoice is dropped.
+    await tx.delete(traderLedgerEntriesTable).where(
+      eq(traderLedgerEntriesTable.wholesaleInvoiceId, invoiceId),
+    );
+    if (returnIds.length) {
+      await tx.delete(traderLedgerEntriesTable).where(
+        inArray(traderLedgerEntriesTable.wholesaleReturnId, returnIds),
+      );
+    }
+    if (settlementIds.length) {
+      await tx.delete(traderLedgerEntriesTable).where(
+        inArray(traderLedgerEntriesTable.wholesaleSettlementId, settlementIds),
+      );
+    }
+    if (itemIds.length) {
+      await tx.delete(traderLedgerEntriesTable).where(
+        inArray(traderLedgerEntriesTable.wholesaleItemId, itemIds),
+      );
+    }
+
+    // ── Step 12: Unregister PDF test fixtures ────────────────────────────────
+    const { unregisterPdfTestFixture } = await import("../routes/pdf-test-fixtures.js");
+    await unregisterPdfTestFixture(tx as unknown as typeof db, "wholesale_invoice", invoiceId);
+    for (const returnId of returnIds) {
+      await unregisterPdfTestFixture(tx as unknown as typeof db, "wholesale_return", returnId);
+    }
+
+    // ── Step 13: Delete parent invoice (children cascade) ───────────────────
+    // wholesale_invoice_items, wholesale_inventory_consumptions,
+    // wholesale_settlements, wholesale_settlement_allocations,
+    // wholesale_returns, wholesale_return_lines all cascade.
+    await tx.delete(wholesaleInvoicesTable).where(eq(wholesaleInvoicesTable.id, invoiceId));
+
+    // ── Step 14: Immutable audit log entry ───────────────────────────────────
+    await tx.insert(auditLogTable).values({
+      actorId: actorId ?? null,
+      entityType: "wholesale_invoice",
+      entityId: invoiceId,
+      action: "delete",
+      billNo: lockedInvoice.invoiceNumber,
+      details: JSON.stringify({
+        invoiceNumber: lockedInvoice.invoiceNumber,
+        invoiceDate: lockedInvoice.invoiceDate,
+        traderId: lockedInvoice.traderId,
+        traderName: lockedInvoice.traderName,
+        pricingType: lockedInvoice.pricingType,
+        status: lockedInvoice.status,
+        totalGrossGrams: lockedInvoice.totalGrossGrams,
+        totalPureGrams: lockedInvoice.totalPureGrams,
+        totalAed: lockedInvoice.totalAed,
+        openPureGrams: lockedInvoice.openPureGrams,
+        deletedByUserId: actorId ?? null,
+        deletedByUserName: actorName ?? null,
+      }),
+    });
+
+    return { deleted: true, notFound: false };
+  });
 }
 
 // ── Load return with lines ───────────────────────────────────────────────────
