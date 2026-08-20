@@ -146,8 +146,17 @@ async function removeOwnedFixtures(
   page: Page,
   invoiceIds: number[],
   purchaseIds: number[],
+  purchaseBillIds: number[] = [],
 ): Promise<void> {
   const errors: string[] = [];
+  for (const id of [...purchaseBillIds].reverse()) {
+    const deleted = await page.request.delete(`/api/purchase-bills/${id}`, {
+      headers: { "X-Allow-Paid-Delete": "true" },
+    });
+    if (![204, 404].includes(deleted.status())) {
+      errors.push(`purchase bill ${id}: ${deleted.status()} ${await deleted.text()}`);
+    }
+  }
   for (const id of [...invoiceIds].reverse()) {
     const deleted = await page.request.delete(`/api/invoices/${id}`, {
       headers: { "X-Allow-Invoice-Delete": "true" },
@@ -228,18 +237,98 @@ async function createPurchase(
   return ((await response.json()) as CreatedRecord).id;
 }
 
+async function createPurchaseBill(
+  page: Page,
+  supplierName: string,
+  options: {
+    purchaseType?: "fixed" | "unfixed";
+    paymentStatus?: "paid" | "unpaid" | "unfixed";
+  } = {},
+): Promise<{ id: number; billNo: string }> {
+  const billNo = `PB-${supplierName.replace(/[^A-Z0-9]/gi, "").slice(0, 22)}`;
+  const purchaseType = options.purchaseType ?? "fixed";
+  const paymentStatus = options.paymentStatus ?? "unpaid";
+  const initialRate = purchaseType === "unfixed" ? 0 : 320;
+  const response = await page.request.post("/api/purchase-bills", {
+    headers: fixtureHeaders(runId),
+    data: {
+      billNo,
+      billDate: "2026-08-18",
+      supplierName,
+      purchaseType,
+      paymentStatus,
+      notes: "Invoice-style purchase bill PDF regression fixture",
+      items: [{
+        category: "995",
+        grossWeightGrams: 10,
+        purityPercent: 99.5,
+        rateAedPerG: initialRate,
+        makingChargeAed: 0,
+        lineTotalAed: initialRate * 10,
+      }],
+    },
+  });
+  await expectSuccessful(response, `create purchase bill ${billNo}`);
+  return response.json() as Promise<{ id: number; billNo: string }>;
+}
+
+function firstPageQrDarkFraction(pdfPath: string): number {
+  const dir = dirname(pdfPath);
+  const prefix = join(dir, `${FIXTURE_PREFIX.toLowerCase()}-purchase-qr`);
+  const imagePath = `${prefix}.png`;
+  execFileSync(
+    "pdftoppm",
+    ["-png", "-singlefile", "-r", "144", "-f", "1", "-l", "1", pdfPath, prefix],
+    { maxBuffer: 4_000_000 },
+  );
+  try {
+    const [width, height] = execFileSync(
+      "magick",
+      [imagePath, "-format", "%w %h", "info:"],
+      { encoding: "utf8" },
+    ).trim().split(/\s+/).map(Number);
+    const crop = {
+      x: Math.floor(width * 0.44),
+      y: Math.floor(height * 0.08),
+      width: Math.floor(width * 0.13),
+      height: Math.floor(height * 0.10),
+    };
+    return Number(execFileSync(
+      "magick",
+      [
+        imagePath,
+        "-crop", `${crop.width}x${crop.height}+${crop.x}+${crop.y}`,
+        "+repage",
+        "-colorspace", "Gray",
+        "-threshold", "90%",
+        "-format", "%[fx:1-mean]",
+        "info:",
+      ],
+      { encoding: "utf8" },
+    ));
+  } finally {
+    rmSync(imagePath, { force: true });
+  }
+}
+
 async function recoverAbandonedFixtures(page: Page): Promise<{ invoices: number; purchases: number; runIds: string[] }> {
   const listed = await page.request.get("/api/test-fixtures/pdf/abandoned", {
     headers: fixtureHeaders(runId),
   });
   await expectSuccessful(listed, "list abandoned PDF fixtures");
   const { fixtures, runIds } = await listed.json() as {
-    fixtures: { runId: string; entityType: "invoice" | "stock_purchase"; entityId: number }[];
+    fixtures: { runId: string; entityType: "invoice" | "stock_purchase" | "purchase_bill"; entityId: number }[];
     runIds: string[];
   };
   const invoices = fixtures.filter((fixture) => fixture.entityType === "invoice");
   const purchases = fixtures.filter((fixture) => fixture.entityType === "stock_purchase");
-  await removeOwnedFixtures(page, invoices.map((fixture) => fixture.entityId), purchases.map((fixture) => fixture.entityId));
+  const purchaseBills = fixtures.filter((fixture) => fixture.entityType === "purchase_bill");
+  await removeOwnedFixtures(
+    page,
+    invoices.map((fixture) => fixture.entityId),
+    purchases.map((fixture) => fixture.entityId),
+    purchaseBills.map((fixture) => fixture.entityId),
+  );
   if (runIds.length > 0) {
     const completed = await page.request.post("/api/test-fixtures/pdf/recovery-complete", {
       headers: fixtureHeaders(runId),
@@ -313,6 +402,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
   const pageErrors: string[] = [];
   const invoiceIds: number[] = [];
   const purchaseIds: number[] = [];
+  const purchaseBillIds: number[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   await login(page);
@@ -362,6 +452,20 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
     for (let index = 0; index < 34; index += 1) {
       purchaseIds.push(await createPurchase(page, supplier, index));
     }
+    const purchaseBill = await createPurchaseBill(page, `${runTag} VENDOR`);
+    purchaseBillIds.push(purchaseBill.id);
+    const settledUnfixedBill = await createPurchaseBill(
+      page,
+      `${runTag} UNFIXED`,
+      { purchaseType: "unfixed", paymentStatus: "unfixed" },
+    );
+    purchaseBillIds.push(settledUnfixedBill.id);
+    const settled = await page.request.patch(
+      `/api/purchase-bills/${settledUnfixedBill.id}/payment-status`,
+      { data: { paymentStatus: "paid", fixingRateAedPerG: 320 } },
+    );
+    await expectSuccessful(settled, `settle unfixed purchase bill ${settledUnfixedBill.billNo}`);
+    expect(((await settled.json()) as { totalAed: number }).totalAed).toBe(3184);
 
     await test.step("oversized invoice remains one complete A4 page", async () => {
       await page.goto(`/invoices/${oversized.id}`);
@@ -417,6 +521,79 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       expect(ocr).toContain("GRANDTOTAL");
     });
 
+    await test.step("purchase bill matches the customer invoice document structure", async () => {
+      const response = await page.request.get(`/api/purchase-bills/${purchaseBill.id}/pdf`);
+      await expectSuccessful(response, `download purchase bill ${purchaseBill.billNo}`);
+      expect(response.headers()["content-type"]).toContain("application/pdf");
+      expect(response.headers()["content-disposition"]).toContain(`purchase-bill-${purchaseBill.billNo}.pdf`);
+
+      const path = testInfo.outputPath("purchase-bill.pdf");
+      writeFileSync(path, await response.body());
+      expect(readFileSync(path).subarray(0, 4).toString("utf8")).toBe("%PDF");
+
+      const info = pdfInfo(path);
+      expect(info.pages).toBe(1);
+      expect(info.width).toBeLessThan(info.height);
+      const pages = pdfPages(path);
+      const text = pages.join("\n");
+      const normalizedText = normalized(text);
+      const ocr = normalized(ocrPdf(path));
+
+      expect(normalizedText).toContain("PURCHASEBILL");
+      for (const requiredText of [
+        "Bill / Ref No:",
+        purchaseBill.billNo,
+        "SUPPLIER / VENDOR DETAILS",
+        `${runTag} VENDOR`,
+        "Supplier / Party Name",
+        "Phone Number",
+        "Email Address",
+        "Address / Location",
+        "Stock Description",
+        "Gross Wt.",
+        "Purity",
+        "Pure Wt.",
+        "Making",
+        "GOLD VALUE",
+        "Discount (AED)",
+        "NET AMOUNT (AED)",
+        "Amount In Words (AED)",
+        "Payment Mode",
+      ]) {
+        expect(text).toContain(requiredText);
+      }
+      for (const requiredOcr of [
+        "CUSTOMERSSIGNATURE",
+        "CHECKEDBY",
+        "AUTHORISEDSIGNATURE",
+        "THANKYOUFORYOURBUSINESS",
+      ]) {
+        expect(ocr).toContain(requiredOcr);
+      }
+
+      const visual = finalPageVisualMetrics(path);
+      expect(visual.navyAtBottom, "purchase-bill thank-you banner must be flush with the bottom edge").toBe(true);
+      expect(visual.goldAtBottom, "purchase-bill gold rule must reach the absolute bottom edge").toBe(true);
+      expect(visual.authorisedStampDarkFraction, "purchase-bill seal must be visible above the authorised signature").toBeGreaterThan(0.04);
+      expect(firstPageQrDarkFraction(path), "purchase-bill location QR must be visible in the header").toBeGreaterThan(0.08);
+    });
+
+    await test.step("settled unfixed purchase bill keeps stored pure-weight totals", async () => {
+      const response = await page.request.get(`/api/purchase-bills/${settledUnfixedBill.id}/pdf`);
+      await expectSuccessful(response, `download settled unfixed purchase bill ${settledUnfixedBill.billNo}`);
+      const path = testInfo.outputPath("settled-unfixed-purchase-bill.pdf");
+      writeFileSync(path, await response.body());
+
+      const text = pdfPages(path).join("\n");
+      expect(text).toContain(settledUnfixedBill.billNo);
+      expect(text).toContain("99.500%");
+      expect(text).toContain("PAID IN CASH");
+      expect(text).toContain("GOLD VALUE @ 320.000 / gram (AED)");
+      expect(text).toContain("Three Thousand One Hundred Eighty Four Dirhams Only");
+      expect(text.match(/3,184\.00/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+      expect(text).not.toContain("3,200.00");
+    });
+
     await test.step("multi-page supplier statement repeats its safe frame and headings", async () => {
       await page.goto("/products");
       await page.getByPlaceholder("Search supplier or category...").fill(runTag);
@@ -445,7 +622,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
 
     expect(pageErrors, `uncaught browser errors: ${pageErrors.join("\n")}`).toEqual([]);
   } finally {
-    await removeOwnedFixtures(page, invoiceIds, purchaseIds);
+    await removeOwnedFixtures(page, invoiceIds, purchaseIds, purchaseBillIds);
     const completed = await page.request.post("/api/test-fixtures/pdf/complete", {
       headers: fixtureHeaders(runId),
     });

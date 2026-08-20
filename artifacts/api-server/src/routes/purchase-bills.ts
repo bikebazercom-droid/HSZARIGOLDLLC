@@ -3,6 +3,7 @@ import { and, count, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm
 import { db, purchaseBillsTable, purchaseBillItemsTable, stockPurchasesTable, auditLogTable } from "@workspace/db";
 import { broadcast } from "../lib/socket.js";
 import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding.js";
+import { createPurchaseBillPdf } from "../lib/purchaseBillPdf.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { applyStockDelta } from "./stock.js";
 import { authorizePdfTestRun, registerPdfTestFixture, unregisterPdfTestFixture } from "./pdf-test-fixtures.js";
@@ -754,153 +755,29 @@ router.patch("/purchase-bills/:id/payment-status", requireAdmin, async (req, res
 });
 
 // Raw PDF route (outside the OpenAPI spec, like other document downloads):
-// formal "Purchase Receipt / Bill Confirmation" for record-keeping.
+// formal invoice-style supplier purchase bill for record-keeping.
 router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const loaded = await loadBill(id);
   if (!loaded) { res.status(404).json({ error: "Bill not found" }); return; }
   const { bill, items } = loaded;
-
-  const NAVY = PDF_BRAND.navy;
-  const GOLD = PDF_BRAND.gold;
-  const GRID = "#d1d5db";
-  const LIGHT = "#f5f3ee";
-  const pdf = createBrandedPdf({
-    title: "Purchase Receipt / Bill Confirmation",
+  const doc = createPurchaseBillPdf({
+    billNo: bill.billNo,
+    billDate: bill.billDate,
+    supplierName: bill.supplierName,
+    purchaseType: bill.purchaseType,
+    paymentStatus: bill.paymentStatus,
+    totalGrossGrams: Number(bill.totalGrossGrams),
+    totalPureGrams: Number(bill.totalPureGrams),
+    totalAed: Number(bill.totalAed),
+    notes: bill.notes,
+    items: items.map(parseItem),
   });
-  const { doc } = pdf;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="purchase-bill-${bill.billNo.replace(/[^A-Za-z0-9-_]/g, "_")}.pdf"`);
   doc.pipe(res);
-
-  const W = pdf.width; // 515 for A4 portrait
-  const num2 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const num3 = (n: number) => n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-
-  // Bill meta box
-  const meta: [string, string][] = [
-    ["Bill No / Ref:", bill.billNo],
-    ["Bill Date:", bill.billDate],
-    ["Supplier:", bill.supplierName],
-    ["Purchase Type:", bill.purchaseType === "fixed" ? "Fixed Purchase" : "Unfixed Purchase"],
-    ["Payment Status:", bill.paymentStatus === "paid" ? "Paid in Cash" : bill.paymentStatus === "unpaid" ? "Unpaid / Liability" : "Unfixed Balance"],
-  ];
-  doc.rect(40, pdf.contentTop, W, 20 + meta.length * 16).fillAndStroke(LIGHT, GRID);
-  let my = pdf.contentTop + 10;
-  for (const [k, v] of meta) {
-    doc.fillColor("#666").font("Helvetica").fontSize(9).text(k, 52, my, { lineBreak: false });
-    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9).text(v, 160, my);
-    my += 16;
-  }
-
-  // Items table — widths sum to 515.
-  let y = pdf.contentTop + 20 + meta.length * 16 + 18;
-  const header: [string, number, boolean?][] = [
-    ["Category", 95], ["Gross Wt (g)", 70, true], ["Purity %", 55, true],
-    ["Pure Wt (g)", 70, true], ["Rate (AED/g)", 70, true],
-    ["Making (AED)", 70, true], ["Line Total (AED)", 85, true],
-  ];
-  const drawRow = (cells: [string, number, boolean?][], bg: string, color: string, bold: boolean, h = 18) => {
-    if (y + h > pdf.contentBottom) {
-      y = pdf.addPage();
-      if (cells !== header) {
-        drawRow(header, "#1e293b", "white", true);
-      }
-    }
-    let x = 40;
-    doc.lineWidth(0.5);
-    for (const [text, width, right] of cells) {
-      doc.rect(x, y, width, h).fillAndStroke(bg, GRID);
-      doc.fillColor(color).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
-      doc.text(text, x + 5, y + (h - 9) / 2, { width: width - 10, align: right ? "right" : "left", lineBreak: false });
-      x += width;
-    }
-    y += h;
-  };
-  drawRow(header, "#1e293b", "white", true);
-  items.forEach((raw, i) => {
-    const it = parseItem(raw);
-    drawRow([
-      [CAT_LABEL[it.category] ?? it.category, 95],
-      [num3(it.grossWeightGrams), 70, true],
-      [num2(it.purityPercent), 55, true],
-      [num3(it.pureWeightGrams), 70, true],
-      [num2(it.rateAedPerG), 70, true],
-      [num2(it.makingChargeAed), 70, true],
-      [num2(it.lineTotalAed), 85, true],
-    ], i % 2 === 0 ? "white" : "#f8fafc", "#1a1a1a", false);
-  });
-  drawRow([
-    ["TOTAL", 95],
-    [num3(Number(bill.totalGrossGrams)), 70, true],
-    ["", 55],
-    [num3(Number(bill.totalPureGrams)), 70, true],
-    ["", 70],
-    ["", 70],
-    [`AED ${num2(Number(bill.totalAed))}`, 85, true],
-  ], "#eee6cf", NAVY, true, 20);
-
-  y += 14;
-  y = pdf.ensureSpace(y, 58);
-  doc.rect(40, y, W, 44).fillAndStroke("#fdf9ee", GOLD);
-  doc.fillColor("#666").font("Helvetica").fontSize(8.5)
-    .text("Ledger posting: Metal Credit (+ weight) to supplier & master ledger; Cash Debit (+ cost) to supplier account.", 52, y + 8, { width: W - 24 });
-  doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10)
-    .text(`Total Metal Credit: ${num3(Number(bill.totalGrossGrams))} g     ·     Total Cash Debit: AED ${num2(Number(bill.totalAed))}`, 52, y + 24, { width: W - 24 });
-  y += 58;
-  if (bill.notes) {
-    doc.fillColor("#444").font("Helvetica-Oblique").fontSize(8.5);
-    let remaining = `Notes: ${bill.notes}`.trim();
-    const lineHeight = doc.currentLineHeight(true);
-
-    while (remaining.length > 0) {
-      if (y + lineHeight > pdf.contentBottom) {
-        y = pdf.addPage();
-      }
-
-      const availableHeight = pdf.contentBottom - y;
-      const fullHeight = doc.heightOfString(remaining, { width: W });
-      if (fullHeight <= availableHeight) {
-        doc.text(remaining, 40, y, { width: W });
-        y += fullHeight + 8;
-        break;
-      }
-
-      // Find the largest prefix that fits on this page. Prefer a whitespace
-      // boundary, while still making progress for unusually long unbroken text.
-      let low = 1;
-      let high = remaining.length;
-      let best = 1;
-      while (low <= high) {
-        const middle = Math.floor((low + high) / 2);
-        const candidate = remaining.slice(0, middle);
-        const candidateHeight = doc.heightOfString(candidate, { width: W });
-        if (candidateHeight <= availableHeight) {
-          best = middle;
-          low = middle + 1;
-        } else {
-          high = middle - 1;
-        }
-      }
-
-      const whitespaceBoundary = remaining.lastIndexOf(" ", best);
-      if (whitespaceBoundary > 0) {
-        best = whitespaceBoundary;
-      }
-      const chunk = remaining.slice(0, best).trimEnd();
-      const chunkHeight = doc.heightOfString(chunk, { width: W });
-      doc.text(chunk, 40, y, { width: W });
-      y += chunkHeight;
-      remaining = remaining.slice(best).trimStart();
-
-      if (remaining.length > 0) {
-        y = pdf.addPage();
-      }
-    }
-  }
-
-  pdf.finish(y);
+  doc.end();
 });
 
 export default router;
