@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Wholesale Invoice Delete regression test (Task #91)
+ * Wholesale Invoice Delete regression test
  *
  * Covers:
  *   1. Staff user gets 403 (requireAdmin)
@@ -18,6 +18,10 @@
  *      re-deleted successfully
  *  11. Repeated delete returns 404 (idempotent guard)
  *  12. Concurrent delete: exactly one succeeds, one 404; no double-restore
+ *  13. DELETE versus physical return: delete wins the shared lock race,
+ *      return gets 404, and stock/FIFO/trader books remain reconciled
+ *  14. DELETE versus rate fix: delete wins the shared lock race, rate fix
+ *      gets 404, and no settlement or orphan ledger row is left behind
  *
  * Usage:
  *   pnpm --filter @workspace/api-server run test:wholesale-delete
@@ -125,6 +129,169 @@ function assertEq<T>(actual: T, expected: T, label: string): void {
 
 function assertClose(actual: number, expected: number, label: string, tolerance = 0.01): void {
   assert(Math.abs(actual - expected) < tolerance, label, `expected ~${expected}, got ${actual}`);
+}
+
+type GateClient = Awaited<ReturnType<typeof pool.connect>>;
+
+async function waitForStockMutationWaiters(
+  gateClient: GateClient,
+  expectedCount: number,
+  label: string,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await gateClient.query<{ waiter_count: number }>(`
+      SELECT COUNT(*)::int AS waiter_count
+      FROM pg_locks AS waiting
+      JOIN pg_locks AS held
+        ON waiting.locktype = held.locktype
+       AND waiting.database IS NOT DISTINCT FROM held.database
+       AND waiting.classid IS NOT DISTINCT FROM held.classid
+       AND waiting.objid IS NOT DISTINCT FROM held.objid
+       AND waiting.objsubid IS NOT DISTINCT FROM held.objsubid
+      WHERE held.pid = pg_backend_pid()
+        AND held.locktype = 'advisory'
+        AND held.granted
+        AND waiting.pid <> held.pid
+        AND NOT waiting.granted
+    `);
+    if (Number(result.rows[0]?.waiter_count ?? 0) >= expectedCount) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`${label}: timed out waiting for ${expectedCount} stock-mutation lock waiter(s)`);
+}
+
+async function awaitRaceResponses(
+  requests: [Promise<Response>, Promise<Response>],
+  label: string,
+): Promise<[Response, Response]> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.all(requests),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`${label}: requests did not finish within 10 seconds (possible deadlock)`)),
+          10_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function runDeleteFirstLockRace(
+  invoiceId: number,
+  competingRequest: (signal: AbortSignal) => Promise<Response>,
+  label: string,
+): Promise<[deleteResponse: Response, competingResponse: Response]> {
+  const gateClient = await pool.connect();
+  const deleteController = new AbortController();
+  const competingController = new AbortController();
+  let transactionOpen = false;
+
+  try {
+    await gateClient.query("BEGIN");
+    transactionOpen = true;
+    await gateClient.query("SELECT pg_advisory_xact_lock(hashtext('stock_mutation'))");
+
+    const deleteRequest = apiReq(
+      `/wholesale/invoices/${invoiceId}`,
+      { method: "DELETE", signal: deleteController.signal },
+    );
+    await waitForStockMutationWaiters(gateClient, 1, `${label} DELETE`);
+
+    const loserRequest = competingRequest(competingController.signal);
+    await waitForStockMutationWaiters(gateClient, 2, `${label} competing request`);
+
+    await gateClient.query("COMMIT");
+    transactionOpen = false;
+    return await awaitRaceResponses([deleteRequest, loserRequest], label);
+  } catch (error) {
+    deleteController.abort();
+    competingController.abort();
+    if (transactionOpen) {
+      await gateClient.query("ROLLBACK").catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    gateClient.release();
+  }
+}
+
+async function assertRaceDeletionReconciled(args: {
+  label: string;
+  invoiceId: number;
+  loserIdempotencyKey: string;
+  stockPurchaseId: number;
+  expectedBatchRemaining: number;
+  expectedStock: number;
+  traderId: number;
+  expectedAedBalance: number;
+  expectedPureBalance: number;
+}): Promise<void> {
+  const [
+    invoiceRows,
+    consumptionRows,
+    returnRows,
+    settlementRows,
+    invoiceLedgerRows,
+    loserLedgerRows,
+    traderLedgerRows,
+    batchRows,
+    stockRows,
+  ] = await Promise.all([
+    db.select({ id: wholesaleInvoicesTable.id }).from(wholesaleInvoicesTable)
+      .where(eq(wholesaleInvoicesTable.id, args.invoiceId)),
+    db.select({ id: wholesaleInventoryConsumptionsTable.id }).from(wholesaleInventoryConsumptionsTable)
+      .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, args.invoiceId)),
+    db.select({ id: wholesaleReturnsTable.id }).from(wholesaleReturnsTable)
+      .where(eq(wholesaleReturnsTable.invoiceId, args.invoiceId)),
+    db.select({ id: wholesaleSettlementsTable.id }).from(wholesaleSettlementsTable)
+      .where(eq(wholesaleSettlementsTable.invoiceId, args.invoiceId)),
+    db.select({ id: traderLedgerEntriesTable.id }).from(traderLedgerEntriesTable)
+      .where(eq(traderLedgerEntriesTable.wholesaleInvoiceId, args.invoiceId)),
+    db.select({ id: traderLedgerEntriesTable.id }).from(traderLedgerEntriesTable)
+      .where(eq(traderLedgerEntriesTable.idempotencyKey, args.loserIdempotencyKey)),
+    db.select().from(traderLedgerEntriesTable)
+      .where(eq(traderLedgerEntriesTable.traderId, args.traderId)),
+    db.select().from(stockPurchasesTable)
+      .where(eq(stockPurchasesTable.id, args.stockPurchaseId)),
+    db.select().from(stockLevelsTable)
+      .where(eq(stockLevelsTable.category, CATEGORY)),
+  ]);
+
+  assertEq(invoiceRows.length, 0, `${args.label}: invoice is fully deleted`);
+  assertEq(consumptionRows.length, 0, `${args.label}: FIFO consumption rows are not orphaned`);
+  assertEq(returnRows.length, 0, `${args.label}: losing return leaves no return row`);
+  assertEq(settlementRows.length, 0, `${args.label}: losing rate fix leaves no settlement row`);
+  assertEq(invoiceLedgerRows.length, 0, `${args.label}: invoice ledger rows are removed`);
+  assertEq(loserLedgerRows.length, 0, `${args.label}: loser leaves no idempotency-keyed ledger row`);
+  assertClose(
+    Number(batchRows[0]?.remainingWeightGrams ?? "0"),
+    args.expectedBatchRemaining,
+    `${args.label}: FIFO batch returns to its exact baseline`,
+    0.001,
+  );
+  assertClose(
+    Number(stockRows[0]?.weightGrams ?? "0"),
+    args.expectedStock,
+    `${args.label}: stock level returns to its exact baseline`,
+    0.001,
+  );
+  assertClose(
+    traderLedgerRows.reduce((sum, row) => sum + Number(row.aedDelta), 0),
+    args.expectedAedBalance,
+    `${args.label}: trader AED balance reconciles to baseline`,
+    0.01,
+  );
+  assertClose(
+    traderLedgerRows.reduce((sum, row) => sum + Number(row.pureGoldGramsDelta), 0),
+    args.expectedPureBalance,
+    `${args.label}: trader pure-gram balance reconciles to baseline`,
+    0.001,
+  );
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -913,6 +1080,120 @@ async function run(): Promise<void> {
     "Concurrent delete does not double-restore FIFO batch",
     0.001,
   );
+
+  // ── Test 13: DELETE versus physical return ────────────────────────────────
+  console.log("\n─── Test 13: Concurrent DELETE versus physical return ───");
+  const deleteReturnRace = await createWholesaleInvoice({
+    traderId: trader.id,
+    traderSnapshot: { name: trader.name },
+    invoiceDate: "2025-09-01",
+    pricingType: "unfixed",
+    fixtureRunId: suiteRunId,
+    idempotencyKey: `del-return-race-${Date.now()}`,
+    items: [{
+      description: "Delete versus return race",
+      category: CATEGORY,
+      quantity: 1,
+      grossGrams: 12,
+      purityMultiplier: 1,
+      makingAed: 120,
+    }],
+  });
+  if (!deleteReturnRace.invoice) throw new Error("Delete-versus-return invoice not created");
+  const deleteReturnInvoiceId = deleteReturnRace.invoice.invoice.id;
+  const deleteReturnItemId = deleteReturnRace.invoice.items[0]!.id;
+  const returnRaceKey = `del-return-race-loser-${Date.now()}`;
+  toClean.invoiceIds.push(deleteReturnInvoiceId);
+
+  const [deleteReturnResponse, returnRaceResponse] = await runDeleteFirstLockRace(
+    deleteReturnInvoiceId,
+    (signal) => apiReq(`/wholesale/invoices/${deleteReturnInvoiceId}/return`, {
+      method: "POST",
+      signal,
+      body: JSON.stringify({
+        date: "2025-09-02",
+        idempotencyKey: returnRaceKey,
+        lines: [{ invoiceItemId: deleteReturnItemId, grossWeightGrams: 4 }],
+      }),
+    }),
+    "DELETE versus physical return",
+  );
+  assert(true, "DELETE versus return requests both finish without deadlock");
+  assertEq(deleteReturnResponse.status, 204, "DELETE wins the return race with 204");
+  assertEq(returnRaceResponse.status, 404, "Losing return gets a clear 404");
+  const returnRaceBody = await returnRaceResponse.json().catch(() => ({})) as { error?: string };
+  assertEq(returnRaceBody.error, "Invoice not found", "Losing return explains that the invoice is missing");
+  await assertRaceDeletionReconciled({
+    label: "DELETE versus return",
+    invoiceId: deleteReturnInvoiceId,
+    loserIdempotencyKey: `return_${returnRaceKey}`,
+    stockPurchaseId,
+    expectedBatchRemaining: initialRemaining,
+    expectedStock: initialStock,
+    traderId: trader.id,
+    expectedAedBalance: ledgerBaseline,
+    expectedPureBalance: pureBaseline,
+  });
+  if (deleteReturnResponse.status === 204) {
+    toClean.invoiceIds.splice(toClean.invoiceIds.indexOf(deleteReturnInvoiceId), 1);
+  }
+
+  // ── Test 14: DELETE versus rate fix ───────────────────────────────────────
+  console.log("\n─── Test 14: Concurrent DELETE versus rate fix ───");
+  const deleteRateFixRace = await createWholesaleInvoice({
+    traderId: trader.id,
+    traderSnapshot: { name: trader.name },
+    invoiceDate: "2025-10-01",
+    pricingType: "unfixed",
+    fixtureRunId: suiteRunId,
+    idempotencyKey: `del-rate-fix-race-${Date.now()}`,
+    items: [{
+      description: "Delete versus rate-fix race",
+      category: CATEGORY,
+      quantity: 1,
+      grossGrams: 14,
+      purityMultiplier: 1,
+      makingAed: 140,
+    }],
+  });
+  if (!deleteRateFixRace.invoice) throw new Error("Delete-versus-rate-fix invoice not created");
+  const deleteRateFixInvoiceId = deleteRateFixRace.invoice.invoice.id;
+  const rateFixRaceKey = `del-rate-fix-race-loser-${Date.now()}`;
+  toClean.invoiceIds.push(deleteRateFixInvoiceId);
+
+  const [deleteRateFixResponse, rateFixRaceResponse] = await runDeleteFirstLockRace(
+    deleteRateFixInvoiceId,
+    (signal) => apiReq(`/wholesale/invoices/${deleteRateFixInvoiceId}/fix-rate`, {
+      method: "POST",
+      signal,
+      body: JSON.stringify({
+        date: "2025-10-02",
+        idempotencyKey: rateFixRaceKey,
+        pureWeightGrams: 5,
+        rateAedPerGram: 430,
+      }),
+    }),
+    "DELETE versus rate fix",
+  );
+  assert(true, "DELETE versus rate-fix requests both finish without deadlock");
+  assertEq(deleteRateFixResponse.status, 204, "DELETE wins the rate-fix race with 204");
+  assertEq(rateFixRaceResponse.status, 404, "Losing rate fix gets a clear 404");
+  const rateFixRaceBody = await rateFixRaceResponse.json().catch(() => ({})) as { error?: string };
+  assertEq(rateFixRaceBody.error, "Invoice not found", "Losing rate fix explains that the invoice is missing");
+  await assertRaceDeletionReconciled({
+    label: "DELETE versus rate fix",
+    invoiceId: deleteRateFixInvoiceId,
+    loserIdempotencyKey: `ratefix_${rateFixRaceKey}`,
+    stockPurchaseId,
+    expectedBatchRemaining: initialRemaining,
+    expectedStock: initialStock,
+    traderId: trader.id,
+    expectedAedBalance: ledgerBaseline,
+    expectedPureBalance: pureBaseline,
+  });
+  if (deleteRateFixResponse.status === 204) {
+    toClean.invoiceIds.splice(toClean.invoiceIds.indexOf(deleteRateFixInvoiceId), 1);
+  }
 
   console.log("\n─── All delete tests complete ───");
 }
