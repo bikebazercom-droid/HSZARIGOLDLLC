@@ -33,6 +33,7 @@ import {
   wholesaleReturnLinesTable,
   traderLedgerEntriesTable,
   invoiceItemsTable,
+  inventoryConsumptionsTable,
   stockLevelsTable,
   stockPurchasesTable,
   stockMovementsTable,
@@ -1453,8 +1454,7 @@ async function run(): Promise<void> {
   console.log("\n─── Test: Dashboard excludes automated-test categories from rows and totals ───");
   const dashboardFixtureDate = new Date().toISOString().slice(0, 10);
   const hiddenDashboardCategory = `test_dashboard_hidden_${Date.now()}`;
-  const visibleDashboardControlCategory = `dashboard_control_${Date.now()}`;
-  toClean.transientCategories.push(hiddenDashboardCategory, visibleDashboardControlCategory);
+  toClean.transientCategories.push(hiddenDashboardCategory);
   const dashboardOpeningDate = new Date(`${dashboardFixtureDate}T00:00:00Z`);
   dashboardOpeningDate.setUTCDate(dashboardOpeningDate.getUTCDate() + 1);
   const dashboardOpeningStartDate = dashboardOpeningDate.toISOString().slice(0, 10);
@@ -1498,11 +1498,6 @@ async function run(): Promise<void> {
     toClean.stockPurchaseIds.push(purchaseId);
     return purchaseId;
   };
-  const visibleDashboardControlPurchaseId = await createRegisteredDashboardPurchase(
-    visibleDashboardControlCategory,
-    10,
-    333,
-  );
   const loadDashboardVisibilitySnapshot = async () => {
     const [kpis, summary, legacyDashboard, categorySummary, ledgerPeriod, ledgerOpening, statement] = await Promise.all([
       apiJson<Record<string, unknown>>(`/dashboard/kpis?${dashboardFixtureRange}`),
@@ -1633,7 +1628,7 @@ async function run(): Promise<void> {
       items: [
         {
           description: "Visible line in mixed dashboard retail fixture",
-          category: visibleDashboardControlCategory,
+          category: CATEGORY,
           quantity: 1,
           grossWeight: 1,
           unitPrice: 700,
@@ -1666,7 +1661,7 @@ async function run(): Promise<void> {
     items: [
       {
         description: "Visible line in mixed dashboard wholesale fixture",
-        category: visibleDashboardControlCategory,
+        category: CATEGORY,
         quantity: 1,
         grossGrams: 2,
         purityMultiplier: 1,
@@ -1687,24 +1682,79 @@ async function run(): Promise<void> {
   if (!mixedWholesaleCreated.invoice) throw new Error("Mixed dashboard wholesale invoice was not created");
   toClean.invoiceIds.push(mixedWholesaleCreated.invoice.invoice.id);
 
+  const [mixedRetailVisibleSlices, mixedWholesaleVisibleSlices] = await Promise.all([
+    db.select({
+      purchaseId: inventoryConsumptionsTable.purchaseId,
+      category: inventoryConsumptionsTable.category,
+      grams: inventoryConsumptionsTable.weightGrams,
+    })
+      .from(inventoryConsumptionsTable)
+      .where(and(
+        eq(inventoryConsumptionsTable.invoiceId, mixedRetailInvoice.id),
+        eq(inventoryConsumptionsTable.category, CATEGORY),
+      )),
+    db.select({
+      purchaseId: wholesaleInventoryConsumptionsTable.purchaseId,
+      category: wholesaleInventoryConsumptionsTable.category,
+      grams: wholesaleInventoryConsumptionsTable.consumedGrams,
+    })
+      .from(wholesaleInventoryConsumptionsTable)
+      .where(and(
+        eq(
+          wholesaleInventoryConsumptionsTable.wholesaleInvoiceId,
+          mixedWholesaleCreated.invoice.invoice.id,
+        ),
+        eq(wholesaleInventoryConsumptionsTable.category, CATEGORY),
+      )),
+  ]);
+  const mixedVisibleSlices = [
+    ...mixedRetailVisibleSlices,
+    ...mixedWholesaleVisibleSlices,
+  ];
+  assertClose(
+    mixedVisibleSlices.reduce((sum, slice) => sum + Number(slice.grams), 0),
+    3,
+    "Mixed dashboard fixtures record all 3g of visible-category FIFO consumption",
+    0.0001,
+  );
+  if (mixedVisibleSlices.some((slice) => slice.purchaseId == null)) {
+    throw new Error("Mixed dashboard visible-category fixture unexpectedly used a FIFO shortfall");
+  }
+  const visibleRestorationByPurchase = new Map<number, number>();
+  const visibleRestorationByCategory = new Map<string, number>();
+  for (const slice of mixedVisibleSlices) {
+    visibleRestorationByPurchase.set(
+      slice.purchaseId!,
+      (visibleRestorationByPurchase.get(slice.purchaseId!) ?? 0) + Number(slice.grams),
+    );
+    visibleRestorationByCategory.set(
+      slice.category,
+      (visibleRestorationByCategory.get(slice.category) ?? 0) + Number(slice.grams),
+    );
+  }
+
   // Keep physical-stock cards at the baseline while preserving the mixed
   // invoices' positive FIFO consumption rows. The temporary restoration is
   // undone in finally so normal invoice cleanup can reverse the sale exactly.
-  let visibleControlStockTemporarilyRestored = false;
+  let visibleStockTemporarilyRestored = false;
   try {
     await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        UPDATE stock_purchases
-        SET remaining_weight_grams = remaining_weight_grams::numeric + 2
-        WHERE id = ${visibleDashboardControlPurchaseId}
-      `);
-      await tx.execute(sql`
-        UPDATE stock_levels
-        SET weight_grams = weight_grams::numeric + 2
-        WHERE category = ${visibleDashboardControlCategory}
-      `);
+      for (const [purchaseId, grams] of visibleRestorationByPurchase) {
+        await tx.execute(sql`
+          UPDATE stock_purchases
+          SET remaining_weight_grams = remaining_weight_grams::numeric + ${grams}::numeric
+          WHERE id = ${purchaseId}
+        `);
+      }
+      for (const [category, grams] of visibleRestorationByCategory) {
+        await tx.execute(sql`
+          UPDATE stock_levels
+          SET weight_grams = weight_grams::numeric + ${grams}::numeric
+          WHERE category = ${category}
+        `);
+      }
     });
-    visibleControlStockTemporarilyRestored = true;
+    visibleStockTemporarilyRestored = true;
 
     const dashboardVisibilityAfter = await loadDashboardVisibilitySnapshot();
     assertEq(
@@ -1758,21 +1808,29 @@ async function run(): Promise<void> {
       "Dashboard financial statement PDF downloads while hidden and mixed fixtures exist",
     );
   } finally {
-    if (visibleControlStockTemporarilyRestored) {
+    if (visibleStockTemporarilyRestored) {
       await db.transaction(async (tx) => {
-        await tx.execute(sql`
-          UPDATE stock_purchases
-          SET remaining_weight_grams = remaining_weight_grams::numeric - 2
-          WHERE id = ${visibleDashboardControlPurchaseId}
-        `);
-        await tx.execute(sql`
-          UPDATE stock_levels
-          SET weight_grams = weight_grams::numeric - 2
-          WHERE category = ${visibleDashboardControlCategory}
-        `);
+        for (const [purchaseId, grams] of visibleRestorationByPurchase) {
+          await tx.execute(sql`
+            UPDATE stock_purchases
+            SET remaining_weight_grams = remaining_weight_grams::numeric - ${grams}::numeric
+            WHERE id = ${purchaseId}
+          `);
+        }
+        for (const [category, grams] of visibleRestorationByCategory) {
+          await tx.execute(sql`
+            UPDATE stock_levels
+            SET weight_grams = weight_grams::numeric - ${grams}::numeric
+            WHERE category = ${category}
+          `);
+        }
       });
     }
   }
+  await cleanupRegisteredFixture("invoice", hiddenRetailInvoice.id);
+  await cleanupRegisteredFixture("invoice", mixedRetailInvoice.id);
+  await cleanupRegisteredFixture("wholesale_invoice", hiddenWholesaleCreated.invoice.invoice.id);
+  await cleanupRegisteredFixture("wholesale_invoice", mixedWholesaleCreated.invoice.invoice.id);
 
   // Deliberate oversells use explicit shortfall FIFO slices. Returning them
   // cancels the negative stock deficit without fabricating a purchase batch.
