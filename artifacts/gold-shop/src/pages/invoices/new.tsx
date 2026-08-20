@@ -103,16 +103,15 @@ const LIVE_ASSET_DESCRIPTIONS = [
 const WHOLESALE_STOCK_ITEMS: Array<{
   description: string;
   category: WholesaleInvoiceItemInputCategory;
-  purityMultiplier: number;
 }> = [
-  { description: "Gold Jewelry 22K", category: "gold_jewelry_22k", purityMultiplier: 0.916 },
-  { description: "Gold Jewelry 21K", category: "gold_jewelry_22k", purityMultiplier: 0.875 },
-  { description: "Gold Jewelry 18K", category: "gold_jewelry_22k", purityMultiplier: 0.75 },
-  { description: "GOLD 9999 (0.9999)", category: "gold_9999", purityMultiplier: 0.9999 },
-  { description: "TEN TOLA BAR (0.9999)", category: "ten_tola_bar", purityMultiplier: 0.9999 },
-  { description: "KG BAR (0.9999)", category: "kg_bar", purityMultiplier: 0.9999 },
-  { description: "995", category: "995", purityMultiplier: 0.995 },
-  { description: "Silver", category: "silver", purityMultiplier: 0.999 },
+  { description: "Gold Jewelry 22K", category: "gold_jewelry_22k" },
+  { description: "Gold Jewelry 21K", category: "gold_jewelry_22k" },
+  { description: "Gold Jewelry 18K", category: "gold_jewelry_22k" },
+  { description: "GOLD 9999 (0.9999)", category: "gold_9999" },
+  { description: "TEN TOLA BAR (0.9999)", category: "ten_tola_bar" },
+  { description: "KG BAR (0.9999)", category: "kg_bar" },
+  { description: "995", category: "995" },
+  { description: "Silver", category: "silver" },
 ];
 
 // Visual-only display labels for the dropdown — underlying values (above) stay
@@ -382,7 +381,7 @@ export default function NewInvoice() {
     description: "",
     category: "gold_9999",
     grossGrams: 0,
-    purityMultiplier: 0.9999,
+    purityMultiplier: 1,
     makingRate: 0,
     makingAed: 0,
     rateAedPerGram: 0,
@@ -675,10 +674,7 @@ export default function NewInvoice() {
     4,
   );
   const wholesaleTotalPure = roundTo(
-    wholesaleItems.reduce(
-      (sum, item) => sum + (item.grossGrams || 0) * (item.purityMultiplier || 0),
-      0,
-    ),
+    wholesaleItems.reduce((sum, item) => sum + (item.grossGrams || 0), 0),
     4,
   );
   const wholesaleTotalMaking = roundTo(
@@ -687,9 +683,8 @@ export default function NewInvoice() {
   );
   const wholesaleTotalAed = roundTo(
     wholesaleItems.reduce((sum, item) => {
-      const pureWeight = (item.grossGrams || 0) * (item.purityMultiplier || 0);
       const metalValue = wholesalePricingType === "fixed"
-        ? pureWeight * (item.rateAedPerGram || 0)
+        ? (item.grossGrams || 0) * (item.rateAedPerGram || 0)
         : 0;
       return sum + (item.makingAed || 0) + metalValue;
     }, 0),
@@ -706,7 +701,7 @@ export default function NewInvoice() {
             ...item,
             description: selected.description,
             category: selected.category,
-            purityMultiplier: selected.purityMultiplier,
+            purityMultiplier: 1,
           }
         : item
     )));
@@ -738,7 +733,7 @@ export default function NewInvoice() {
       description: "",
       category: "gold_9999",
       grossGrams: 0,
-      purityMultiplier: 0.9999,
+      purityMultiplier: 1,
       makingRate: 0,
       makingAed: 0,
       rateAedPerGram: wholesaleMetalRate,
@@ -774,7 +769,7 @@ export default function NewInvoice() {
           category: item.category,
           quantity: 1,
           grossGrams: roundTo(item.grossGrams, 4),
-          purityMultiplier: roundTo(item.purityMultiplier, 4),
+          purityMultiplier: 1,
           makingAed: roundTo(item.makingAed, 2),
           rateAedPerGram: wholesalePricingType === "fixed"
             ? roundTo(item.rateAedPerGram, 4)
@@ -790,7 +785,7 @@ export default function NewInvoice() {
           description: "",
           category: "gold_9999",
           grossGrams: 0,
-          purityMultiplier: 0.9999,
+          purityMultiplier: 1,
           makingRate: 0,
           makingAed: 0,
           rateAedPerGram: 0,
@@ -831,10 +826,6 @@ export default function NewInvoice() {
     }
     if (wholesaleItems.some((item) => item.grossGrams <= 0)) {
       toast({ title: "Gross weight required", description: "Enter a positive gross weight on every line.", variant: "destructive" });
-      return;
-    }
-    if (wholesaleItems.some((item) => item.purityMultiplier <= 0 || item.purityMultiplier > 1)) {
-      toast({ title: "Invalid purity", description: "Purity must be greater than 0 and no more than 1.", variant: "destructive" });
       return;
     }
     if (
@@ -955,9 +946,11 @@ export default function NewInvoice() {
                 </thead>
                 <tbody>
                   {wholesaleItems.map((item, index) => {
-                    const pureWeight = roundTo(item.grossGrams * item.purityMultiplier, 4);
+                    // Wholesale settlement is always on gross weight. Purity is
+                    // deliberately fixed at 1.0000 and never discounts a line.
+                    const pureWeight = roundTo(item.grossGrams, 4);
                     const lineTotal = roundTo(
-                      item.makingAed + (wholesalePricingType === "fixed" ? pureWeight * item.rateAedPerGram : 0),
+                      item.makingAed + (wholesalePricingType === "fixed" ? item.grossGrams * item.rateAedPerGram : 0),
                       2,
                     );
                     return (
@@ -990,13 +983,10 @@ export default function NewInvoice() {
                         </td>
                         <td className="px-3 py-3">
                           <Input
-                            type="number"
-                            min="0"
-                            max="1"
-                            step="0.0001"
-                            value={item.purityMultiplier || ""}
-                            onChange={(event) => updateWholesaleItem(index, "purityMultiplier", Number(event.target.value) || 0)}
-                            className="h-9 text-center"
+                            value="1.0000"
+                            readOnly
+                            aria-label="Purity fixed at 1.0000 for wholesale"
+                            className="h-9 cursor-not-allowed bg-muted text-center text-muted-foreground"
                           />
                         </td>
                         <td className="bg-emerald-50/50 px-3 py-3 text-center font-mono font-semibold text-emerald-700">
@@ -1013,16 +1003,8 @@ export default function NewInvoice() {
                             placeholder="AED/g"
                           />
                         </td>
-                        <td className="px-3 py-3">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.makingAed || ""}
-                            onChange={(event) => updateWholesaleItem(index, "makingAed", Number(event.target.value) || 0)}
-                            className="h-9 text-center"
-                            placeholder="AED"
-                          />
+                        <td className="bg-amber-50/50 px-3 py-3 text-center font-mono font-semibold text-amber-700">
+                          {fmt(item.makingAed)}
                         </td>
                         <td className="bg-primary/5 px-3 py-3 text-center font-mono font-semibold text-primary">
                           {fmt(lineTotal)}
