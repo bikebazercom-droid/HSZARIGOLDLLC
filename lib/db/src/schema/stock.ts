@@ -30,6 +30,9 @@ export const purchaseBillsTable = pgTable("purchase_bills", {
   billNo: text("bill_no").notNull(),
   billDate: text("bill_date").notNull(), // yyyy-MM-dd
   supplierName: text("supplier_name").notNull(),
+  supplierPhone: text("supplier_phone"),
+  supplierEmail: text("supplier_email"),
+  supplierAddress: text("supplier_address"),
   purchaseType: text("purchase_type").notNull(), // fixed | unfixed
   paymentStatus: text("payment_status").notNull(), // paid | unpaid | unfixed
   totalGrossGrams: numeric("total_gross_grams", { precision: 14, scale: 4 }).notNull(),

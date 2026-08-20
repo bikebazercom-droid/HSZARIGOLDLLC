@@ -1827,7 +1827,7 @@ components:
 
     PurchaseBill:
       type: object
-      required: [id, billNo, billDate, supplierName, purchaseType, paymentStatus, totalGrossGrams, totalPureGrams, totalAed, items, createdAt]
+      required: [id, billNo, billDate, supplierName, supplierPhone, supplierEmail, supplierAddress, purchaseType, paymentStatus, totalGrossGrams, totalPureGrams, totalAed, items, createdAt]
       properties:
         id:
           type: integer
@@ -1837,6 +1837,13 @@ components:
           type: string
         supplierName:
           type: string
+        supplierPhone:
+          type: ["string", "null"]
+        supplierEmail:
+          type: ["string", "null"]
+          format: email
+        supplierAddress:
+          type: ["string", "null"]
         purchaseType:
           type: string
           enum: [fixed, unfixed]
@@ -1949,6 +1956,16 @@ components:
         supplierName:
           type: string
           minLength: 1
+        supplierPhone:
+          type: string
+          maxLength: 100
+        supplierEmail:
+          type: string
+          format: email
+          maxLength: 254
+        supplierAddress:
+          type: string
+          maxLength: 500
         purchaseType:
           type: string
           enum: [fixed, unfixed]

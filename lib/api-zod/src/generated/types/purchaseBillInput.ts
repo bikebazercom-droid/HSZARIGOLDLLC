@@ -15,6 +15,12 @@ export interface PurchaseBillInput {
   billDate: string;
   /** @minLength 1 */
   supplierName: string;
+  /** @maxLength 100 */
+  supplierPhone?: string;
+  /** @maxLength 254 */
+  supplierEmail?: string;
+  /** @maxLength 500 */
+  supplierAddress?: string;
   purchaseType: PurchaseBillInputPurchaseType;
   paymentStatus: PurchaseBillInputPaymentStatus;
   notes?: string;

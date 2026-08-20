@@ -50,6 +50,9 @@ function parseBill(
     billNo: row.billNo,
     billDate: row.billDate,
     supplierName: row.supplierName,
+    supplierPhone: row.supplierPhone,
+    supplierEmail: row.supplierEmail,
+    supplierAddress: row.supplierAddress,
     purchaseType: row.purchaseType,
     paymentStatus: row.paymentStatus,
     totalGrossGrams: Number(row.totalGrossGrams),
@@ -443,6 +446,10 @@ router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => 
   const totalGross = withPure.reduce((s, it) => s + it.grossWeightGrams, 0);
   const totalPure = withPure.reduce((s, it) => s + it.pureWeightGrams, 0);
   const totalAed = withPure.reduce((s, it) => s + it.lineTotalAed, 0);
+  const supplierName = input.supplierName.trim().toUpperCase();
+  const supplierPhone = input.supplierPhone?.trim() || null;
+  const supplierEmail = input.supplierEmail?.trim() || null;
+  const supplierAddress = input.supplierAddress?.trim() || null;
 
   // If a registered test run requested ownership, record the created bill in
   // the durable test registry atomically with its creation, so a crash right
@@ -458,7 +465,10 @@ router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => 
     const [bill] = await tx.insert(purchaseBillsTable).values({
       billNo: input.billNo.trim(),
       billDate: input.billDate,
-      supplierName: input.supplierName.trim(),
+      supplierName,
+      supplierPhone,
+      supplierEmail,
+      supplierAddress,
       purchaseType: input.purchaseType,
       paymentStatus: input.paymentStatus,
       totalGrossGrams: String(totalGross),
@@ -473,7 +483,7 @@ router.post("/purchase-bills", requireAdmin, async (req, res): Promise<void> => 
       // dual-ledger, and statement outputs keep working unchanged.
       const [sp] = await tx.insert(stockPurchasesTable).values({
         category: it.category,
-        supplierName: input.supplierName.trim(),
+        supplierName,
         purchaseDate: input.billDate,
         weightGrams: String(it.grossWeightGrams),
         totalPriceAed: String(it.lineTotalAed),
@@ -766,6 +776,9 @@ router.get("/purchase-bills/:id/pdf", requireAdmin, async (req, res): Promise<vo
     billNo: bill.billNo,
     billDate: bill.billDate,
     supplierName: bill.supplierName,
+    supplierPhone: bill.supplierPhone,
+    supplierEmail: bill.supplierEmail,
+    supplierAddress: bill.supplierAddress,
     purchaseType: bill.purchaseType,
     paymentStatus: bill.paymentStatus,
     totalGrossGrams: Number(bill.totalGrossGrams),

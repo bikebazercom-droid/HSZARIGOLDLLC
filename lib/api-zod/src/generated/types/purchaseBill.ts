@@ -14,6 +14,12 @@ export interface PurchaseBill {
   billNo: string;
   billDate: string;
   supplierName: string;
+  /** @nullable */
+  supplierPhone: string | null;
+  /** @nullable */
+  supplierEmail: string | null;
+  /** @nullable */
+  supplierAddress: string | null;
   purchaseType: PurchaseBillPurchaseType;
   paymentStatus: PurchaseBillPaymentStatus;
   totalGrossGrams: number;

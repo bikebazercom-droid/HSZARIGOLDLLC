@@ -7,6 +7,11 @@ const FIXTURE_PREFIX = "PDFE2E";
 const BISMILLAH_ARABIC = "بسم الله الرحمن الرحيم";
 const BISMILLAH_ARABIC_WORDS = BISMILLAH_ARABIC.split(" ");
 const ENGLISH_BISMILLAH = "In the name of Allah, the Most Gracious, the Most Merciful";
+const PURCHASE_BILL_SUPPLIER_CONTACT = {
+  phone: "+971 50 123 4567",
+  email: "pdf.vendor@example.com",
+  address: "Room 101, Deira, Dubai, UAE",
+} as const;
 const testAdminMobile = process.env.TEST_ADMIN_MOBILE;
 const testAdminPin = process.env.TEST_ADMIN_PIN;
 const runId = process.env.PDF_E2E_RUN_ID;
@@ -271,6 +276,9 @@ async function createPurchaseBill(
       billNo,
       billDate: "2026-08-18",
       supplierName,
+      supplierPhone: PURCHASE_BILL_SUPPLIER_CONTACT.phone,
+      supplierEmail: PURCHASE_BILL_SUPPLIER_CONTACT.email,
+      supplierAddress: PURCHASE_BILL_SUPPLIER_CONTACT.address,
       purchaseType,
       paymentStatus,
       notes: "Invoice-style purchase bill PDF regression fixture",
@@ -566,6 +574,9 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
 
       expect(normalizedText).toContain("PURCHASEBILL");
       expectArabicBismillah(text);
+      expect(text).toContain(PURCHASE_BILL_SUPPLIER_CONTACT.phone);
+      expect(text).toContain(PURCHASE_BILL_SUPPLIER_CONTACT.email);
+      expect(text).toContain(PURCHASE_BILL_SUPPLIER_CONTACT.address);
       for (const requiredText of [
         "Bill / Ref No:",
         purchaseBill.billNo,

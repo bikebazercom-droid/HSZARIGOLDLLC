@@ -231,6 +231,9 @@ export default function PurchaseBillsPage() {
   const [billNo, setBillNo] = useState("");
   const [billDate, setBillDate] = useState(todayStr);
   const [supplierName, setSupplierName] = useState("");
+  const [supplierPhone, setSupplierPhone] = useState("");
+  const [supplierEmail, setSupplierEmail] = useState("");
+  const [supplierAddress, setSupplierAddress] = useState("");
   const [purchaseType, setPurchaseType] = useState<"fixed" | "unfixed">("fixed");
   const [paymentStatus, setPaymentStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
   const [notes, setNotes] = useState("");
@@ -251,6 +254,7 @@ export default function PurchaseBillsPage() {
 
   const resetForm = () => {
     setBillNo(""); setBillDate(todayStr); setSupplierName("");
+    setSupplierPhone(""); setSupplierEmail(""); setSupplierAddress("");
     setPurchaseType("fixed"); setPaymentStatus("paid"); setNotes("");
     setLines([emptyLine()]);
   };
@@ -267,6 +271,10 @@ export default function PurchaseBillsPage() {
   const handleSave = () => {
     if (!billNo.trim()) { toast({ title: "Bill No / Ref is required", variant: "destructive" }); return; }
     if (!supplierName.trim()) { toast({ title: "Supplier name is required", variant: "destructive" }); return; }
+    if (supplierEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supplierEmail.trim())) {
+      toast({ title: "Enter a valid supplier email", variant: "destructive" });
+      return;
+    }
     for (let i = 0; i < lines.length; i++) {
       const c = calc[i];
       if (!(c.gross > 0)) { toast({ title: `Line ${i + 1}: enter a valid gross weight`, variant: "destructive" }); return; }
@@ -277,7 +285,10 @@ export default function PurchaseBillsPage() {
       data: {
         billNo: billNo.trim(),
         billDate,
-        supplierName: supplierName.trim(),
+        supplierName: supplierName.trim().toUpperCase(),
+        ...(supplierPhone.trim() ? { supplierPhone: supplierPhone.trim() } : {}),
+        ...(supplierEmail.trim() ? { supplierEmail: supplierEmail.trim() } : {}),
+        ...(supplierAddress.trim() ? { supplierAddress: supplierAddress.trim() } : {}),
         purchaseType,
         paymentStatus,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -1186,10 +1197,45 @@ export default function PurchaseBillsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Supplier Name</Label>
-                <Input list="bill-supplier-names" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="e.g. Rahim" />
+                <Input
+                  list="bill-supplier-names"
+                  value={supplierName}
+                  onChange={(e) => setSupplierName(e.target.value.toUpperCase())}
+                  placeholder="e.g. RAHIM"
+                  className="uppercase"
+                />
                 <datalist id="bill-supplier-names">
                   {suppliers?.map((s) => <option key={s} value={s} />)}
                 </datalist>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Supplier Phone Number</Label>
+                <Input
+                  type="tel"
+                  autoComplete="tel"
+                  value={supplierPhone}
+                  onChange={(e) => setSupplierPhone(e.target.value)}
+                  placeholder="e.g. +971 50 123 4567"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Supplier Email</Label>
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  value={supplierEmail}
+                  onChange={(e) => setSupplierEmail(e.target.value)}
+                  placeholder="e.g. supplier@example.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Supplier Address</Label>
+                <Input
+                  autoComplete="street-address"
+                  value={supplierAddress}
+                  onChange={(e) => setSupplierAddress(e.target.value)}
+                  placeholder="e.g. Deira, Dubai, UAE"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Purchase Type</Label>

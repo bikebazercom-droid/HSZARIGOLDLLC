@@ -916,6 +916,9 @@ export const ListPurchaseBillsResponseItem = zod.object({
   "billNo": zod.string(),
   "billDate": zod.string(),
   "supplierName": zod.string(),
+  "supplierPhone": zod.string().nullable(),
+  "supplierEmail": zod.string().email().nullable(),
+  "supplierAddress": zod.string().nullable(),
   "purchaseType": zod.enum(['fixed', 'unfixed']),
   "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
   "totalGrossGrams": zod.number(),
@@ -943,6 +946,12 @@ export const ListPurchaseBillsResponse = zod.array(ListPurchaseBillsResponseItem
  */
 
 
+export const createPurchaseBillBodySupplierPhoneMax = 100;
+
+export const createPurchaseBillBodySupplierEmailMax = 254;
+
+export const createPurchaseBillBodySupplierAddressMax = 500;
+
 export const createPurchaseBillBodyItemsItemGrossWeightGramsExclusiveMin = 0;
 
 export const createPurchaseBillBodyItemsItemPurityPercentExclusiveMin = 0;
@@ -961,6 +970,9 @@ export const CreatePurchaseBillBody = zod.object({
   "billNo": zod.string().min(1),
   "billDate": zod.string(),
   "supplierName": zod.string().min(1),
+  "supplierPhone": zod.string().max(createPurchaseBillBodySupplierPhoneMax).optional(),
+  "supplierEmail": zod.string().email().max(createPurchaseBillBodySupplierEmailMax).optional(),
+  "supplierAddress": zod.string().max(createPurchaseBillBodySupplierAddressMax).optional(),
   "purchaseType": zod.enum(['fixed', 'unfixed']),
   "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
   "notes": zod.string().optional(),
@@ -979,6 +991,9 @@ export const CreatePurchaseBillResponse = zod.object({
   "billNo": zod.string(),
   "billDate": zod.string(),
   "supplierName": zod.string(),
+  "supplierPhone": zod.string().nullable(),
+  "supplierEmail": zod.string().email().nullable(),
+  "supplierAddress": zod.string().nullable(),
   "purchaseType": zod.enum(['fixed', 'unfixed']),
   "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
   "totalGrossGrams": zod.number(),
@@ -1029,6 +1044,9 @@ export const GetPurchaseBillResponse = zod.object({
   "billNo": zod.string(),
   "billDate": zod.string(),
   "supplierName": zod.string(),
+  "supplierPhone": zod.string().nullable(),
+  "supplierEmail": zod.string().email().nullable(),
+  "supplierAddress": zod.string().nullable(),
   "purchaseType": zod.enum(['fixed', 'unfixed']),
   "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
   "totalGrossGrams": zod.number(),
@@ -1081,6 +1099,9 @@ export const UpdatePurchaseBillPaymentStatusResponse = zod.object({
   "billNo": zod.string(),
   "billDate": zod.string(),
   "supplierName": zod.string(),
+  "supplierPhone": zod.string().nullable(),
+  "supplierEmail": zod.string().email().nullable(),
+  "supplierAddress": zod.string().nullable(),
   "purchaseType": zod.enum(['fixed', 'unfixed']),
   "paymentStatus": zod.enum(['paid', 'unpaid', 'unfixed']),
   "totalGrossGrams": zod.number(),
