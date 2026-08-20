@@ -373,6 +373,7 @@ export default function NewInvoice() {
   const [newWholesaleTraderName, setNewWholesaleTraderName] = useState("");
   const [newWholesaleTraderPhone, setNewWholesaleTraderPhone] = useState("");
   const [wholesalePricingType, setWholesalePricingType] = useState<WholesaleInvoiceInputPricingType>("unfixed");
+  const [wholesaleMetalRate, setWholesaleMetalRate] = useState(0);
   const [wholesaleInvoiceDate, setWholesaleInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [wholesaleNotes, setWholesaleNotes] = useState("");
   const [wholesaleSuccess, setWholesaleSuccess] = useState<string | null>(null);
@@ -740,8 +741,17 @@ export default function NewInvoice() {
       purityMultiplier: 0.9999,
       makingRate: 0,
       makingAed: 0,
-      rateAedPerGram: 0,
+      rateAedPerGram: wholesaleMetalRate,
     }]);
+  };
+
+  const updateWholesaleMetalRate = (value: number) => {
+    setWholesaleSuccess(null);
+    setWholesaleMetalRate(value);
+    setWholesaleItems((current) => current.map((item) => ({
+      ...item,
+      rateAedPerGram: value,
+    })));
   };
 
   const removeWholesaleItem = (id: string) => {
@@ -785,6 +795,7 @@ export default function NewInvoice() {
           makingAed: 0,
           rateAedPerGram: 0,
         }]);
+        setWholesaleMetalRate(0);
         setWholesaleNotes("");
         queryClient.invalidateQueries({
           predicate: (query) => JSON.stringify(query.queryKey).includes("/api/wholesale"),
@@ -828,9 +839,9 @@ export default function NewInvoice() {
     }
     if (
       wholesalePricingType === "fixed"
-      && wholesaleItems.some((item) => item.rateAedPerGram <= 0)
+      && wholesaleMetalRate <= 0
     ) {
-      toast({ title: "Fixed rate required", description: "Enter the metal rate for every fixed-gold line.", variant: "destructive" });
+      toast({ title: "Fixed rate required", description: "Enter the metal rate for this fixed-gold invoice.", variant: "destructive" });
       return;
     }
 
@@ -916,306 +927,314 @@ export default function NewInvoice() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <Card>
-              <CardHeader className="border-b border-border/50 pb-4">
-                <CardTitle>Wholesale Entry</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 pt-5 md:grid-cols-2">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label>Trader</Label>
-                    <Button
-                      type="button"
-                      variant="link"
-                      size="sm"
-                      className="h-auto p-0"
-                      onClick={() => {
-                        setWholesaleSuccess(null);
-                        setIsAddingWholesaleTrader((current) => !current);
-                      }}
-                    >
-                      {isAddingWholesaleTrader ? "Select existing" : "Add New Trader"}
-                    </Button>
-                  </div>
-                  {isAddingWholesaleTrader ? (
-                    <div className="grid gap-3 rounded-md border border-border/60 bg-muted/20 p-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Company Name *</Label>
-                        <Input
-                          value={newWholesaleTraderName}
-                          onChange={(event) => setNewWholesaleTraderName(event.target.value)}
-                          placeholder="Trader company"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Phone</Label>
-                        <Input
-                          value={newWholesaleTraderPhone}
-                          onChange={(event) => setNewWholesaleTraderPhone(event.target.value)}
-                          placeholder="+971..."
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <Select
-                      value={wholesaleTraderId?.toString() ?? ""}
-                      onValueChange={(value) => {
-                        setWholesaleSuccess(null);
-                        setWholesaleTraderId(Number(value));
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={wholesaleTradersLoading ? "Loading traders..." : "Select existing trader"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {wholesaleTraders?.map((trader) => (
-                          <SelectItem key={trader.id} value={trader.id.toString()}>
-                            {trader.name}{trader.phone ? ` · ${trader.phone}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <Label>Pricing Type</Label>
-                  <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWholesaleSuccess(null);
-                        setWholesalePricingType("unfixed");
-                      }}
-                      className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-                        wholesalePricingType === "unfixed"
-                          ? "bg-background text-amber-700 shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      Unfixed Gold
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWholesaleSuccess(null);
-                        setWholesalePricingType("fixed");
-                      }}
-                      className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-                        wholesalePricingType === "fixed"
-                          ? "bg-background text-primary shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      Fixed Gold
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {wholesalePricingType === "unfixed"
-                      ? "Metal remains open by pure weight; making is posted now."
-                      : "Metal and making are posted in AED at the entered fixed rate."}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b border-border/50 pb-3">
-                <CardTitle>Line Items</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="overflow-x-auto rounded-md border border-border">
-                  <table className="w-full min-w-[920px] border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-[#1e3a5f] text-white">
-                        <th className="w-10 px-3 py-2.5 text-center text-xs font-semibold">#</th>
-                        <th className="min-w-[210px] px-3 py-2.5 text-left text-xs font-semibold">Stock Item</th>
-                        <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold">Gross Weight</th>
-                        <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold">Purity</th>
-                        <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold">Pure Weight</th>
-                        <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold">Making Rate</th>
-                        <th className="w-32 px-3 py-2.5 text-center text-xs font-semibold">Making Amount</th>
-                        {wholesalePricingType === "fixed" && (
-                          <th className="w-32 px-3 py-2.5 text-center text-xs font-semibold">Metal Rate</th>
-                        )}
-                        <th className="w-10 px-1 py-2.5" />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-border/50 pb-3">
+            <div>
+              <CardTitle>Invoice Items / Line Items</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Add the wholesale stock and weight details for this delivery.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addWholesaleItem}>
+              <Plus className="mr-2 h-4 w-4" /> Add Line Item
+            </Button>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full min-w-[940px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-[#1e3a5f] text-white">
+                    <th className="w-10 px-3 py-2.5 text-center text-xs font-semibold">#</th>
+                    <th className="min-w-[210px] px-3 py-2.5 text-left text-xs font-semibold">Stock Description</th>
+                    <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold">Gross Wt</th>
+                    <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold">Purity</th>
+                    <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold">Pure Wt</th>
+                    <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold">Making Rate</th>
+                    <th className="w-32 px-3 py-2.5 text-center text-xs font-semibold">Making Amt (AED)</th>
+                    <th className="w-32 px-3 py-2.5 text-center text-xs font-semibold">Total (AED)</th>
+                    <th className="w-10 px-1 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {wholesaleItems.map((item, index) => {
+                    const pureWeight = roundTo(item.grossGrams * item.purityMultiplier, 4);
+                    const lineTotal = roundTo(
+                      item.makingAed + (wholesalePricingType === "fixed" ? pureWeight * item.rateAedPerGram : 0),
+                      2,
+                    );
+                    return (
+                      <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
+                        <td className="px-3 py-3 text-center text-muted-foreground">{index + 1}</td>
+                        <td className="px-3 py-3">
+                          <Select value={item.description} onValueChange={(value) => selectWholesaleStockItem(index, value)}>
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="Select stock item" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {WHOLESALE_STOCK_ITEMS.map((stockItem) => (
+                                <SelectItem key={stockItem.description} value={stockItem.description}>
+                                  {DESC_DISPLAY_LABEL[stockItem.description] ?? stockItem.description}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            value={item.grossGrams || ""}
+                            onChange={(event) => updateWholesaleItem(index, "grossGrams", Number(event.target.value) || 0)}
+                            className="h-9 text-center"
+                            placeholder="0.0000"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.0001"
+                            value={item.purityMultiplier || ""}
+                            onChange={(event) => updateWholesaleItem(index, "purityMultiplier", Number(event.target.value) || 0)}
+                            className="h-9 text-center"
+                          />
+                        </td>
+                        <td className="bg-emerald-50/50 px-3 py-3 text-center font-mono font-semibold text-emerald-700">
+                          {pureWeight.toFixed(4)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.makingRate || ""}
+                            onChange={(event) => updateWholesaleItem(index, "makingRate", Number(event.target.value) || 0)}
+                            className="h-9 text-center"
+                            placeholder="AED/g"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.makingAed || ""}
+                            onChange={(event) => updateWholesaleItem(index, "makingAed", Number(event.target.value) || 0)}
+                            className="h-9 text-center"
+                            placeholder="AED"
+                          />
+                        </td>
+                        <td className="bg-primary/5 px-3 py-3 text-center font-mono font-semibold text-primary">
+                          {fmt(lineTotal)}
+                        </td>
+                        <td className="px-1 py-3">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeWholesaleItem(item.id)}
+                            disabled={wholesaleItems.length === 1}
+                            aria-label={`Remove wholesale item ${index + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {wholesaleItems.map((item, index) => {
-                        const pureWeight = roundTo(item.grossGrams * item.purityMultiplier, 4);
-                        return (
-                          <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
-                            <td className="px-3 py-3 text-center text-muted-foreground">{index + 1}</td>
-                            <td className="px-3 py-3">
-                              <Select value={item.description} onValueChange={(value) => selectWholesaleStockItem(index, value)}>
-                                <SelectTrigger className="h-9">
-                                  <SelectValue placeholder="Select stock item" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {WHOLESALE_STOCK_ITEMS.map((stockItem) => (
-                                    <SelectItem key={stockItem.description} value={stockItem.description}>
-                                      {DESC_DISPLAY_LABEL[stockItem.description] ?? stockItem.description}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="px-3 py-3">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.0001"
-                                value={item.grossGrams || ""}
-                                onChange={(event) => updateWholesaleItem(index, "grossGrams", Number(event.target.value) || 0)}
-                                className="h-9 text-center"
-                                placeholder="0.0000"
-                              />
-                            </td>
-                            <td className="px-3 py-3">
-                              <Input
-                                type="number"
-                                min="0"
-                                max="1"
-                                step="0.0001"
-                                value={item.purityMultiplier || ""}
-                                onChange={(event) => updateWholesaleItem(index, "purityMultiplier", Number(event.target.value) || 0)}
-                                className="h-9 text-center"
-                              />
-                            </td>
-                            <td className="bg-emerald-50/50 px-3 py-3 text-center font-mono font-semibold text-emerald-700">
-                              {pureWeight.toFixed(4)}
-                            </td>
-                            <td className="px-3 py-3">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.makingRate || ""}
-                                onChange={(event) => updateWholesaleItem(index, "makingRate", Number(event.target.value) || 0)}
-                                className="h-9 text-center"
-                                placeholder="AED/g"
-                              />
-                            </td>
-                            <td className="px-3 py-3">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.makingAed || ""}
-                                onChange={(event) => updateWholesaleItem(index, "makingAed", Number(event.target.value) || 0)}
-                                className="h-9 text-center"
-                                placeholder="AED"
-                              />
-                            </td>
-                            {wholesalePricingType === "fixed" && (
-                              <td className="bg-primary/5 px-3 py-3">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.0001"
-                                  value={item.rateAedPerGram || ""}
-                                  onChange={(event) => updateWholesaleItem(index, "rateAedPerGram", Number(event.target.value) || 0)}
-                                  className="h-9 border-primary/30 text-center font-mono"
-                                  placeholder="AED/g"
-                                />
-                              </td>
-                            )}
-                            <td className="px-1 py-3">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() => removeWholesaleItem(item.id)}
-                                disabled={wholesaleItems.length === 1}
-                                aria-label={`Remove wholesale item ${index + 1}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <Button type="button" variant="outline" className="mt-4 w-full border-dashed" onClick={addWholesaleItem}>
-                  <Plus className="mr-2 h-4 w-4" /> Add Line Item
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
 
-          <div>
-            <Card className="lg:sticky lg:top-6">
-              <CardHeader className="border-b border-border/50 bg-muted/20 pb-3">
-                <CardTitle>Summary &amp; Save</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>Invoice Date</Label>
-                  <Input
-                    type="date"
-                    value={wholesaleInvoiceDate}
-                    onChange={(event) => setWholesaleInvoiceDate(event.target.value)}
-                  />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader className="border-b border-border/50 pb-3">
+              <CardTitle>Trader Details &amp; Pricing Type</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5 pt-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Trader</Label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => {
+                      setWholesaleSuccess(null);
+                      setIsAddingWholesaleTrader((current) => !current);
+                    }}
+                  >
+                    {isAddingWholesaleTrader ? "Select existing" : "Add New Trader"}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <Textarea
-                    value={wholesaleNotes}
-                    onChange={(event) => setWholesaleNotes(event.target.value)}
-                    placeholder="Optional delivery notes"
-                    className="min-h-20 resize-none"
-                  />
-                </div>
-
-                <div className="space-y-2 rounded-md bg-sidebar p-4 text-sidebar-foreground">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-sidebar-foreground/70">Gross Weight</span>
-                    <span className="font-mono">{wholesaleTotalGross.toFixed(4)} g</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold text-emerald-400">
-                    <span>Pure Weight</span>
-                    <span className="font-mono">{wholesaleTotalPure.toFixed(4)} g</span>
-                  </div>
-                  <div className="flex justify-between border-t border-sidebar-border pt-2 text-sm">
-                    <span className="text-sidebar-foreground/70">Making Amount</span>
-                    <span className="font-mono">{fmt(wholesaleTotalMaking)} AED</span>
-                  </div>
-                  {wholesalePricingType === "fixed" && (
-                    <div className="flex justify-between border-t border-sidebar-border pt-2 font-bold text-white">
-                      <span>Fixed Invoice Total</span>
-                      <span className="font-mono">{fmt(wholesaleTotalAed)} AED</span>
+                {isAddingWholesaleTrader ? (
+                  <div className="grid gap-3 rounded-md border border-border/60 bg-muted/20 p-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Company Name *</Label>
+                      <Input
+                        value={newWholesaleTraderName}
+                        onChange={(event) => setNewWholesaleTraderName(event.target.value)}
+                        placeholder="Trader company"
+                      />
                     </div>
-                  )}
-                </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Phone</Label>
+                      <Input
+                        value={newWholesaleTraderPhone}
+                        onChange={(event) => setNewWholesaleTraderPhone(event.target.value)}
+                        placeholder="+971..."
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <Select
+                    value={wholesaleTraderId?.toString() ?? ""}
+                    onValueChange={(value) => {
+                      setWholesaleSuccess(null);
+                      setWholesaleTraderId(Number(value));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={wholesaleTradersLoading ? "Loading traders..." : "Select existing trader"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wholesaleTraders?.map((trader) => (
+                        <SelectItem key={trader.id} value={trader.id.toString()}>
+                          {trader.name}{trader.phone ? ` · ${trader.phone}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
 
-                <Button
-                  type="button"
-                  size="lg"
-                  className="w-full"
-                  onClick={handleWholesaleSubmit}
-                  disabled={createWholesaleInvoice.isPending || createWholesaleTrader.isPending}
-                >
-                  {createWholesaleInvoice.isPending || createWholesaleTrader.isPending ? (
-                    "Saving Wholesale Invoice..."
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save / Create Wholesale Invoice
-                    </>
-                  )}
-                </Button>
-                <p className="text-center text-xs text-muted-foreground">
-                  Saves directly and keeps you on this invoice page.
+              <div className="space-y-3">
+                <Label>Pricing Type</Label>
+                <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWholesaleSuccess(null);
+                      setWholesalePricingType("unfixed");
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                      wholesalePricingType === "unfixed"
+                        ? "bg-background text-amber-700 shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Unfixed Gold Delivery
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWholesaleSuccess(null);
+                      setWholesalePricingType("fixed");
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                      wholesalePricingType === "fixed"
+                        ? "bg-background text-primary shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Fixed Gold
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {wholesalePricingType === "unfixed"
+                    ? "Metal remains open by pure weight; making is posted now."
+                    : "Metal and making are posted in AED at the entered fixed rate."}
                 </p>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Delivery / Invoice Date</Label>
+                <Input
+                  type="date"
+                  value={wholesaleInvoiceDate}
+                  onChange={(event) => setWholesaleInvoiceDate(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={wholesaleNotes}
+                  onChange={(event) => setWholesaleNotes(event.target.value)}
+                  placeholder="Optional delivery notes"
+                  className="min-h-20 resize-none"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b border-border/50 bg-muted/20 pb-3">
+              <CardTitle>Wholesale Entry / Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5 pt-5">
+              <div className="space-y-2">
+                <Label>Metal Rate (AED/g)</Label>
+                {wholesalePricingType === "fixed" ? (
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={wholesaleMetalRate || ""}
+                    onChange={(event) => updateWholesaleMetalRate(Number(event.target.value) || 0)}
+                    className="font-mono"
+                    placeholder="0.0000"
+                  />
+                ) : (
+                  <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                    Open delivery — metal value settles later by pure weight.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-md bg-sidebar p-4 text-sidebar-foreground">
+                <div className="flex justify-between text-sm">
+                  <span className="text-sidebar-foreground/70">Total Gross Wt</span>
+                  <span className="font-mono">{wholesaleTotalGross.toFixed(4)} g</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold text-emerald-400">
+                  <span>Total Pure Wt</span>
+                  <span className="font-mono">{wholesaleTotalPure.toFixed(4)} g</span>
+                </div>
+                <div className="flex justify-between border-t border-sidebar-border pt-2 text-sm">
+                  <span className="text-sidebar-foreground/70">Total Making Amount</span>
+                  <span className="font-mono">{fmt(wholesaleTotalMaking)} AED</span>
+                </div>
+                <div className="flex justify-between border-t border-sidebar-border pt-2 font-bold text-white">
+                  <span>Grand Total (AED)</span>
+                  <span className="font-mono">{fmt(wholesaleTotalAed)} AED</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                onClick={handleWholesaleSubmit}
+                disabled={createWholesaleInvoice.isPending || createWholesaleTrader.isPending}
+              >
+                {createWholesaleInvoice.isPending || createWholesaleTrader.isPending ? (
+                  "Saving Wholesale Invoice..."
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Create / Save Wholesale Invoice
+                  </>
+                )}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Saves directly to the wholesale invoice service and keeps you on this page.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
