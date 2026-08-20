@@ -24,6 +24,10 @@ import PurchaseBillsPage from "@/pages/purchase-bills";
 import PriceItemsPage from "@/pages/price-items";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
+import WholesaleDashboard from "@/pages/wholesale/index";
+import NewWholesaleInvoice from "@/pages/wholesale/new";
+import WholesaleInvoiceDetail from "@/pages/wholesale/[id]";
+import WholesaleTraderStatement from "@/pages/wholesale/traders/[id]";
 
 // A 401 from any query or mutation means the server-side session is gone
 // (expired, or the API server restarted and dropped its in-memory session
@@ -55,6 +59,10 @@ function StaffRouter() {
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={NewInvoice} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
+        <Route path="/wholesale" component={WholesaleDashboard} />
+        <Route path="/wholesale/new" component={NewWholesaleInvoice} />
+        <Route path="/wholesale/:id" component={WholesaleInvoiceDetail} />
+        <Route path="/wholesale/traders/:id" component={WholesaleTraderStatement} />
         <Route>{() => <Redirect to="/invoices/new" />}</Route>
       </Switch>
     </AppLayout>
@@ -70,6 +78,10 @@ function AdminRouter() {
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={NewInvoice} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
+        <Route path="/wholesale" component={WholesaleDashboard} />
+        <Route path="/wholesale/new" component={NewWholesaleInvoice} />
+        <Route path="/wholesale/:id" component={WholesaleInvoiceDetail} />
+        <Route path="/wholesale/traders/:id" component={WholesaleTraderStatement} />
         <Route path="/customers" component={Customers} />
         <Route path="/customers/new" component={NewCustomer} />
         <Route path="/customers/:id" component={CustomerDetail} />

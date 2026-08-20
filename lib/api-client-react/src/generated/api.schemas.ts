@@ -791,6 +791,298 @@ export interface MonthlySale {
   bankTransfer: number;
 }
 
+export interface WholesaleTrader {
+  id: number;
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  trn?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleTraderInput {
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  name: string;
+  /** @maxLength 100 */
+  phone?: string;
+  /** @maxLength 254 */
+  email?: string;
+  /** @maxLength 500 */
+  address?: string;
+  /** @maxLength 100 */
+  trn?: string;
+  isActive?: boolean;
+}
+
+export interface WholesaleTraderUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  name?: string;
+  /** @maxLength 100 */
+  phone?: string;
+  /** @maxLength 254 */
+  email?: string;
+  /** @maxLength 500 */
+  address?: string;
+  /** @maxLength 100 */
+  trn?: string;
+  isActive?: boolean;
+}
+
+export interface WholesaleInvoiceItem {
+  id: number;
+  invoiceId: number;
+  description: string;
+  category: string;
+  quantity: number;
+  grossGrams: number;
+  purityMultiplier: number;
+  pureGrams: number;
+  /** @nullable */
+  rateAedPerGram?: number | null;
+  makingAed: number;
+  totalAed: number;
+  fixedPureGrams: number;
+  returnedGrossGrams: number;
+  returnedPureGrams: number;
+  returnedFixedPureGrams: number;
+  returnedMakingAed: number;
+  returnedMetalAed: number;
+}
+
+export type WholesaleInvoicePricingType = typeof WholesaleInvoicePricingType[keyof typeof WholesaleInvoicePricingType];
+
+
+export const WholesaleInvoicePricingType = {
+  fixed: 'fixed',
+  unfixed: 'unfixed',
+} as const;
+
+export type WholesaleInvoiceStatus = typeof WholesaleInvoiceStatus[keyof typeof WholesaleInvoiceStatus];
+
+
+export const WholesaleInvoiceStatus = {
+  open: 'open',
+  partially_settled: 'partially_settled',
+  settled: 'settled',
+} as const;
+
+export interface WholesaleInvoice {
+  id: number;
+  invoiceNumber: string;
+  invoiceDate: string;
+  /** @nullable */
+  traderId?: number | null;
+  traderName: string;
+  /** @nullable */
+  traderPhone?: string | null;
+  /** @nullable */
+  traderEmail?: string | null;
+  /** @nullable */
+  traderAddress?: string | null;
+  /** @nullable */
+  traderTrn?: string | null;
+  pricingType: WholesaleInvoicePricingType;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  createdByUserId?: number | null;
+  /** @nullable */
+  createdByUserName?: string | null;
+  status: WholesaleInvoiceStatus;
+  totalGrossGrams: number;
+  totalPureGrams: number;
+  totalMakingAed: number;
+  totalAed: number;
+  openPureGrams: number;
+  settledAed: number;
+  createdAt: string;
+  items: WholesaleInvoiceItem[];
+}
+
+export type WholesaleInvoiceItemInputCategory = typeof WholesaleInvoiceItemInputCategory[keyof typeof WholesaleInvoiceItemInputCategory];
+
+
+export const WholesaleInvoiceItemInputCategory = {
+  gold_9999: 'gold_9999',
+  ten_tola_bar: 'ten_tola_bar',
+  kg_bar: 'kg_bar',
+  NUMBER_995: '995',
+  gold_jewelry_22k: 'gold_jewelry_22k',
+  silver: 'silver',
+} as const;
+
+export interface WholesaleInvoiceItemInput {
+  /** @minLength 1 */
+  description: string;
+  category: WholesaleInvoiceItemInputCategory;
+  /** @exclusiveMinimum 0 */
+  quantity: number;
+  /** @exclusiveMinimum 0 */
+  grossGrams: number;
+  /**
+     * @maximum 1
+     * @exclusiveMinimum 0
+     */
+  purityMultiplier: number;
+  /** @minimum 0 */
+  makingAed: number;
+  /**
+     * Required for fixed invoices; must be null/absent for unfixed
+     * @exclusiveMinimum 0
+     */
+  rateAedPerGram?: number;
+}
+
+export type WholesaleInvoiceInputPricingType = typeof WholesaleInvoiceInputPricingType[keyof typeof WholesaleInvoiceInputPricingType];
+
+
+export const WholesaleInvoiceInputPricingType = {
+  fixed: 'fixed',
+  unfixed: 'unfixed',
+} as const;
+
+export interface WholesaleInvoiceInput {
+  traderId: number;
+  /** yyyy-MM-dd */
+  invoiceDate: string;
+  pricingType: WholesaleInvoiceInputPricingType;
+  notes?: string;
+  /** @maxLength 128 */
+  idempotencyKey?: string;
+  /** @minItems 1 */
+  items: WholesaleInvoiceItemInput[];
+}
+
+export interface WholesaleRateFixInput {
+  /** @exclusiveMinimum 0 */
+  pureWeightGrams: number;
+  /** @exclusiveMinimum 0 */
+  rateAedPerGram: number;
+  /** yyyy-MM-dd */
+  date: string;
+  note?: string;
+  /** @maxLength 128 */
+  idempotencyKey?: string;
+}
+
+export interface WholesaleReturnLineInput {
+  invoiceItemId: number;
+  /** @exclusiveMinimum 0 */
+  grossWeightGrams: number;
+}
+
+export interface WholesaleReturnInput {
+  /** @minItems 1 */
+  lines: WholesaleReturnLineInput[];
+  /** yyyy-MM-dd */
+  date: string;
+  note?: string;
+  /** @maxLength 128 */
+  idempotencyKey?: string;
+}
+
+export interface WholesaleReturnLine {
+  id: number;
+  invoiceItemId: number;
+  grossWeightGrams: number;
+  pureWeightGrams: number;
+  returnedFixedPureGrams: number;
+  returnedMakingAed: number;
+  returnedMetalAed: number;
+  returnedAed: number;
+}
+
+export interface WholesaleReturnRecord {
+  id: number;
+  returnNumber: string;
+  invoiceId: number;
+  returnDate: string;
+  /** @nullable */
+  note?: string | null;
+  totalReturnedGrossGrams: number;
+  totalReturnedPureGrams: number;
+  totalReturnedFixedPureGrams: number;
+  totalReturnedMakingAed: number;
+  totalReturnedMetalAed: number;
+  totalReturnedAed: number;
+  /** @nullable */
+  createdByUserId?: number | null;
+  /** @nullable */
+  createdByUserName?: string | null;
+  createdAt: string;
+  lines: WholesaleReturnLine[];
+}
+
+export type TraderLedgerEntryEventType = typeof TraderLedgerEntryEventType[keyof typeof TraderLedgerEntryEventType];
+
+
+export const TraderLedgerEntryEventType = {
+  delivery: 'delivery',
+  fixed_sale: 'fixed_sale',
+  rate_fix: 'rate_fix',
+  physical_return: 'physical_return',
+} as const;
+
+export interface TraderLedgerEntry {
+  id: number;
+  traderId: number;
+  eventType: TraderLedgerEntryEventType;
+  /** yyyy-MM-dd business date */
+  eventDate: string;
+  aedDelta: number;
+  pureGoldGramsDelta: number;
+  /** @nullable */
+  wholesaleInvoiceId?: number | null;
+  /** @nullable */
+  wholesaleItemId?: number | null;
+  /** @nullable */
+  wholesaleSettlementId?: number | null;
+  /** @nullable */
+  wholesaleReturnId?: number | null;
+  /** @nullable */
+  note?: string | null;
+  /** @nullable */
+  createdByUserId?: number | null;
+  /** @nullable */
+  createdByUserName?: string | null;
+  /** @nullable */
+  idempotencyKey?: string | null;
+  createdAt: string;
+}
+
+export interface TraderLedgerStatement {
+  trader: WholesaleTrader;
+  entries: TraderLedgerEntry[];
+  /** Running total AED owed by trader to shop (positive = owes shop) */
+  balanceAed: number;
+  /** Running total pure grams owed by trader to shop */
+  balancePureGrams: number;
+}
+
+export interface WholesaleDashboard {
+  invoiceCount: number;
+  fixedInvoiceCount: number;
+  unfixedInvoiceCount: number;
+  settledInvoiceCount: number;
+  totalFixedAed: number;
+  openPureGrams: number;
+  returnedGrossGrams: number;
+  traderCount: number;
+}
+
 export type GetCategorySummaryParams = {
 startDate: string;
 endDate: string;
@@ -870,4 +1162,36 @@ export const GetSalesReportCategory = {
   gold_jewelry_22k: 'gold_jewelry_22k',
   silver: 'silver',
 } as const;
+
+export type ListWholesaleTradersParams = {
+search?: string;
+isActive?: boolean;
+};
+
+export type GetTraderStatementParams = {
+traderId: number;
+startDate?: string;
+endDate?: string;
+};
+
+export type ListWholesaleInvoicesParams = {
+traderId?: number;
+status?: ListWholesaleInvoicesStatus;
+startDate?: string;
+endDate?: string;
+};
+
+export type ListWholesaleInvoicesStatus = typeof ListWholesaleInvoicesStatus[keyof typeof ListWholesaleInvoicesStatus];
+
+
+export const ListWholesaleInvoicesStatus = {
+  open: 'open',
+  partially_settled: 'partially_settled',
+  settled: 'settled',
+} as const;
+
+export type GetWholesaleDashboardParams = {
+startDate?: string;
+endDate?: string;
+};
 

@@ -1,0 +1,244 @@
+import React, { useState } from "react";
+import { Link } from "wouter";
+import { format } from "date-fns";
+import {
+  useGetWholesaleDashboard,
+  getGetWholesaleDashboardQueryKey,
+  useListWholesaleInvoices,
+  getListWholesaleInvoicesQueryKey,
+  useListWholesaleTraders,
+  getListWholesaleTradersQueryKey,
+} from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  FileDown, Plus, Search, Eye, TrendingUp, Briefcase, FileText, Anchor, History, Key, CheckCircle, Scale
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { InvoiceModeSelector } from "@/components/invoice-mode-selector";
+
+function fmtG(n: number | undefined | null): string {
+  return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+function fmtAED(n: number | undefined | null): string {
+  return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function kg(n: number | undefined | null): string {
+  return ((n ?? 0) / 1000).toFixed(3);
+}
+
+export default function WholesaleDashboard() {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [traderId, setTraderId] = useState<string>("all");
+  const [status, setStatus] = useState<string>("all");
+
+  const dashboardParams = { startDate: startDate || undefined, endDate: endDate || undefined };
+  const { data: dashboard, isLoading: dashLoading } = useGetWholesaleDashboard(
+    dashboardParams,
+    { query: { queryKey: getGetWholesaleDashboardQueryKey(dashboardParams) } }
+  );
+
+  const invoiceParams = {
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
+    traderId: traderId !== "all" ? parseInt(traderId) : undefined,
+    status: status !== "all" ? status as any : undefined,
+  };
+
+  const { data: invoices, isLoading: invoicesLoading } = useListWholesaleInvoices(
+    invoiceParams,
+    { query: { queryKey: getListWholesaleInvoicesQueryKey(invoiceParams) } }
+  );
+
+  const { data: traders } = useListWholesaleTraders(
+    {},
+    { query: { queryKey: getListWholesaleTradersQueryKey({}) } }
+  );
+
+  const handleDownloadPdf = () => {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    if (traderId !== "all") params.set("traderId", traderId);
+    if (status !== "all") params.set("status", status);
+    
+    window.open(`/api/wholesale/summary/pdf?${params.toString()}`, "_blank");
+  };
+
+  return (
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-12">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary mb-2 sm:mb-4">Wholesale &amp; Traders</h1>
+          <InvoiceModeSelector mode="wholesale" />
+        </div>
+        <div className="flex gap-2 self-start sm:self-auto pb-4">
+          <Button onClick={handleDownloadPdf} variant="outline">
+            <FileDown className="w-4 h-4 mr-1.5" /> Summary PDF
+          </Button>
+          <Link href="/wholesale/new">
+            <Button><Plus className="w-4 h-4 mr-1.5" /> Create Invoice</Button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Card>
+          <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Invoices</CardTitle>
+            <FileText className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-xl font-bold">{dashboard?.invoiceCount ?? 0}</div>
+            <p className="text-xs text-muted-foreground">{dashboard?.fixedInvoiceCount ?? 0} fixed, {dashboard?.unfixedInvoiceCount ?? 0} unfixed</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Open Pure Grams</CardTitle>
+            <Scale className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-xl font-bold text-amber-600">{fmtG(dashboard?.openPureGrams)} g</div>
+            <p className="text-xs text-muted-foreground">Pending rate fix</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total Fixed AED</CardTitle>
+            <TrendingUp className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-xl font-bold">{fmtAED(dashboard?.totalFixedAed)}</div>
+            <p className="text-xs text-muted-foreground">Settled value</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Traders</CardTitle>
+            <Briefcase className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-xl font-bold">{dashboard?.traderCount ?? 0}</div>
+            <p className="text-xs text-muted-foreground">Active wholesale partners</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+            <CardTitle className="text-lg">Wholesale Invoices</CardTitle>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="w-32">
+                <Input type="date" className="h-8 text-xs" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              </div>
+              <span className="text-xs text-muted-foreground">to</span>
+              <div className="w-32">
+                <Input type="date" className="h-8 text-xs" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              </div>
+              <div className="w-40">
+                <Select value={traderId} onValueChange={setTraderId}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All Traders" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Traders</SelectItem>
+                    {traders?.map(t => (
+                      <SelectItem key={t.id} value={t.id.toString()}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-32">
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="partially_settled">Partially Settled</SelectItem>
+                    <SelectItem value="settled">Settled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-muted/30">
+              <TableRow>
+                <TableHead className="w-28 text-xs font-semibold uppercase tracking-wider">Date</TableHead>
+                <TableHead className="w-28 text-xs font-semibold uppercase tracking-wider">Invoice #</TableHead>
+                <TableHead className="w-48 text-xs font-semibold uppercase tracking-wider">Trader</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-center">Type</TableHead>
+                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider">Total Pure Wt</TableHead>
+                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider">Open Pure Wt</TableHead>
+                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider">Fixed AED</TableHead>
+                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider">Status</TableHead>
+                <TableHead className="w-16"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoicesLoading ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading invoices...</TableCell>
+                </TableRow>
+              ) : invoices?.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No invoices found for this criteria.</TableCell>
+                </TableRow>
+              ) : (
+                invoices?.map(inv => (
+                  <TableRow key={inv.id} className="hover:bg-muted/10 group">
+                    <TableCell className="font-medium text-xs whitespace-nowrap">
+                      {format(new Date(`${inv.invoiceDate}T00:00:00`), "dd MMM yyyy")}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{inv.invoiceNumber}</TableCell>
+                    <TableCell>
+                      <div className="font-semibold text-sm truncate max-w-[200px]">{inv.traderName}</div>
+                      {inv.traderId && (
+                        <Link href={`/wholesale/traders/${inv.traderId}`} className="text-[10px] text-primary hover:underline">
+                          View Ledger
+                        </Link>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={inv.pricingType === "fixed" ? "default" : "outline"} className="text-[10px] uppercase tracking-wider">
+                        {inv.pricingType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{fmtG(inv.totalPureGrams)} g</TableCell>
+                    <TableCell className="text-right">
+                      {inv.openPureGrams > 0 ? (
+                        <span className="text-amber-600 font-bold">{fmtG(inv.openPureGrams)} g</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{fmtAED(inv.settledAed)}</TableCell>
+                    <TableCell className="text-center">
+                      {inv.status === "open" && <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-600/30">Open</Badge>}
+                      {inv.status === "partially_settled" && <Badge variant="secondary" className="text-[10px] uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Partial</Badge>}
+                      {inv.status === "settled" && <Badge variant="secondary" className="text-[10px] uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Settled</Badge>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/wholesale/${inv.id}`}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary group-hover:bg-primary/10">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+    </div>
+  );
+}

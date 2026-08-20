@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { tenTolaPurityMultiplier } from "@/lib/invoice-category-rates";
+import { InvoiceModeSelector } from "@/components/invoice-mode-selector";
 
 interface LineItem {
   id: string;
@@ -612,6 +613,12 @@ export default function NewInvoice() {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-20 px-1 sm:px-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary mb-2 sm:mb-4">New Invoice</h1>
+          <InvoiceModeSelector mode="retail" />
+        </div>
+      </div>
       <div className="space-y-6">
         {/* Invoice Items */}
         <Card>

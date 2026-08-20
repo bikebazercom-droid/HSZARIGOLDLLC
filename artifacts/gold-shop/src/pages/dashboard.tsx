@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   useGetDashboardKpis, getGetDashboardKpisQueryKey,
   useGetDashboardSummaryCards, getGetDashboardSummaryCardsQueryKey,
+  useGetWholesaleDashboard, getGetWholesaleDashboardQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
@@ -20,7 +21,7 @@ import { format, startOfWeek, startOfMonth } from "date-fns";
 import {
   Plus, ArrowDownToLine, ArrowUpFromLine, Scale, Banknote,
   Wallet, AlertCircle, Hammer, ReceiptText, ShoppingCart, TrendingUp, FileDown, FileSpreadsheet,
-  Database, Layers
+  Database, Layers, Briefcase
 } from "lucide-react";
 
 const STATEMENT_CATEGORIES: [string, string][] = [
@@ -67,6 +68,10 @@ export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummaryCards({
     query: { queryKey: getGetDashboardSummaryCardsQueryKey() },
   });
+  const { data: wholesaleDash, isLoading: wholesaleLoading } = useGetWholesaleDashboard(
+    {},
+    { query: { queryKey: getGetWholesaleDashboardQueryKey({}) } }
+  );
 
   const todayDate = format(new Date(), "MMMM d, yyyy");
 
@@ -172,7 +177,7 @@ export default function Dashboard() {
                   </Select>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Leave dates empty for an all-time statement. Includes itemized purchases, sales, remaining stock and net profit.
+                  Leave dates empty for an all-time statement. Includes itemized retail and wholesale sales, purchases, remaining stock and net profit.
                 </p>
               </div>
               <DialogFooter className="flex-col sm:flex-col gap-2">
@@ -213,7 +218,7 @@ export default function Dashboard() {
                   <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.totalPurchaseDebitAed)}</p>
                 </div>
                 <div className="p-5 flex flex-col justify-center">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Sales Credit (Cash In)</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Sales Credit (Invoiced)</p>
                   <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.totalSalesCreditAed)}</p>
                 </div>
                 <div className="p-5 flex flex-col justify-center">
@@ -260,6 +265,40 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Wholesale Overview */}
+      {wholesaleDash && (
+        <Card className="overflow-hidden border-border/50 shadow-sm">
+          <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <Briefcase className="w-4 h-4 text-muted-foreground" /> Wholesale &amp; Traders Overview
+            </CardTitle>
+            <Link href="/wholesale">
+              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2">View Wholesale Dashboard</Button>
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
+              <div className="p-5 flex flex-col justify-center">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Total AED Posted</p>
+                <p className="text-lg font-bold font-mono text-foreground">{fmtAED(wholesaleDash.totalFixedAed)}</p>
+              </div>
+              <div className="p-5 flex flex-col justify-center bg-amber-50/30 dark:bg-amber-950/10">
+                <p className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-500 font-semibold mb-1">Open Pure Grams</p>
+                <p className="text-lg font-bold font-mono text-amber-700 dark:text-amber-500">{fmtG(wholesaleDash.openPureGrams)} g</p>
+              </div>
+              <div className="p-5 flex flex-col justify-center">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Returned Grams</p>
+                <p className="text-lg font-bold font-mono text-foreground">{fmtG(wholesaleDash.returnedGrossGrams)} g</p>
+              </div>
+              <div className="p-5 flex flex-col justify-center">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Active Traders</p>
+                <p className="text-lg font-bold font-mono text-foreground">{wholesaleDash.traderCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Category Breakdown Table */}

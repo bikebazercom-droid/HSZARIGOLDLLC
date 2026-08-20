@@ -7,3 +7,4 @@ export * from "./invoices";
 export * from "./company-settings";
 export * from "./stock";
 export * from "./pdf-test-fixtures";
+export * from "./wholesale";

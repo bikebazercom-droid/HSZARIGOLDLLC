@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Package,
   Settings, LogOut, Menu, X, FilePlus, ReceiptText,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Briefcase
 } from "lucide-react";
 import { useGetSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/context/auth";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 const ADMIN_SETTINGS_SUB = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/wholesale", label: "Wholesale", icon: Briefcase },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
   { href: "/purchase-bills", label: "Purchase Bills", icon: ReceiptText },
@@ -21,6 +22,7 @@ const ADMIN_SETTINGS_SUB = [
 
 const STAFF_NAV = [
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/wholesale", label: "Wholesale", icon: Briefcase },
   { href: "/invoices/new", label: "New Invoice", icon: FilePlus },
 ];
 

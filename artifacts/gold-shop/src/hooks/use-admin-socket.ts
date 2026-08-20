@@ -108,6 +108,14 @@ export function useAdminSocket(): void {
       invalidateDashboardAggregates();
     }
 
+    function onWholesaleMutation() {
+      queryClient.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string"
+          && (q.queryKey[0] as string).startsWith("/api/wholesale"),
+      });
+      invalidateDashboardAggregates();
+    }
+
     sock.on("STOCK_MUTATION",    onStockMutation);
     sock.on("INVOICE_MUTATION",  onInvoiceMutation);
     sock.on("PRICE_MUTATION",    onPriceMutation);
@@ -115,6 +123,7 @@ export function useAdminSocket(): void {
     sock.on("SETTINGS_MUTATION", onSettingsMutation);
     sock.on("CUSTOMER_MUTATION", onCustomerMutation);
     sock.on("USER_MUTATION",     onUserMutation);
+    sock.on("WHOLESALE_MUTATION", onWholesaleMutation);
 
     return () => {
       sock.off("STOCK_MUTATION",    onStockMutation);
@@ -124,6 +133,7 @@ export function useAdminSocket(): void {
       sock.off("SETTINGS_MUTATION", onSettingsMutation);
       sock.off("CUSTOMER_MUTATION", onCustomerMutation);
       sock.off("USER_MUTATION",     onUserMutation);
+      sock.off("WHOLESALE_MUTATION", onWholesaleMutation);
     };
   }, [user, queryClient]);
 }

@@ -32,6 +32,7 @@ import {
   STATEMENT_FIRST_PAGE_SPACER,
   STATEMENT_PDF_MARGIN,
 } from "@/components/pdf-branding";
+import { InvoiceModeSelector } from "@/components/invoice-mode-selector";
 
 // For known stock buckets show the friendly label; for custom items show the
 // exact user-entered item name (never a generic "Custom" fallback).
@@ -211,9 +212,12 @@ export default function Invoices() {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-6xl mx-auto">
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary">Invoices</h1>
-        <Link href="/invoices/new" className="self-start sm:self-auto">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary mb-2 sm:mb-4">Invoices</h1>
+          <InvoiceModeSelector mode="retail" />
+        </div>
+        <Link href="/invoices/new" className="self-start sm:self-auto pb-4">
           <Button className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" /> Create Invoice</Button>
         </Link>
       </div>

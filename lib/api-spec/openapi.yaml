@@ -844,6 +844,331 @@ paths:
                 items:
                   $ref: "#/components/schemas/MonthlySale"
 
+  # ── Wholesale ──────────────────────────────────────────────────────────────
+
+  /wholesale/traders:
+    get:
+      operationId: listWholesaleTraders
+      tags: [wholesale]
+      summary: List wholesale traders
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of traders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleTrader"
+    post:
+      operationId: createWholesaleTrader
+      tags: [wholesale]
+      summary: Create a new wholesale trader
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleTraderInput"
+      responses:
+        "201":
+          description: Created trader
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleTrader"
+
+  /wholesale/traders/{id}:
+    get:
+      operationId: getWholesaleTrader
+      tags: [wholesale]
+      summary: Get a wholesale trader by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trader
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleTrader"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateWholesaleTrader
+      tags: [wholesale]
+      summary: Update a wholesale trader
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleTraderUpdate"
+      responses:
+        "200":
+          description: Updated trader
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleTrader"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wholesale/ledger:
+    get:
+      operationId: getTraderStatement
+      tags: [wholesale]
+      summary: Get trader ledger / statement entries for a specific trader
+      parameters:
+        - name: traderId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trader ledger entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraderLedgerStatement"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wholesale/invoices:
+    get:
+      operationId: listWholesaleInvoices
+      tags: [wholesale]
+      summary: List wholesale invoices
+      parameters:
+        - name: traderId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, partially_settled, settled]
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of wholesale invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleInvoice"
+    post:
+      operationId: createWholesaleInvoice
+      tags: [wholesale]
+      summary: Create a new wholesale invoice (fixed or unfixed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleInvoiceInput"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleInvoice"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wholesale/invoices/{id}:
+    get:
+      operationId: getWholesaleInvoice
+      tags: [wholesale]
+      summary: Get a wholesale invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Wholesale invoice with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleInvoice"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wholesale/invoices/{id}/fix-rate:
+    post:
+      operationId: fixWholesaleRate
+      tags: [wholesale]
+      summary: Partially or fully fix the rate for an unfixed wholesale invoice (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleRateFixInput"
+      responses:
+        "200":
+          description: Updated invoice after rate fix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleInvoice"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Over-fix or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wholesale/invoices/{id}/return:
+    post:
+      operationId: returnWholesaleGoods
+      tags: [wholesale]
+      summary: Record a partial or full physical return on a wholesale invoice (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleReturnInput"
+      responses:
+        "200":
+          description: Created return record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleReturnRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Over-return or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wholesale/dashboard:
+    get:
+      operationId: getWholesaleDashboard
+      tags: [wholesale]
+      summary: Wholesale summary dashboard with invoice counts, fixed AED, open pure grams, returned grams
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Wholesale dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleDashboard"
+
 components:
   schemas:
     HealthStatus:
@@ -2018,3 +2343,411 @@ components:
           type: number
         bankTransfer:
           type: number
+
+    # ── Wholesale schemas ──────────────────────────────────────────────────
+
+    WholesaleTrader:
+      type: object
+      required: [id, name, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        trn:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WholesaleTraderInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 300
+        phone:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        address:
+          type: string
+          maxLength: 500
+        trn:
+          type: string
+          maxLength: 100
+        isActive:
+          type: boolean
+
+    WholesaleTraderUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 300
+        phone:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        address:
+          type: string
+          maxLength: 500
+        trn:
+          type: string
+          maxLength: 100
+        isActive:
+          type: boolean
+
+    WholesaleInvoiceItem:
+      type: object
+      required: [id, invoiceId, description, category, quantity, grossGrams, purityMultiplier, pureGrams, makingAed, totalAed, fixedPureGrams, returnedGrossGrams, returnedPureGrams, returnedFixedPureGrams, returnedMakingAed, returnedMetalAed]
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        description:
+          type: string
+        category:
+          type: string
+        quantity:
+          type: number
+        grossGrams:
+          type: number
+        purityMultiplier:
+          type: number
+        pureGrams:
+          type: number
+        rateAedPerGram:
+          type: ["number", "null"]
+        makingAed:
+          type: number
+        totalAed:
+          type: number
+        fixedPureGrams:
+          type: number
+        returnedGrossGrams:
+          type: number
+        returnedPureGrams:
+          type: number
+        returnedFixedPureGrams:
+          type: number
+        returnedMakingAed:
+          type: number
+        returnedMetalAed:
+          type: number
+
+    WholesaleInvoice:
+      type: object
+      required: [id, invoiceNumber, invoiceDate, traderName, pricingType, status, totalGrossGrams, totalPureGrams, totalMakingAed, totalAed, openPureGrams, settledAed, createdAt, items]
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        invoiceDate:
+          type: string
+        traderId:
+          type: ["integer", "null"]
+        traderName:
+          type: string
+        traderPhone:
+          type: ["string", "null"]
+        traderEmail:
+          type: ["string", "null"]
+        traderAddress:
+          type: ["string", "null"]
+        traderTrn:
+          type: ["string", "null"]
+        pricingType:
+          type: string
+          enum: [fixed, unfixed]
+        notes:
+          type: ["string", "null"]
+        createdByUserId:
+          type: ["integer", "null"]
+        createdByUserName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, partially_settled, settled]
+        totalGrossGrams:
+          type: number
+        totalPureGrams:
+          type: number
+        totalMakingAed:
+          type: number
+        totalAed:
+          type: number
+        openPureGrams:
+          type: number
+        settledAed:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleInvoiceItem"
+
+    WholesaleInvoiceItemInput:
+      type: object
+      required: [description, category, quantity, grossGrams, purityMultiplier, makingAed]
+      properties:
+        description:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          enum: [gold_9999, ten_tola_bar, kg_bar, "995", gold_jewelry_22k, silver]
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+        grossGrams:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+        purityMultiplier:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+          multipleOf: 0.0001
+        makingAed:
+          type: number
+          minimum: 0
+          multipleOf: 0.01
+        rateAedPerGram:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+          description: Required for fixed invoices; must be null/absent for unfixed
+
+    WholesaleInvoiceInput:
+      type: object
+      required: [traderId, invoiceDate, pricingType, items]
+      properties:
+        traderId:
+          type: integer
+        invoiceDate:
+          type: string
+          description: yyyy-MM-dd
+        pricingType:
+          type: string
+          enum: [fixed, unfixed]
+        notes:
+          type: string
+        idempotencyKey:
+          type: string
+          maxLength: 128
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WholesaleInvoiceItemInput"
+
+    WholesaleRateFixInput:
+      type: object
+      required: [pureWeightGrams, rateAedPerGram, date]
+      properties:
+        pureWeightGrams:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+        rateAedPerGram:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+        date:
+          type: string
+          description: yyyy-MM-dd
+        note:
+          type: string
+        idempotencyKey:
+          type: string
+          maxLength: 128
+
+    WholesaleReturnLineInput:
+      type: object
+      required: [invoiceItemId, grossWeightGrams]
+      properties:
+        invoiceItemId:
+          type: integer
+        grossWeightGrams:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+
+    WholesaleReturnInput:
+      type: object
+      required: [lines, date]
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WholesaleReturnLineInput"
+        date:
+          type: string
+          description: yyyy-MM-dd
+        note:
+          type: string
+        idempotencyKey:
+          type: string
+          maxLength: 128
+
+    WholesaleReturnLine:
+      type: object
+      required: [id, invoiceItemId, grossWeightGrams, pureWeightGrams, returnedFixedPureGrams, returnedMakingAed, returnedMetalAed, returnedAed]
+      properties:
+        id:
+          type: integer
+        invoiceItemId:
+          type: integer
+        grossWeightGrams:
+          type: number
+        pureWeightGrams:
+          type: number
+        returnedFixedPureGrams:
+          type: number
+        returnedMakingAed:
+          type: number
+        returnedMetalAed:
+          type: number
+        returnedAed:
+          type: number
+
+    WholesaleReturnRecord:
+      type: object
+      required: [id, returnNumber, invoiceId, returnDate, totalReturnedGrossGrams, totalReturnedPureGrams, totalReturnedFixedPureGrams, totalReturnedMakingAed, totalReturnedMetalAed, totalReturnedAed, createdAt, lines]
+      properties:
+        id:
+          type: integer
+        returnNumber:
+          type: string
+        invoiceId:
+          type: integer
+        returnDate:
+          type: string
+        note:
+          type: ["string", "null"]
+        totalReturnedGrossGrams:
+          type: number
+        totalReturnedPureGrams:
+          type: number
+        totalReturnedFixedPureGrams:
+          type: number
+        totalReturnedMakingAed:
+          type: number
+        totalReturnedMetalAed:
+          type: number
+        totalReturnedAed:
+          type: number
+        createdByUserId:
+          type: ["integer", "null"]
+        createdByUserName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleReturnLine"
+
+    TraderLedgerEntry:
+      type: object
+      required: [id, traderId, eventType, eventDate, aedDelta, pureGoldGramsDelta, createdAt]
+      properties:
+        id:
+          type: integer
+        traderId:
+          type: integer
+        eventType:
+          type: string
+          enum: [delivery, fixed_sale, rate_fix, physical_return]
+        eventDate:
+          type: string
+          description: yyyy-MM-dd business date
+        aedDelta:
+          type: number
+        pureGoldGramsDelta:
+          type: number
+        wholesaleInvoiceId:
+          type: ["integer", "null"]
+        wholesaleItemId:
+          type: ["integer", "null"]
+        wholesaleSettlementId:
+          type: ["integer", "null"]
+        wholesaleReturnId:
+          type: ["integer", "null"]
+        note:
+          type: ["string", "null"]
+        createdByUserId:
+          type: ["integer", "null"]
+        createdByUserName:
+          type: ["string", "null"]
+        idempotencyKey:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    TraderLedgerStatement:
+      type: object
+      required: [trader, entries, balanceAed, balancePureGrams]
+      properties:
+        trader:
+          $ref: "#/components/schemas/WholesaleTrader"
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraderLedgerEntry"
+        balanceAed:
+          type: number
+          description: Running total AED owed by trader to shop (positive = owes shop)
+        balancePureGrams:
+          type: number
+          description: Running total pure grams owed by trader to shop
+
+    WholesaleDashboard:
+      type: object
+      required: [invoiceCount, fixedInvoiceCount, unfixedInvoiceCount, settledInvoiceCount, totalFixedAed, openPureGrams, returnedGrossGrams, traderCount]
+      properties:
+        invoiceCount:
+          type: integer
+        fixedInvoiceCount:
+          type: integer
+        unfixedInvoiceCount:
+          type: integer
+        settledInvoiceCount:
+          type: integer
+        totalFixedAed:
+          type: number
+        openPureGrams:
+          type: number
+        returnedGrossGrams:
+          type: number
+        traderCount:
+          type: integer

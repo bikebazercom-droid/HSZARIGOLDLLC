@@ -9,12 +9,13 @@ import { STOCK_CATEGORY_LABEL } from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
-const CATEGORY_ORDER = ["gold_jewelry", "gold_9999", "ten_tola_bar", "kg_bar", "silver", "custom"] as const;
+const CATEGORY_ORDER = ["gold_jewelry_22k", "gold_9999", "ten_tola_bar", "kg_bar", "995", "silver", "custom"] as const;
 const CATEGORY_SUMMARY_LABEL: Record<string, string> = {
-  gold_jewelry: "22K Gold Jewelry",
+  gold_jewelry_22k: "22K Gold Jewelry",
   gold_9999: "GOLD 9999",
   ten_tola_bar: "TEN TOLA BAR",
   kg_bar: "KG. BAR",
+  "995": "995",
   silver: "Silver",
   custom: "Custom",
 };
@@ -71,6 +72,30 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     ],
     sql` AND `,
   );
+  const wholesaleInvoiceWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(q.startDate?.trim() ? [sql`wi.invoice_date >= ${q.startDate.trim()}`] : []),
+      ...(q.endDate?.trim() ? [sql`wi.invoice_date <= ${q.endDate.trim()}`] : []),
+    ],
+    sql` AND `,
+  );
+  const wholesaleLedgerWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(q.startDate?.trim() ? [sql`tle.event_date >= ${q.startDate.trim()}`] : []),
+      ...(q.endDate?.trim() ? [sql`tle.event_date <= ${q.endDate.trim()}`] : []),
+    ],
+    sql` AND `,
+  );
+  const wholesaleReturnWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(q.startDate?.trim() ? [sql`wr.return_date >= ${q.startDate.trim()}`] : []),
+      ...(q.endDate?.trim() ? [sql`wr.return_date <= ${q.endDate.trim()}`] : []),
+    ],
+    sql` AND `,
+  );
 
   // COGS: weighted-average all-time purchase cost per gram per category,
   // multiplied by sold grams per stock bucket in the range. Same bucket rule
@@ -80,7 +105,7 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
         WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
         ELSE ii.category END)`;
 
-  const [invAgg, itemAgg, purchaseAgg, cogsAgg] = await Promise.all([
+  const [invAgg, itemAgg, purchaseAgg, cogsAgg, wholesaleAgg, wholesaleCogsAgg] = await Promise.all([
     db.execute<{ invoice_count: string; total_revenue: string; cash_received: string; outstanding_due: string }>(sql`
       SELECT COUNT(*)::text AS invoice_count,
              COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
@@ -110,12 +135,65 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
       JOIN invoices i ON i.id = c.invoice_id
       WHERE ${invWhere}
     `).then((r) => r.rows[0]),
+    db.execute<{
+      invoice_count: string;
+      total_revenue: string;
+      sold_grams: string;
+      making_charges: string;
+    }>(sql`
+      SELECT
+        (SELECT COUNT(*) FROM wholesale_invoices wi WHERE ${wholesaleInvoiceWhere})::text AS invoice_count,
+        (SELECT COALESCE(SUM(tle.aed_delta::numeric), 0)
+         FROM trader_ledger_entries tle WHERE ${wholesaleLedgerWhere})::text AS total_revenue,
+        (
+          COALESCE((
+            SELECT SUM(wii.gross_grams::numeric)
+            FROM wholesale_invoice_items wii
+            JOIN wholesale_invoices wi ON wi.id = wii.invoice_id
+            WHERE ${wholesaleInvoiceWhere}
+          ), 0)
+          - COALESCE((
+            SELECT SUM(wr.total_returned_gross_grams::numeric)
+            FROM wholesale_returns wr
+            WHERE ${wholesaleReturnWhere}
+          ), 0)
+        )::text AS sold_grams,
+        (
+          COALESCE((
+            SELECT SUM(wii.making_aed::numeric)
+            FROM wholesale_invoice_items wii
+            JOIN wholesale_invoices wi ON wi.id = wii.invoice_id
+            WHERE ${wholesaleInvoiceWhere}
+          ), 0)
+          - COALESCE((
+            SELECT SUM(wr.total_returned_making_aed::numeric)
+            FROM wholesale_returns wr
+            WHERE ${wholesaleReturnWhere}
+          ), 0)
+        )::text AS making_charges
+    `).then((r) => r.rows[0]),
+    db.execute<{ cogs: string }>(sql`
+      SELECT (
+        COALESCE((
+          SELECT SUM(wic.cost_aed::numeric)
+          FROM wholesale_inventory_consumptions wic
+          JOIN wholesale_invoices wi ON wi.id = wic.wholesale_invoice_id
+          WHERE ${wholesaleInvoiceWhere}
+        ), 0)
+        - COALESCE((
+          SELECT SUM(wr.total_returned_cogs_aed::numeric)
+          FROM wholesale_returns wr
+          WHERE ${wholesaleReturnWhere}
+        ), 0)
+      )::text AS cogs
+    `).then((r) => r.rows[0]),
   ]);
 
   const stockInGrams = Number(purchaseAgg.purchased_grams);
-  const stockOutGrams = Number(itemAgg.sold_grams);
-  const invoiceCount = Number(invAgg.invoice_count);
-  const totalRevenueAed = Number(invAgg.total_revenue);
+  const stockOutGrams = Number(itemAgg.sold_grams) + Number(wholesaleAgg.sold_grams);
+  const invoiceCount = Number(invAgg.invoice_count) + Number(wholesaleAgg.invoice_count);
+  const totalRevenueAed = Number(invAgg.total_revenue) + Number(wholesaleAgg.total_revenue);
+  const totalCogsAed = Number(cogsAgg.cogs) + Number(wholesaleCogsAgg.cogs);
 
   res.json({
     stockInGrams,
@@ -123,13 +201,13 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     netStockGrams: stockInGrams - stockOutGrams,
     totalRevenueAed,
     cashReceivedAed: Number(invAgg.cash_received),
-    outstandingDueAed: Number(invAgg.outstanding_due),
-    makingChargesAed: Number(itemAgg.making_charges),
+    outstandingDueAed: Number(invAgg.outstanding_due) + Number(wholesaleAgg.total_revenue),
+    makingChargesAed: Number(itemAgg.making_charges) + Number(wholesaleAgg.making_charges),
     invoiceCount,
     avgInvoiceAed: invoiceCount > 0 ? totalRevenueAed / invoiceCount : 0,
     purchaseCostAed: Number(purchaseAgg.purchase_cost),
-    cogsAed: Number(cogsAgg.cogs),
-    netProfitAed: totalRevenueAed - Number(cogsAgg.cogs),
+    cogsAed: totalCogsAed,
+    netProfitAed: totalRevenueAed - totalCogsAed,
   });
 });
 
@@ -152,13 +230,26 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
       FROM stock_purchases
     `).then((r) => r.rows[0]),
     db.execute<{ total_revenue: string }>(sql`
-      SELECT COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue
-      FROM invoices i
+      SELECT (
+        COALESCE((SELECT SUM(i.total::numeric) FROM invoices i), 0)
+        + COALESCE((SELECT SUM(wi.total_aed::numeric) FROM wholesale_invoices wi), 0)
+      )::text AS total_revenue
     `).then((r) => r.rows[0]),
     db.execute<{ main_cogs: string; silver_cogs: string }>(sql`
-      SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN cost_aed::numeric ELSE 0 END), 0)::text AS main_cogs,
-             COALESCE(SUM(CASE WHEN category = 'silver' THEN cost_aed::numeric ELSE 0 END), 0)::text AS silver_cogs
-      FROM inventory_consumptions
+      SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN net_cost ELSE 0 END), 0)::text AS main_cogs,
+             COALESCE(SUM(CASE WHEN category = 'silver' THEN net_cost ELSE 0 END), 0)::text AS silver_cogs
+      FROM (
+        SELECT category, cost_aed::numeric AS net_cost
+        FROM inventory_consumptions
+        UNION ALL
+        SELECT category,
+               CASE WHEN consumed_grams::numeric > 0
+                    THEN cost_aed::numeric
+                         * GREATEST(consumed_grams::numeric - returned_grams::numeric, 0)
+                         / consumed_grams::numeric
+                    ELSE 0 END AS net_cost
+        FROM wholesale_inventory_consumptions
+      ) costs
     `).then((r) => r.rows[0]),
     db.execute<{ category: string; purchased_grams: string }>(sql`
       SELECT category, COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams
@@ -166,13 +257,20 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
       GROUP BY category
     `).then((r) => r.rows),
     db.execute<{ category: string; sold_grams: string }>(sql`
-      SELECT CASE WHEN TRIM(ii.description) = '995' THEN '995'
-                  WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
-                  ELSE ii.category END AS category,
-             COALESCE(SUM(COALESCE(ii.gross_weight::numeric, 0)), 0)::text AS sold_grams
-      FROM invoice_items ii
-      WHERE ii.category IS NOT NULL
-      GROUP BY 1
+      SELECT category, COALESCE(SUM(sold_grams), 0)::text AS sold_grams
+      FROM (
+        SELECT CASE WHEN TRIM(ii.description) = '995' THEN '995'
+                    WHEN ii.category = 'gold_jewelry' THEN 'gold_jewelry_22k'
+                    ELSE ii.category END AS category,
+               COALESCE(ii.gross_weight::numeric, 0) AS sold_grams
+        FROM invoice_items ii
+        WHERE ii.category IS NOT NULL
+        UNION ALL
+        SELECT wii.category,
+               GREATEST(wii.gross_grams::numeric - wii.returned_gross_grams::numeric, 0) AS sold_grams
+        FROM wholesale_invoice_items wii
+      ) sales
+      GROUP BY category
     `).then((r) => r.rows),
     db.execute<{ category: string; remaining_grams: string }>(sql`
       SELECT category, weight_grams::text AS remaining_grams
@@ -411,26 +509,83 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
     return;
   }
 
-  const catRows = await db.execute<CatRow>(sql`
-    SELECT
-      COALESCE(ii.category, 'custom') AS category,
-      COUNT(DISTINCT ii.invoice_id)::text AS invoice_count,
-      COALESCE(SUM(ii.total_price::numeric), 0)::text AS total_amount,
-      COALESCE(SUM(COALESCE(ii.pure_weight::numeric, ii.gross_weight::numeric, 0)), 0)::text AS total_weight,
-      COALESCE(SUM(ii.gross_weight::numeric), 0)::text AS total_gross_weight
-    FROM invoice_items ii
-    JOIN invoices i ON ii.invoice_id = i.id
-    WHERE i.created_at >= ${start} AND i.created_at < ${end}
-    GROUP BY COALESCE(ii.category, 'custom')
-  `).then(r => r.rows as CatRow[]);
+  const [retailCatRows, wholesaleCatRows] = await Promise.all([
+    db.execute<CatRow>(sql`
+      SELECT
+        COALESCE(ii.category, 'custom') AS category,
+        COUNT(DISTINCT ii.invoice_id)::text AS invoice_count,
+        COALESCE(SUM(ii.total_price::numeric), 0)::text AS total_amount,
+        COALESCE(SUM(COALESCE(ii.pure_weight::numeric, ii.gross_weight::numeric, 0)), 0)::text AS total_weight,
+        COALESCE(SUM(ii.gross_weight::numeric), 0)::text AS total_gross_weight
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE i.created_at >= ${start} AND i.created_at < ${end}
+      GROUP BY COALESCE(ii.category, 'custom')
+    `).then(r => r.rows as CatRow[]),
+    db.execute<CatRow>(sql`
+      SELECT
+        COALESCE(category, 'custom') AS category,
+        COUNT(DISTINCT invoice_id)::text AS invoice_count,
+        COALESCE(SUM(amount), 0)::text AS total_amount,
+        COALESCE(SUM(pure_grams), 0)::text AS total_weight,
+        COALESCE(SUM(gross_grams), 0)::text AS total_gross_weight
+      FROM (
+        SELECT wii.category,
+               wi.id AS invoice_id,
+               CASE WHEN wi.pricing_type = 'fixed'
+                    THEN wii.total_aed::numeric
+                         + wii.returned_making_aed::numeric
+                         + wii.returned_metal_aed::numeric
+                    ELSE wii.making_aed::numeric END AS amount,
+               wii.pure_grams::numeric AS pure_grams,
+               wii.gross_grams::numeric AS gross_grams
+        FROM wholesale_invoice_items wii
+        JOIN wholesale_invoices wi ON wi.id = wii.invoice_id
+        WHERE wi.invoice_date >= ${startDate} AND wi.invoice_date <= ${endDate}
+
+        UNION ALL
+
+        SELECT wii.category,
+               ws.invoice_id,
+               wsa.aed_amount::numeric AS amount,
+               0::numeric AS pure_grams,
+               0::numeric AS gross_grams
+        FROM wholesale_settlement_allocations wsa
+        JOIN wholesale_settlements ws ON ws.id = wsa.settlement_id
+        JOIN wholesale_invoice_items wii ON wii.id = wsa.invoice_item_id
+        WHERE ws.settlement_date >= ${startDate} AND ws.settlement_date <= ${endDate}
+
+        UNION ALL
+
+        SELECT wii.category,
+               wr.invoice_id,
+               -wrl.returned_aed::numeric AS amount,
+               -wrl.pure_weight_grams::numeric AS pure_grams,
+               -wrl.gross_weight_grams::numeric AS gross_grams
+        FROM wholesale_return_lines wrl
+        JOIN wholesale_returns wr ON wr.id = wrl.return_id
+        JOIN wholesale_invoice_items wii ON wii.id = wrl.invoice_item_id
+        WHERE wr.return_date >= ${startDate} AND wr.return_date <= ${endDate}
+      ) wholesale_events
+      GROUP BY COALESCE(category, 'custom')
+    `).then(r => r.rows as CatRow[]),
+  ]);
+  const catRows = [...retailCatRows, ...wholesaleCatRows];
 
   // Payment method breakdown for the same date range.
   // Credit/Due sales are any invoice marked isPending, regardless of the recorded payment method.
   // Remaining (settled) invoices are split into Cash vs Card (bank_transfer is grouped with Card as electronic settlement).
-  const rangeInvoices = await db
-    .select({ total: invoicesTable.total, paymentMethod: invoicesTable.paymentMethod, isPending: invoicesTable.isPending })
-    .from(invoicesTable)
-    .where(sql`${invoicesTable.createdAt} >= ${start} AND ${invoicesTable.createdAt} < ${end}`);
+  const [rangeInvoices, wholesaleCredit] = await Promise.all([
+    db
+      .select({ total: invoicesTable.total, paymentMethod: invoicesTable.paymentMethod, isPending: invoicesTable.isPending })
+      .from(invoicesTable)
+      .where(sql`${invoicesTable.createdAt} >= ${start} AND ${invoicesTable.createdAt} < ${end}`),
+    db.execute<{ total: string }>(sql`
+      SELECT COALESCE(SUM(aed_delta::numeric), 0)::text AS total
+      FROM trader_ledger_entries
+      WHERE event_date >= ${startDate} AND event_date <= ${endDate}
+    `).then((r) => r.rows[0]),
+  ]);
 
   let totalCash = 0;
   let totalCard = 0;
@@ -445,6 +600,9 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
       totalCard += amount;
     }
   }
+  // Wholesale AED values are trader receivables until an explicit payment
+  // module exists, so they belong in the Credit / Due bucket.
+  totalCredit += Number(wholesaleCredit.total);
   const paymentBreakdown = {
     totalCash: Math.round(totalCash * 100) / 100,
     totalCard: Math.round(totalCard * 100) / 100,
@@ -454,10 +612,15 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
 
   // Anything with a category not in our known set is folded into "Custom"
   const knownCategories = new Set(CATEGORY_ORDER);
-  const normalizedRows = catRows.map(r => ({
-    ...r,
-    category: knownCategories.has(r.category as (typeof CATEGORY_ORDER)[number]) ? r.category : "custom",
-  }));
+  const normalizedRows = catRows.map(r => {
+    const canonicalCategory = r.category === "gold_jewelry" ? "gold_jewelry_22k" : r.category;
+    return {
+      ...r,
+      category: knownCategories.has(canonicalCategory as (typeof CATEGORY_ORDER)[number])
+        ? canonicalCategory
+        : "custom",
+    };
+  });
 
   const rows = CATEGORY_ORDER.map((category) => {
     const matching = normalizedRows.filter(r => r.category === category);
@@ -694,7 +857,7 @@ interface StatementLedgerRow {
   sl: number;
   date: string;          // display date
   invoiceRef: string;    // sales: invoice number; purchases: ""
-  type: "Purchase" | "Sale";
+  type: "Purchase" | "Sale" | "Wholesale Sale" | "Wholesale Fix" | "Wholesale Return";
   party: string;
   category: string;      // bucket label
   itemName: string;      // exact custom item name (sales) / category (purchases)
@@ -705,6 +868,20 @@ interface StatementLedgerRow {
   costAed: number | null;   // sales only: exact FIFO purchase cost of this line
   profitAed: number | null; // sales only
   batchRefs: string | null; // sales only: consumed FIFO lots, e.g. "#19 (50g)"
+}
+
+interface StatementSaleSource {
+  created_at: string;
+  invoice_number: string;
+  customer_name: string | null;
+  description: string;
+  bucket: string | null;
+  grams: string;
+  amount: string;
+  exact_cogs: string | null;
+  batch_refs: string | null;
+  source: "retail" | "wholesale";
+  event_kind: "retail_sale" | "wholesale_delivery" | "wholesale_fix" | "wholesale_return";
 }
 
 interface StatementCategoryBreakdownRow {
@@ -770,8 +947,35 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     ],
     sql` AND `,
   );
+  const wholesaleDeliveryWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(startDate ? [sql`wi.invoice_date >= ${startDate}`] : []),
+      ...(endDate ? [sql`wi.invoice_date <= ${endDate}`] : []),
+      ...(category ? [sql`wii.category = ${category}`] : []),
+    ],
+    sql` AND `,
+  );
+  const wholesaleFixWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(startDate ? [sql`ws.settlement_date >= ${startDate}`] : []),
+      ...(endDate ? [sql`ws.settlement_date <= ${endDate}`] : []),
+      ...(category ? [sql`wii.category = ${category}`] : []),
+    ],
+    sql` AND `,
+  );
+  const wholesaleReturnWhere = sql.join(
+    [
+      sql`TRUE`,
+      ...(startDate ? [sql`wr.return_date >= ${startDate}`] : []),
+      ...(endDate ? [sql`wr.return_date <= ${endDate}`] : []),
+      ...(category ? [sql`wii.category = ${category}`] : []),
+    ],
+    sql` AND `,
+  );
 
-  const [purchases, sales, levels] = await Promise.all([
+  const [purchases, retailSales, wholesaleSales, levels] = await Promise.all([
     db.execute<{ id: number; purchase_date: string; supplier_name: string; category: string; weight_grams: string; total_price_aed: string }>(sql`
       SELECT id, purchase_date, supplier_name, category, weight_grams::text, total_price_aed::text
       FROM stock_purchases
@@ -781,7 +985,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     // Revenue basis matches the KPI and sales report: each item's amount is its
     // proportional share of the invoice's FINAL billed total (VAT/discount/
     // round-off included), so statement totals reconcile with the dashboard.
-    db.execute<{ created_at: string; invoice_number: string; customer_name: string | null; description: string; bucket: string | null; grams: string; amount: string; exact_cogs: string | null; batch_refs: string | null }>(sql`
+    db.execute<Omit<StatementSaleSource, "source">>(sql`
       SELECT i.created_at::text, i.invoice_number, i.customer_name, ii.description,
              ${bucketExpr} AS bucket,
              COALESCE(ii.gross_weight::numeric, 0)::text AS grams,
@@ -789,7 +993,8 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
                    THEN ii.total_price::numeric * i.total::numeric / s.sum_items
                    ELSE ii.total_price::numeric END)::text AS amount,
              c.exact_cogs::text AS exact_cogs,
-             c.batch_refs
+             c.batch_refs,
+             'retail_sale'::text AS event_kind
       FROM invoice_items ii
       JOIN invoices i ON i.id = ii.invoice_id
       JOIN LATERAL (
@@ -809,10 +1014,86 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       WHERE ${salesWhere}
       ORDER BY i.created_at, i.id
     `).then((r) => r.rows),
+    db.execute<Omit<StatementSaleSource, "source">>(sql`
+      SELECT *
+      FROM (
+        SELECT (wi.invoice_date || 'T00:00:00.000Z')::text AS created_at,
+               wi.invoice_number,
+               wi.trader_name AS customer_name,
+               wii.description,
+               wii.category AS bucket,
+               wii.gross_grams::numeric::text AS grams,
+               (CASE WHEN wi.pricing_type = 'fixed'
+                     THEN wii.total_aed::numeric
+                          + wii.returned_making_aed::numeric
+                          + wii.returned_metal_aed::numeric
+                     ELSE wii.making_aed::numeric END)::text AS amount,
+               c.exact_cogs::text AS exact_cogs,
+               c.batch_refs,
+               'wholesale_delivery'::text AS event_kind
+        FROM wholesale_invoice_items wii
+        JOIN wholesale_invoices wi ON wi.id = wii.invoice_id
+        LEFT JOIN LATERAL (
+          SELECT SUM(wic.cost_aed::numeric) AS exact_cogs,
+                 STRING_AGG(
+                   CASE WHEN wic.purchase_id IS NOT NULL
+                        THEN '#' || wic.purchase_id || ' (' ||
+                             TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM wic.consumed_grams::text)) || 'g)'
+                        ELSE 'shortfall (' ||
+                             TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM wic.consumed_grams::text)) || 'g)'
+                   END, ', ' ORDER BY wic.id
+                 ) AS batch_refs
+          FROM wholesale_inventory_consumptions wic
+          WHERE wic.wholesale_item_id = wii.id
+        ) c ON TRUE
+        WHERE ${wholesaleDeliveryWhere}
+
+        UNION ALL
+
+        SELECT (ws.settlement_date || 'T00:00:00.000Z')::text AS created_at,
+               wi.invoice_number,
+               wi.trader_name AS customer_name,
+               ('Rate fix: ' || wii.description)::text AS description,
+               wii.category AS bucket,
+               0::numeric::text AS grams,
+               wsa.aed_amount::numeric::text AS amount,
+               0::numeric::text AS exact_cogs,
+               NULL::text AS batch_refs,
+               'wholesale_fix'::text AS event_kind
+        FROM wholesale_settlement_allocations wsa
+        JOIN wholesale_settlements ws ON ws.id = wsa.settlement_id
+        JOIN wholesale_invoice_items wii ON wii.id = wsa.invoice_item_id
+        JOIN wholesale_invoices wi ON wi.id = ws.invoice_id
+        WHERE ${wholesaleFixWhere}
+
+        UNION ALL
+
+        SELECT (wr.return_date || 'T00:00:00.000Z')::text AS created_at,
+               wi.invoice_number,
+               wi.trader_name AS customer_name,
+               ('Return ' || wr.return_number || ': ' || wii.description)::text AS description,
+               wii.category AS bucket,
+               (-wrl.gross_weight_grams::numeric)::text AS grams,
+               (-wrl.returned_aed::numeric)::text AS amount,
+               (-wrl.returned_cogs_aed::numeric)::text AS exact_cogs,
+               NULL::text AS batch_refs,
+               'wholesale_return'::text AS event_kind
+        FROM wholesale_return_lines wrl
+        JOIN wholesale_returns wr ON wr.id = wrl.return_id
+        JOIN wholesale_invoice_items wii ON wii.id = wrl.invoice_item_id
+        JOIN wholesale_invoices wi ON wi.id = wr.invoice_id
+        WHERE ${wholesaleReturnWhere}
+      ) wholesale_events
+      ORDER BY created_at, invoice_number, description
+    `).then((r) => r.rows),
     db.execute<{ category: string; weight_grams: string }>(sql`
       SELECT category, weight_grams::text FROM stock_levels ORDER BY category
     `).then((r) => r.rows),
   ]);
+  const sales: StatementSaleSource[] = [
+    ...retailSales.map((row) => ({ ...row, source: "retail" as const })),
+    ...wholesaleSales.map((row) => ({ ...row, source: "wholesale" as const })),
+  ];
 
   const totalPurchaseAed = purchases.reduce((s, p) => s + Number(p.total_price_aed), 0);
   const totalSalesAed = sales.reduce((s, r) => s + Number(r.amount), 0);
@@ -902,10 +1183,18 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       sl: 0,
       date: s.created_at.slice(0, 10),
       invoiceRef: s.invoice_number,
-      type: "Sale",
+      type: s.event_kind === "wholesale_fix"
+        ? "Wholesale Fix"
+        : s.event_kind === "wholesale_return"
+          ? "Wholesale Return"
+          : s.source === "wholesale"
+            ? "Wholesale Sale"
+            : "Sale",
       party: s.customer_name ?? "Walk-in",
       category: s.bucket && STMT_CAT_LABEL[s.bucket] ? STMT_CAT_LABEL[s.bucket] : "Custom",
-      itemName: s.description.trim(),
+      itemName: s.source === "wholesale"
+        ? `[Wholesale] ${s.description.trim()}`
+        : s.description.trim(),
       grams,
       kg: grams / 1000,
       ratePerG: grams > 0 ? total / grams : 0,
@@ -951,7 +1240,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   const totals = {
     grams: ledger.reduce((s, r) => s + r.grams, 0),
     kg: ledger.reduce((s, r) => s + r.kg, 0),
-    soldGrams: ledger.reduce((s, r) => s + (r.type === "Sale" ? r.grams : 0), 0),
+    soldGrams: ledger.reduce((s, r) => s + (r.type === "Purchase" ? 0 : r.grams), 0),
     revenueAed: totalSalesAed,
     cogsAed: cogs,
     profitAed: profit,
@@ -1088,7 +1377,7 @@ router.get("/dashboard/statement-pdf", requireAdmin, async (req, res): Promise<v
   }
 
   // ===== SECTION 2: SALES INVOICES =====
-  const saleRows = ledger.filter((r) => r.type === "Sale");
+  const saleRows = ledger.filter((r) => r.type !== "Purchase");
   sectionHeader("2. Sales Invoices");
   if (saleRows.length === 0) {
     doc.fillColor("#888").font("Helvetica").fontSize(9).text("No sales in this period.", 40, y); y += 20;
@@ -1259,7 +1548,7 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   // ===== SECTION 2: SALES & PROFIT =====
   sectionTitle("SECTION 2: SALES & PROFIT");
   styleHeader(ws.addRow(["SL", "Date", "Invoice", "Customer", "Item Name", "Category", "Sold Wt (g)", "Purchase Cost (AED)", "Sale Value (AED)", "Profit / Loss (AED)", "Consumed Batch"]));
-  const saleRows = ledger.filter((r) => r.type === "Sale");
+  const saleRows = ledger.filter((r) => r.type !== "Purchase");
   for (const [i, r] of saleRows.entries()) {
     const row = ws.addRow([
       i + 1, r.date, r.invoiceRef || "-", r.party, r.itemName, r.category, r.grams,

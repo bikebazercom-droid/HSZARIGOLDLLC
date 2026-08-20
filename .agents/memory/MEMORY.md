@@ -17,3 +17,6 @@
 - [Browser PDF Arabic rendering](browser-pdf-arabic-rendering.md) — jsPDF shapes logical Amiri Arabic itself; `setR2L` double-reverses it, and extracted text may use presentation forms.
 - [Lossless PDFKit statement cells](pdfkit-statement-cells.md) — archival table text must use measured wrapping, bounded input, and page-fit guards; never ellipsis.
 - [Category rename pricing aliases](category-rename-pricing-aliases.md) — canonical inventory description renames must be tested in both live-rate and stored-rate dispatch paths.
+- [Wholesale oversell returns](wholesale-oversell-returns.md) — FIFO return handling distinguishes intentional oversell shortfalls from missing real purchase lots.
+- [Wholesale making-charge lifecycle](wholesale-making-charge-lifecycle.md) — unfixed making posts immediately; fixes add metal AED; returns reverse cumulative pro-rata making.
+- [Wholesale fixed-return allocation](wholesale-fixed-return-allocation.md) — returns consume open metal first, then fixed allocations; only open metal reduces the trader’s pure balance.

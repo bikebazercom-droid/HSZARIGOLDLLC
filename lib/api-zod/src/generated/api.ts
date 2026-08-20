@@ -1243,3 +1243,500 @@ export const GetMonthlySalesResponseItem = zod.object({
 export const GetMonthlySalesResponse = zod.array(GetMonthlySalesResponseItem)
 
 
+/**
+ * @summary List wholesale traders
+ */
+export const ListWholesaleTradersQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "isActive": zod.coerce.boolean().optional()
+})
+
+export const ListWholesaleTradersResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "trn": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListWholesaleTradersResponse = zod.array(ListWholesaleTradersResponseItem)
+
+
+/**
+ * @summary Create a new wholesale trader
+ */
+export const createWholesaleTraderBodyNameMax = 300;
+
+export const createWholesaleTraderBodyPhoneMax = 100;
+
+export const createWholesaleTraderBodyEmailMax = 254;
+
+export const createWholesaleTraderBodyAddressMax = 500;
+
+export const createWholesaleTraderBodyTrnMax = 100;
+
+
+
+export const CreateWholesaleTraderBody = zod.object({
+  "name": zod.string().min(1).max(createWholesaleTraderBodyNameMax),
+  "phone": zod.string().max(createWholesaleTraderBodyPhoneMax).optional(),
+  "email": zod.string().email().max(createWholesaleTraderBodyEmailMax).optional(),
+  "address": zod.string().max(createWholesaleTraderBodyAddressMax).optional(),
+  "trn": zod.string().max(createWholesaleTraderBodyTrnMax).optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const CreateWholesaleTraderResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "trn": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a wholesale trader by ID
+ */
+export const GetWholesaleTraderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWholesaleTraderResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "trn": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a wholesale trader
+ */
+export const UpdateWholesaleTraderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateWholesaleTraderBodyNameMax = 300;
+
+export const updateWholesaleTraderBodyPhoneMax = 100;
+
+export const updateWholesaleTraderBodyEmailMax = 254;
+
+export const updateWholesaleTraderBodyAddressMax = 500;
+
+export const updateWholesaleTraderBodyTrnMax = 100;
+
+
+
+export const UpdateWholesaleTraderBody = zod.object({
+  "name": zod.string().min(1).max(updateWholesaleTraderBodyNameMax).optional(),
+  "phone": zod.string().max(updateWholesaleTraderBodyPhoneMax).optional(),
+  "email": zod.string().email().max(updateWholesaleTraderBodyEmailMax).optional(),
+  "address": zod.string().max(updateWholesaleTraderBodyAddressMax).optional(),
+  "trn": zod.string().max(updateWholesaleTraderBodyTrnMax).optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateWholesaleTraderResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "trn": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get trader ledger / statement entries for a specific trader
+ */
+export const GetTraderStatementQueryParams = zod.object({
+  "traderId": zod.coerce.number(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
+export const GetTraderStatementResponse = zod.object({
+  "trader": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "trn": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "entries": zod.array(zod.object({
+  "id": zod.number(),
+  "traderId": zod.number(),
+  "eventType": zod.enum(['delivery', 'fixed_sale', 'rate_fix', 'physical_return']),
+  "eventDate": zod.string().describe('yyyy-MM-dd business date'),
+  "aedDelta": zod.number(),
+  "pureGoldGramsDelta": zod.number(),
+  "wholesaleInvoiceId": zod.number().nullish(),
+  "wholesaleItemId": zod.number().nullish(),
+  "wholesaleSettlementId": zod.number().nullish(),
+  "wholesaleReturnId": zod.number().nullish(),
+  "note": zod.string().nullish(),
+  "createdByUserId": zod.number().nullish(),
+  "createdByUserName": zod.string().nullish(),
+  "idempotencyKey": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "balanceAed": zod.number().describe('Running total AED owed by trader to shop (positive = owes shop)'),
+  "balancePureGrams": zod.number().describe('Running total pure grams owed by trader to shop')
+})
+
+
+/**
+ * @summary List wholesale invoices
+ */
+export const ListWholesaleInvoicesQueryParams = zod.object({
+  "traderId": zod.coerce.number().optional(),
+  "status": zod.enum(['open', 'partially_settled', 'settled']).optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
+export const ListWholesaleInvoicesResponseItem = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "invoiceDate": zod.string(),
+  "traderId": zod.number().nullish(),
+  "traderName": zod.string(),
+  "traderPhone": zod.string().nullish(),
+  "traderEmail": zod.string().nullish(),
+  "traderAddress": zod.string().nullish(),
+  "traderTrn": zod.string().nullish(),
+  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "notes": zod.string().nullish(),
+  "createdByUserId": zod.number().nullish(),
+  "createdByUserName": zod.string().nullish(),
+  "status": zod.enum(['open', 'partially_settled', 'settled']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalMakingAed": zod.number(),
+  "totalAed": zod.number(),
+  "openPureGrams": zod.number(),
+  "settledAed": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceId": zod.number(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "grossGrams": zod.number(),
+  "purityMultiplier": zod.number(),
+  "pureGrams": zod.number(),
+  "rateAedPerGram": zod.number().nullish(),
+  "makingAed": zod.number(),
+  "totalAed": zod.number(),
+  "fixedPureGrams": zod.number(),
+  "returnedGrossGrams": zod.number(),
+  "returnedPureGrams": zod.number(),
+  "returnedFixedPureGrams": zod.number(),
+  "returnedMakingAed": zod.number(),
+  "returnedMetalAed": zod.number()
+}))
+})
+export const ListWholesaleInvoicesResponse = zod.array(ListWholesaleInvoicesResponseItem)
+
+
+/**
+ * @summary Create a new wholesale invoice (fixed or unfixed)
+ */
+export const createWholesaleInvoiceBodyIdempotencyKeyMax = 128;
+
+
+export const createWholesaleInvoiceBodyItemsItemQuantityExclusiveMin = 0;
+export const createWholesaleInvoiceBodyItemsItemQuantityMultipleOf = 0.0001;
+
+export const createWholesaleInvoiceBodyItemsItemGrossGramsExclusiveMin = 0;
+export const createWholesaleInvoiceBodyItemsItemGrossGramsMultipleOf = 0.0001;
+
+export const createWholesaleInvoiceBodyItemsItemPurityMultiplierExclusiveMin = 0;
+export const createWholesaleInvoiceBodyItemsItemPurityMultiplierMax = 1;
+export const createWholesaleInvoiceBodyItemsItemPurityMultiplierMultipleOf = 0.0001;
+
+export const createWholesaleInvoiceBodyItemsItemMakingAedMin = 0;
+export const createWholesaleInvoiceBodyItemsItemMakingAedMultipleOf = 0.01;
+
+export const createWholesaleInvoiceBodyItemsItemRateAedPerGramExclusiveMin = 0;
+export const createWholesaleInvoiceBodyItemsItemRateAedPerGramMultipleOf = 0.0001;
+
+
+
+
+export const CreateWholesaleInvoiceBody = zod.object({
+  "traderId": zod.number(),
+  "invoiceDate": zod.string().describe('yyyy-MM-dd'),
+  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "notes": zod.string().optional(),
+  "idempotencyKey": zod.string().max(createWholesaleInvoiceBodyIdempotencyKeyMax).optional(),
+  "items": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "category": zod.enum(['gold_9999', 'ten_tola_bar', 'kg_bar', '995', 'gold_jewelry_22k', 'silver']),
+  "quantity": zod.number().gt(createWholesaleInvoiceBodyItemsItemQuantityExclusiveMin).multipleOf(createWholesaleInvoiceBodyItemsItemQuantityMultipleOf),
+  "grossGrams": zod.number().gt(createWholesaleInvoiceBodyItemsItemGrossGramsExclusiveMin).multipleOf(createWholesaleInvoiceBodyItemsItemGrossGramsMultipleOf),
+  "purityMultiplier": zod.number().gt(createWholesaleInvoiceBodyItemsItemPurityMultiplierExclusiveMin).max(createWholesaleInvoiceBodyItemsItemPurityMultiplierMax).multipleOf(createWholesaleInvoiceBodyItemsItemPurityMultiplierMultipleOf),
+  "makingAed": zod.number().min(createWholesaleInvoiceBodyItemsItemMakingAedMin).multipleOf(createWholesaleInvoiceBodyItemsItemMakingAedMultipleOf),
+  "rateAedPerGram": zod.number().gt(createWholesaleInvoiceBodyItemsItemRateAedPerGramExclusiveMin).multipleOf(createWholesaleInvoiceBodyItemsItemRateAedPerGramMultipleOf).optional().describe('Required for fixed invoices; must be null\/absent for unfixed')
+})).min(1)
+})
+
+export const CreateWholesaleInvoiceResponse = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "invoiceDate": zod.string(),
+  "traderId": zod.number().nullish(),
+  "traderName": zod.string(),
+  "traderPhone": zod.string().nullish(),
+  "traderEmail": zod.string().nullish(),
+  "traderAddress": zod.string().nullish(),
+  "traderTrn": zod.string().nullish(),
+  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "notes": zod.string().nullish(),
+  "createdByUserId": zod.number().nullish(),
+  "createdByUserName": zod.string().nullish(),
+  "status": zod.enum(['open', 'partially_settled', 'settled']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalMakingAed": zod.number(),
+  "totalAed": zod.number(),
+  "openPureGrams": zod.number(),
+  "settledAed": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceId": zod.number(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "grossGrams": zod.number(),
+  "purityMultiplier": zod.number(),
+  "pureGrams": zod.number(),
+  "rateAedPerGram": zod.number().nullish(),
+  "makingAed": zod.number(),
+  "totalAed": zod.number(),
+  "fixedPureGrams": zod.number(),
+  "returnedGrossGrams": zod.number(),
+  "returnedPureGrams": zod.number(),
+  "returnedFixedPureGrams": zod.number(),
+  "returnedMakingAed": zod.number(),
+  "returnedMetalAed": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get a wholesale invoice by ID
+ */
+export const GetWholesaleInvoiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWholesaleInvoiceResponse = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "invoiceDate": zod.string(),
+  "traderId": zod.number().nullish(),
+  "traderName": zod.string(),
+  "traderPhone": zod.string().nullish(),
+  "traderEmail": zod.string().nullish(),
+  "traderAddress": zod.string().nullish(),
+  "traderTrn": zod.string().nullish(),
+  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "notes": zod.string().nullish(),
+  "createdByUserId": zod.number().nullish(),
+  "createdByUserName": zod.string().nullish(),
+  "status": zod.enum(['open', 'partially_settled', 'settled']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalMakingAed": zod.number(),
+  "totalAed": zod.number(),
+  "openPureGrams": zod.number(),
+  "settledAed": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceId": zod.number(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "grossGrams": zod.number(),
+  "purityMultiplier": zod.number(),
+  "pureGrams": zod.number(),
+  "rateAedPerGram": zod.number().nullish(),
+  "makingAed": zod.number(),
+  "totalAed": zod.number(),
+  "fixedPureGrams": zod.number(),
+  "returnedGrossGrams": zod.number(),
+  "returnedPureGrams": zod.number(),
+  "returnedFixedPureGrams": zod.number(),
+  "returnedMakingAed": zod.number(),
+  "returnedMetalAed": zod.number()
+}))
+})
+
+
+/**
+ * @summary Partially or fully fix the rate for an unfixed wholesale invoice (admin only)
+ */
+export const FixWholesaleRateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const fixWholesaleRateBodyPureWeightGramsExclusiveMin = 0;
+export const fixWholesaleRateBodyPureWeightGramsMultipleOf = 0.0001;
+
+export const fixWholesaleRateBodyRateAedPerGramExclusiveMin = 0;
+export const fixWholesaleRateBodyRateAedPerGramMultipleOf = 0.0001;
+
+export const fixWholesaleRateBodyIdempotencyKeyMax = 128;
+
+
+
+export const FixWholesaleRateBody = zod.object({
+  "pureWeightGrams": zod.number().gt(fixWholesaleRateBodyPureWeightGramsExclusiveMin).multipleOf(fixWholesaleRateBodyPureWeightGramsMultipleOf),
+  "rateAedPerGram": zod.number().gt(fixWholesaleRateBodyRateAedPerGramExclusiveMin).multipleOf(fixWholesaleRateBodyRateAedPerGramMultipleOf),
+  "date": zod.string().describe('yyyy-MM-dd'),
+  "note": zod.string().optional(),
+  "idempotencyKey": zod.string().max(fixWholesaleRateBodyIdempotencyKeyMax).optional()
+})
+
+export const FixWholesaleRateResponse = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "invoiceDate": zod.string(),
+  "traderId": zod.number().nullish(),
+  "traderName": zod.string(),
+  "traderPhone": zod.string().nullish(),
+  "traderEmail": zod.string().nullish(),
+  "traderAddress": zod.string().nullish(),
+  "traderTrn": zod.string().nullish(),
+  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "notes": zod.string().nullish(),
+  "createdByUserId": zod.number().nullish(),
+  "createdByUserName": zod.string().nullish(),
+  "status": zod.enum(['open', 'partially_settled', 'settled']),
+  "totalGrossGrams": zod.number(),
+  "totalPureGrams": zod.number(),
+  "totalMakingAed": zod.number(),
+  "totalAed": zod.number(),
+  "openPureGrams": zod.number(),
+  "settledAed": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceId": zod.number(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "grossGrams": zod.number(),
+  "purityMultiplier": zod.number(),
+  "pureGrams": zod.number(),
+  "rateAedPerGram": zod.number().nullish(),
+  "makingAed": zod.number(),
+  "totalAed": zod.number(),
+  "fixedPureGrams": zod.number(),
+  "returnedGrossGrams": zod.number(),
+  "returnedPureGrams": zod.number(),
+  "returnedFixedPureGrams": zod.number(),
+  "returnedMakingAed": zod.number(),
+  "returnedMetalAed": zod.number()
+}))
+})
+
+
+/**
+ * @summary Record a partial or full physical return on a wholesale invoice (admin only)
+ */
+export const ReturnWholesaleGoodsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const returnWholesaleGoodsBodyLinesItemGrossWeightGramsExclusiveMin = 0;
+export const returnWholesaleGoodsBodyLinesItemGrossWeightGramsMultipleOf = 0.0001;
+
+
+export const returnWholesaleGoodsBodyIdempotencyKeyMax = 128;
+
+
+
+export const ReturnWholesaleGoodsBody = zod.object({
+  "lines": zod.array(zod.object({
+  "invoiceItemId": zod.number(),
+  "grossWeightGrams": zod.number().gt(returnWholesaleGoodsBodyLinesItemGrossWeightGramsExclusiveMin).multipleOf(returnWholesaleGoodsBodyLinesItemGrossWeightGramsMultipleOf)
+})).min(1),
+  "date": zod.string().describe('yyyy-MM-dd'),
+  "note": zod.string().optional(),
+  "idempotencyKey": zod.string().max(returnWholesaleGoodsBodyIdempotencyKeyMax).optional()
+})
+
+export const ReturnWholesaleGoodsResponse = zod.object({
+  "id": zod.number(),
+  "returnNumber": zod.string(),
+  "invoiceId": zod.number(),
+  "returnDate": zod.string(),
+  "note": zod.string().nullish(),
+  "totalReturnedGrossGrams": zod.number(),
+  "totalReturnedPureGrams": zod.number(),
+  "totalReturnedFixedPureGrams": zod.number(),
+  "totalReturnedMakingAed": zod.number(),
+  "totalReturnedMetalAed": zod.number(),
+  "totalReturnedAed": zod.number(),
+  "createdByUserId": zod.number().nullish(),
+  "createdByUserName": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "lines": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceItemId": zod.number(),
+  "grossWeightGrams": zod.number(),
+  "pureWeightGrams": zod.number(),
+  "returnedFixedPureGrams": zod.number(),
+  "returnedMakingAed": zod.number(),
+  "returnedMetalAed": zod.number(),
+  "returnedAed": zod.number()
+}))
+})
+
+
+/**
+ * @summary Wholesale summary dashboard with invoice counts, fixed AED, open pure grams, returned grams
+ */
+export const GetWholesaleDashboardQueryParams = zod.object({
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
+export const GetWholesaleDashboardResponse = zod.object({
+  "invoiceCount": zod.number(),
+  "fixedInvoiceCount": zod.number(),
+  "unfixedInvoiceCount": zod.number(),
+  "settledInvoiceCount": zod.number(),
+  "totalFixedAed": zod.number(),
+  "openPureGrams": zod.number(),
+  "returnedGrossGrams": zod.number(),
+  "traderCount": zod.number()
+})
+
+
