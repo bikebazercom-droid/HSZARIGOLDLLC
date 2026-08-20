@@ -86,12 +86,14 @@ const toClean: {
   returnIds: number[];
   stockPurchaseIds: number[];
   categories: string[];
+  transientCategories: string[];
 } = {
   traderIds: [],
   invoiceIds: [],
   returnIds: [],
   stockPurchaseIds: [],
   categories: [CATEGORY, ...WHOLESALE_CATEGORIES],
+  transientCategories: [],
 };
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
@@ -538,6 +540,23 @@ async function cleanup(): Promise<void> {
   }
   for (const traderId of toClean.traderIds) {
     await cleanupRegisteredFixture("wholesale_trader", traderId);
+  }
+  for (const category of toClean.transientCategories) {
+    await db.transaction(async (tx) => {
+      const [linkedItem] = await tx.select({ id: wholesaleInvoiceItemsTable.id })
+        .from(wholesaleInvoiceItemsTable)
+        .where(eq(wholesaleInvoiceItemsTable.category, category))
+        .limit(1);
+      const [level] = await tx.select({ weightGrams: stockLevelsTable.weightGrams })
+        .from(stockLevelsTable)
+        .where(eq(stockLevelsTable.category, category));
+      if (linkedItem || (level && Math.abs(Number(level.weightGrams)) > 0.0001)) {
+        console.warn(`    kept linked or non-zero transient category ${category} for investigation`);
+        return;
+      }
+      await tx.delete(stockMovementsTable).where(eq(stockMovementsTable.category, category));
+      await tx.delete(stockLevelsTable).where(eq(stockLevelsTable.category, category));
+    });
   }
 }
 
@@ -1422,6 +1441,7 @@ async function run(): Promise<void> {
   console.log("\n─── Test: Unbacked oversell return reconciliation ───");
   const shortfallCategory = `test_wholesale_shortfall_${Date.now()}`;
   toClean.categories.push(shortfallCategory);
+  toClean.transientCategories.push(shortfallCategory);
   const shortfallCreated = await createWholesaleInvoice({
     traderId: trader.id,
     traderSnapshot: { name: trader.name, phone: "+971501234567" },

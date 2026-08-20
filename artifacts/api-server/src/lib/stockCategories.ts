@@ -18,6 +18,12 @@ export const STOCK_CATEGORY_LABEL: Record<string, string> = {
   silver: "Silver",
 };
 
+export function isDashboardInventoryCategory(category: string | null | undefined): boolean {
+  const normalized = category?.trim().toLowerCase();
+  if (!normalized) return false;
+  return !normalized.startsWith("test_") && !normalized.startsWith("ws_shortfall_");
+}
+
 export function normalizeCategoryValue(category: string | null | undefined): string | null {
   if (category == null) return null;
   if (category === "gold") return "gold_9999";

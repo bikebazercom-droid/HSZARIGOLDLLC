@@ -21,6 +21,7 @@
     "test:prices-singleton": "tsx scripts/test-prices-singleton.ts",
     "test:category-migration": "flock --exclusive --wait 300 /tmp/gold-shop-suite-registry.lock tsx scripts/test-category-migration.ts",
     "test:category-statement-reconciliation": "flock --exclusive --wait 300 /tmp/gold-shop-suite-registry.lock tsx scripts/test-category-statement-reconciliation.ts",
+    "cleanup:test-stock-categories": "tsx scripts/purge-test-stock-categories.ts",
     "test:bill-delete-audit": "flock --exclusive --wait 300 /tmp/gold-shop-suite-registry.lock tsx scripts/test-bill-delete-audit.ts",
     "test:bill-payment-status-audit": "flock --exclusive --wait 300 /tmp/gold-shop-suite-registry.lock tsx scripts/test-bill-payment-status-audit.ts",
     "test:all-audit-guards": "pnpm run test:suite-fixture-recovery && pnpm run test:invoice-delete-guard && pnpm run test:invoice-delete-audit && pnpm run test:invoice-create-audit && pnpm run test:bill-delete-role-guard && pnpm run test:bill-delete-audit && pnpm run test:bill-payment-status-audit && pnpm run test:wholesale-delete",

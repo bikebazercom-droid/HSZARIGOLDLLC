@@ -5,7 +5,7 @@ import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummary
 import { requireAdmin } from "../middlewares/auth";
 import { createBrandedPdf, PDF_BRAND } from "../lib/pdfBranding";
 import ExcelJS from "exceljs";
-import { STOCK_CATEGORY_LABEL } from "../lib/stockCategories.js";
+import { isDashboardInventoryCategory, STOCK_CATEGORY_LABEL } from "../lib/stockCategories.js";
 
 const router: IRouter = Router();
 
@@ -295,6 +295,7 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
     ...remainingMap.keys(),
   ]);
   const categoryBreakdown = [...categorySet]
+    .filter(isDashboardInventoryCategory)
     .sort((a, b) => {
       const ai = categoryOrder.indexOf(a);
       const bi = categoryOrder.indexOf(b);
@@ -975,7 +976,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
     sql` AND `,
   );
 
-  const [purchases, retailSales, wholesaleSales, levels] = await Promise.all([
+  const [purchaseRows, retailSales, wholesaleSales, levelRows] = await Promise.all([
     db.execute<{ id: number; purchase_date: string; supplier_name: string; category: string; weight_grams: string; total_price_aed: string }>(sql`
       SELECT id, purchase_date, supplier_name, category, weight_grams::text, total_price_aed::text
       FROM stock_purchases
@@ -1090,10 +1091,12 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       SELECT category, weight_grams::text FROM stock_levels ORDER BY category
     `).then((r) => r.rows),
   ]);
+  const purchases = purchaseRows.filter((row) => isDashboardInventoryCategory(row.category));
+  const levels = levelRows.filter((row) => isDashboardInventoryCategory(row.category));
   const sales: StatementSaleSource[] = [
     ...retailSales.map((row) => ({ ...row, source: "retail" as const })),
     ...wholesaleSales.map((row) => ({ ...row, source: "wholesale" as const })),
-  ];
+  ].filter((row) => isDashboardInventoryCategory(row.bucket ?? "custom"));
 
   const totalPurchaseAed = purchases.reduce((s, p) => s + Number(p.total_price_aed), 0);
   const totalSalesAed = sales.reduce((s, r) => s + Number(r.amount), 0);
@@ -1138,7 +1141,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
         ...purchasedByCategory.keys(),
         ...soldByCategory.keys(),
         ...remainingByCategory.keys(),
-      ])].sort((a, b) => {
+      ])].filter(isDashboardInventoryCategory).sort((a, b) => {
         const ai = standardCategoryOrder.indexOf(a);
         const bi = standardCategoryOrder.indexOf(b);
         if (ai === -1 && bi === -1) return a.localeCompare(b);

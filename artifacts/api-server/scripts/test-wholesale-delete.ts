@@ -42,6 +42,7 @@ import {
   traderLedgerEntriesTable,
   stockLevelsTable,
   stockPurchasesTable,
+  stockMovementsTable,
   auditLogTable,
 } from "@workspace/db";
 import {
@@ -87,7 +88,15 @@ const toClean: {
   returnIds: number[];
   stockPurchaseIds: number[];
   userIds: number[];
-} = { traderIds: [], invoiceIds: [], returnIds: [], stockPurchaseIds: [], userIds: [] };
+  transientCategories: string[];
+} = {
+  traderIds: [],
+  invoiceIds: [],
+  returnIds: [],
+  stockPurchaseIds: [],
+  userIds: [],
+  transientCategories: [],
+};
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
 
@@ -550,6 +559,23 @@ async function cleanup(): Promise<void> {
   for (const userId of toClean.userIds) {
     await cleanupRegisteredFixture("user", userId);
   }
+  for (const category of toClean.transientCategories) {
+    await db.transaction(async (tx) => {
+      const [linkedItem] = await tx.select({ id: wholesaleInvoiceItemsTable.id })
+        .from(wholesaleInvoiceItemsTable)
+        .where(eq(wholesaleInvoiceItemsTable.category, category))
+        .limit(1);
+      const [level] = await tx.select({ weightGrams: stockLevelsTable.weightGrams })
+        .from(stockLevelsTable)
+        .where(eq(stockLevelsTable.category, category));
+      if (linkedItem || (level && Math.abs(Number(level.weightGrams)) > 0.0001)) {
+        console.warn(`    kept linked or non-zero transient category ${category} for investigation`);
+        return;
+      }
+      await tx.delete(stockMovementsTable).where(eq(stockMovementsTable.category, category));
+      await tx.delete(stockLevelsTable).where(eq(stockLevelsTable.category, category));
+    });
+  }
 }
 
 async function recoverAbandoned() {
@@ -941,6 +967,7 @@ async function run(): Promise<void> {
   // ── Test 9: Shortfall invoice delete ──────────────────────────────────────
   console.log("\n─── Test 9: Shortfall invoice delete (no source batch) ───");
   const shortfallCategory = `ws_shortfall_del_${Date.now()}`;
+  toClean.transientCategories.push(shortfallCategory);
   const shortfallInv = await createWholesaleInvoice({
     traderId: trader.id,
     traderSnapshot: { name: trader.name },
