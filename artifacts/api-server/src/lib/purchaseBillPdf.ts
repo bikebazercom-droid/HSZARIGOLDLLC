@@ -2,7 +2,12 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
-import { PDF_BRAND } from "./pdfBranding.js";
+import {
+  BISMILLAH_ARABIC,
+  PDF_ARABIC_FONT_NAME,
+  PDF_BRAND,
+  registerPdfArabicFont,
+} from "./pdfBranding.js";
 
 export interface PurchaseBillPdfItem {
   category: string;
@@ -132,9 +137,9 @@ function drawFirstPageHeader(doc: PDFKit.PDFDocument, data: PurchaseBillPdfData)
   const GOLD = PDF_BRAND.gold;
 
   doc.rect(0, 0, PAGE_WIDTH, 4).fill(GOLD);
-  doc.fillColor(GOLD).font("Helvetica-Bold").fontSize(6.5)
-    .text("In the name of Allah, the Most Gracious, the Most Merciful", 190, 10, {
-      width: 215,
+  doc.fillColor(GOLD).font(PDF_ARABIC_FONT_NAME).fontSize(14)
+    .text(BISMILLAH_ARABIC, 180, 4, {
+      width: 235,
       align: "center",
       lineBreak: false,
     });
@@ -493,6 +498,7 @@ export function createPurchaseBillPdf(data: PurchaseBillPdfData): PDFKit.PDFDocu
     },
   });
 
+  registerPdfArabicFont(doc);
   drawFirstPageHeader(doc, data);
   let y = drawSupplierPanel(doc, data);
   y = drawTableHeader(doc, y);

@@ -4,6 +4,9 @@ import { dirname, join } from "node:path";
 import { expect, test, type APIResponse, type Page, type TestInfo } from "@playwright/test";
 
 const FIXTURE_PREFIX = "PDFE2E";
+const BISMILLAH_ARABIC = "بسم الله الرحمن الرحيم";
+const BISMILLAH_ARABIC_WORDS = BISMILLAH_ARABIC.split(" ");
+const ENGLISH_BISMILLAH = "In the name of Allah, the Most Gracious, the Most Merciful";
 const testAdminMobile = process.env.TEST_ADMIN_MOBILE;
 const testAdminPin = process.env.TEST_ADMIN_PIN;
 const runId = process.env.PDF_E2E_RUN_ID;
@@ -125,6 +128,19 @@ function finalPageVisualMetrics(pdfPath: string): {
 
 function normalized(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]+/g, "");
+}
+
+function containsExtractedArabicWord(text: string, word: string): boolean {
+  const compatibilityNormalized = text.normalize("NFKC");
+  const reversedWord = [...word].reverse().join("");
+  return compatibilityNormalized.includes(word) || compatibilityNormalized.includes(reversedWord);
+}
+
+function expectArabicBismillah(text: string): void {
+  for (const word of BISMILLAH_ARABIC_WORDS) {
+    expect(containsExtractedArabicWord(text, word), `missing Arabic word "${word}"`).toBe(true);
+  }
+  expect(text).not.toContain(ENGLISH_BISMILLAH);
 }
 
 async function expectSuccessful(response: APIResponse, action: string) {
@@ -476,6 +492,13 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       await expect(document).toContainText("Customer's Signature");
       await expect(document).toContainText("Checked By");
       await expect(document).toContainText("Authorised Signature");
+      const bismillah = document.getByText(BISMILLAH_ARABIC, { exact: true });
+      await expect(bismillah).toBeVisible();
+      expect(await bismillah.evaluate((element) => getComputedStyle(element).fontFamily)).toContain("Amiri PDF");
+      expect(await page.evaluate(
+        (text) => document.fonts.check('16px "Amiri PDF"', text),
+        BISMILLAH_ARABIC,
+      )).toBe(true);
       expect(await document.evaluate((element) => element.scrollHeight)).toBeGreaterThan(1123);
 
       const path = await downloadPdf(page, "Download PDF", "oversized-invoice.pdf", testInfo);
@@ -507,6 +530,8 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       const pages = pdfPages(path);
       const ocrPages = ocrPdfPages(path, 3).map(normalized);
       expectStatementBranding(pages, ocrPages);
+      expectArabicBismillah(pages[0]);
+      expect(containsExtractedArabicWord(pages.slice(1).join("\n"), BISMILLAH_ARABIC_WORDS[0])).toBe(false);
       const visual = finalPageVisualMetrics(path);
       expect(visual.navyAtBottom, "final thank-you banner must be flush with the bottom edge").toBe(true);
       expect(visual.goldAtBottom, "final gold rule must reach the absolute bottom edge").toBe(true);
@@ -540,6 +565,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       const ocr = normalized(ocrPdf(path));
 
       expect(normalizedText).toContain("PURCHASEBILL");
+      expectArabicBismillah(text);
       for (const requiredText of [
         "Bill / Ref No:",
         purchaseBill.billNo,
@@ -585,7 +611,7 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       writeFileSync(path, await response.body());
 
       const text = pdfPages(path).join("\n");
-      expect(text).toContain(settledUnfixedBill.billNo);
+      expect(normalized(text)).toContain(normalized(settledUnfixedBill.billNo));
       expect(text).toContain("99.500%");
       expect(text).toContain("PAID IN CASH");
       expect(text).toContain("GOLD VALUE @ 320.000 / gram (AED)");
@@ -606,6 +632,8 @@ test("browser PDF downloads keep branding, frames, continuation headings, totals
       const pages = pdfPages(path);
       const ocrPages = ocrPdfPages(path, 3).map(normalized);
       expectStatementBranding(pages, ocrPages);
+      expectArabicBismillah(pages[0]);
+      expect(containsExtractedArabicWord(pages.slice(1).join("\n"), BISMILLAH_ARABIC_WORDS[0])).toBe(false);
       const visual = finalPageVisualMetrics(path);
       expect(visual.navyAtBottom, "final thank-you banner must be flush with the bottom edge").toBe(true);
       expect(visual.goldAtBottom, "final gold rule must reach the absolute bottom edge").toBe(true);

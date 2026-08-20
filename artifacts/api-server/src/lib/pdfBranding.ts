@@ -15,6 +15,9 @@ export const PDF_BRAND = {
   grid: "#d1d5db",
 } as const;
 
+export const BISMILLAH_ARABIC = "بسم الله الرحمن الرحيم";
+export const PDF_ARABIC_FONT_NAME = "Amiri";
+
 const SIDE_MARGIN = 40;
 const FIRST_PAGE_CONTENT_TOP = 136;
 const CONTINUATION_CONTENT_TOP = 40;
@@ -46,6 +49,11 @@ function resolveBrandAsset(filename: string): string {
 
 const LOGO_PATH = resolveBrandAsset("hazari-gold-logo.jpg");
 const STAMP_PATH = resolveBrandAsset("hazari-gold-stamp.png");
+const ARABIC_FONT_PATH = resolveBrandAsset("Amiri-Regular.ttf");
+
+export function registerPdfArabicFont(doc: PDFKit.PDFDocument): void {
+  doc.registerFont(PDF_ARABIC_FONT_NAME, ARABIC_FONT_PATH);
+}
 
 export interface BrandedPdfOptions {
   title: string;
@@ -79,7 +87,15 @@ function drawOfficialHeader(
 
   doc.save();
   doc.rect(0, 0, pageWidth, 5).fill(PDF_BRAND.gold);
-  doc.image(LOGO_PATH, SIDE_MARGIN, 15, {
+  doc.fillColor(PDF_BRAND.gold)
+    .font(PDF_ARABIC_FONT_NAME)
+    .fontSize(14)
+    .text(BISMILLAH_ARABIC, (pageWidth - 240) / 2, 5, {
+      width: 240,
+      align: "center",
+      lineBreak: false,
+    });
+  doc.image(LOGO_PATH, SIDE_MARGIN, 23, {
     fit: [logoWidth, logoHeight],
     valign: "center",
   });
@@ -87,14 +103,14 @@ function drawOfficialHeader(
   doc.fillColor(PDF_BRAND.navy)
     .font("Helvetica-Bold")
     .fontSize(15)
-    .text(PDF_BRAND.companyName, infoX, 15, {
+    .text(PDF_BRAND.companyName, infoX, 27, {
       width: infoWidth,
       lineBreak: false,
     });
   doc.fillColor("#303640")
     .font("Helvetica")
     .fontSize(8.2)
-    .text(PDF_BRAND.address, infoX, 36, {
+    .text(PDF_BRAND.address, infoX, 48, {
       width: infoWidth,
       height: 21,
       ellipsis: true,
@@ -103,7 +119,7 @@ function drawOfficialHeader(
     .text(
       `Phone: ${PDF_BRAND.phone}    Email: ${PDF_BRAND.email}    TRN: ${PDF_BRAND.trn}`,
       infoX,
-      62,
+      74,
       { width: infoWidth, lineBreak: false },
     );
 
@@ -209,6 +225,7 @@ export function createBrandedPdf(options: BrandedPdfOptions): BrandedPdfLayout {
     },
   });
 
+  registerPdfArabicFont(doc);
   drawOfficialHeader(doc, options.title, generatedAt);
 
   const addContinuationPage = (): number => {

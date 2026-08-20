@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/context/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { PdfCompanyDetails, PdfFooter } from "@/components/pdf-branding";
+import { BISMILLAH_ARABIC, PdfCompanyDetails, PdfFooter } from "@/components/pdf-branding";
 
 const NAVY = "#1e3a5f";
 const GOLD = "#c8a43a";
@@ -197,6 +197,8 @@ export default function InvoiceDetail() {
 
   const handleDownloadPdf = async () => {
     if (!invoiceRef.current) return;
+    await document.fonts.load('16px "Amiri PDF"', BISMILLAH_ARABIC);
+    await document.fonts.ready;
     const html2pdf = (await import("html2pdf.js")).default;
     // Capture the complete invoice, then fit that canvas onto one A4 page.
     // This preserves the one-page guarantee without silently cropping long
@@ -349,8 +351,18 @@ export default function InvoiceDetail() {
         {/* Top line: Arabic + PARTY COPY */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 16px 1px" }}>
           <div style={{ flex: 1 }} />
-          <div style={{ textAlign: "center", color: GOLD, fontSize: "13px", fontWeight: "bold", fontFamily: "serif", flex: 2 }}>
-            بسم الله الرحمن الرحيم
+          <div
+            dir="rtl"
+            style={{
+              textAlign: "center",
+              color: GOLD,
+              fontSize: "16px",
+              lineHeight: 1.25,
+              fontFamily: '"Amiri PDF", serif',
+              flex: 2,
+            }}
+          >
+            {BISMILLAH_ARABIC}
           </div>
           <div style={{ textAlign: "right", fontWeight: "bold", fontSize: "12px", letterSpacing: "1px", flex: 1, color: NAVY }}>
             PARTY COPY
