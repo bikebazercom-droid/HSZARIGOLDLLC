@@ -1,0 +1,39 @@
+================================================================================
+FEATURE PRD: WHOLESALE B2B INVOICING & UNFIXED METAL RETURN/SETTLEMENT MODULE
+================================================================================
+
+Target Objective:
+Implement a dedicated Wholesale (B2B) Invoicing & Unfixed Settlement module under the Invoice section to handle trader sales, unfixed price locking, physical gold returns, and automatic stock plus/minus reconciliation across all statements and dashboards.
+
+--------------------------------------------------------------------------------
+1. INVOICE SECTION NAVIGATION (DUAL MODE):
+--------------------------------------------------------------------------------
+- In the Invoice menu, provide a clear toggle/tab selector:
+  * [Retail Customer Invoice] (Existing standard customer billing).
+  * [Wholesale / Trader Invoice] (New B2B trader transaction module).
+
+--------------------------------------------------------------------------------
+2. WHOLESALE / TRADER INVOICE FEATURES:
+--------------------------------------------------------------------------------
+- Trader Selection: Select an existing wholesale trader/shop or create a new trader profile on the fly (Name, Phone, Address, TRN).
+- Stock Deductions: Items issued to a trader (GOLD 9999, TEN TOLA BAR, Jewelry) MUST immediately deduct from live physical vault stock.
+- Unfixed vs Fixed Status:
+  * Fixed: Price rate per gram is locked at the time of creation.
+  * Unfixed: Metal weight is delivered, but gold rate (AED/g) is kept open for later rate-fixing or physical return.
+- Physical Return Handling (Gold Return):
+  * Allow returning full or partial physical weight/items (e.g., returning Ten Tola Bar or scrap gold).
+  * Returned items must immediately PLUS (+) back into live vault stock under their respective categories.
+
+--------------------------------------------------------------------------------
+3. LEDGER & RECONCILIATION INTEGRATION:
+--------------------------------------------------------------------------------
+- Automatically sync wholesale invoices and returns with:
+  * Trader Ledger (Track Cash Balance AED + Pure Metal Weight Balance in grams).
+  * Vault Inventory (Real-time stock increases/decreases).
+  * Dashboard Overview & Financial Reports.
+  * PDF Statements (Include Wholesale Invoices & Return Vouchers in Trader Statement, Daily Statement, and Vault Reports).
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please design the UI tabs, backend database models, stock hooks, and PDF generators for this Wholesale module now!
+================================================================================
