@@ -1383,6 +1383,134 @@ async function run(): Promise<void> {
   assertClose(crossingLedger.reduce((sum, row) => sum + Number(row.aedDelta), 0), 0, "Crossing-return AED ledger reconciles to zero", 0.01);
   assertClose(crossingLedger.reduce((sum, row) => sum + Number(row.pureGoldGramsDelta), 0), 0, "Crossing-return pure ledger reconciles to zero", 0.0001);
 
+  console.log("\n─── Test: Concurrent wholesale create versus return lock order ───");
+  const [stockBeforeLockRace] = await db.select().from(stockLevelsTable)
+    .where(eq(stockLevelsTable.category, CATEGORY));
+  const lockRaceSource = await apiJson<{
+    id: number; items: Array<{ id: number }>;
+  }>("/wholesale/invoices", {
+    method: "POST",
+    body: JSON.stringify({
+      traderId: trader.id,
+      invoiceDate: "2025-12-01",
+      pricingType: "fixed",
+      idempotencyKey: `ws-lock-race-source-${Date.now()}`,
+      items: [{
+        description: "Create return lock source",
+        category: CATEGORY,
+        quantity: 1,
+        grossGrams: 10,
+        purityMultiplier: 1,
+        makingAed: 100,
+        rateAedPerGram: 400,
+      }],
+    }),
+  });
+  toClean.invoiceIds.push(lockRaceSource.id);
+  const [stockBeforeConcurrentMutation] = await db.select().from(stockLevelsTable)
+    .where(eq(stockLevelsTable.category, CATEGORY));
+
+  const concurrentResults = await Promise.allSettled([
+    apiJson<{
+      id: number; items: Array<{ id: number }>;
+    }>("/wholesale/invoices", {
+      method: "POST",
+      body: JSON.stringify({
+        traderId: trader.id,
+        invoiceDate: "2025-12-02",
+        pricingType: "fixed",
+        idempotencyKey: `ws-lock-race-create-${Date.now()}`,
+        items: [{
+          description: "Concurrent wholesale create",
+          category: CATEGORY,
+          quantity: 1,
+          grossGrams: 3,
+          purityMultiplier: 1,
+          makingAed: 30,
+          rateAedPerGram: 400,
+        }],
+      }),
+    }),
+    apiJson<{ id: number }>(`/wholesale/invoices/${lockRaceSource.id}/return`, {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2025-12-02",
+        idempotencyKey: `ws-lock-race-return-${Date.now()}`,
+        lines: [{ invoiceItemId: lockRaceSource.items[0]!.id, grossWeightGrams: 2 }],
+      }),
+    }),
+  ]);
+  const concurrentCreate = concurrentResults[0];
+  const concurrentReturn = concurrentResults[1];
+  assert(
+    concurrentCreate.status === "fulfilled",
+    `Concurrent wholesale create completes without deadlock${concurrentCreate.status === "rejected" ? `: ${String(concurrentCreate.reason)}` : ""}`,
+  );
+  assert(
+    concurrentReturn.status === "fulfilled",
+    `Concurrent wholesale return completes without deadlock${concurrentReturn.status === "rejected" ? `: ${String(concurrentReturn.reason)}` : ""}`,
+  );
+  if (concurrentCreate.status === "fulfilled") {
+    toClean.invoiceIds.push(concurrentCreate.value.id);
+  }
+  if (concurrentReturn.status === "fulfilled") {
+    toClean.returnIds.push(concurrentReturn.value.id);
+  }
+
+  if (concurrentCreate.status === "fulfilled" && concurrentReturn.status === "fulfilled") {
+    const [stockAfterConcurrentMutation] = await db.select().from(stockLevelsTable)
+      .where(eq(stockLevelsTable.category, CATEGORY));
+    assertClose(
+      Number(stockAfterConcurrentMutation?.weightGrams ?? "0"),
+      Number(stockBeforeConcurrentMutation?.weightGrams ?? "0") - 1,
+      "Concurrent create (-3g) and return (+2g) reconcile stock atomically",
+      0.0001,
+    );
+    const raceSourceConsumptions = await db.select().from(wholesaleInventoryConsumptionsTable)
+      .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, lockRaceSource.id));
+    const raceCreateConsumptions = await db.select().from(wholesaleInventoryConsumptionsTable)
+      .where(eq(wholesaleInventoryConsumptionsTable.wholesaleInvoiceId, concurrentCreate.value.id));
+    assertClose(
+      raceSourceConsumptions.reduce((sum, row) => sum + Number(row.returnedGrams), 0),
+      2,
+      "Concurrent return restores its exact FIFO grams",
+      0.0001,
+    );
+    assertClose(
+      raceCreateConsumptions.reduce((sum, row) => sum + Number(row.consumedGrams), 0),
+      3,
+      "Concurrent create records its exact FIFO consumption",
+      0.0001,
+    );
+
+    const finalSourceReturn = await apiJson<{ id: number }>(`/wholesale/invoices/${lockRaceSource.id}/return`, {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2025-12-03",
+        idempotencyKey: `ws-lock-race-source-final-${Date.now()}`,
+        lines: [{ invoiceItemId: lockRaceSource.items[0]!.id, grossWeightGrams: 8 }],
+      }),
+    });
+    toClean.returnIds.push(finalSourceReturn.id);
+    const finalCreatedReturn = await apiJson<{ id: number }>(`/wholesale/invoices/${concurrentCreate.value.id}/return`, {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2025-12-03",
+        idempotencyKey: `ws-lock-race-create-final-${Date.now()}`,
+        lines: [{ invoiceItemId: concurrentCreate.value.items[0]!.id, grossWeightGrams: 3 }],
+      }),
+    });
+    toClean.returnIds.push(finalCreatedReturn.id);
+    const [stockAfterLockRaceCleanup] = await db.select().from(stockLevelsTable)
+      .where(eq(stockLevelsTable.category, CATEGORY));
+    assertClose(
+      Number(stockAfterLockRaceCleanup?.weightGrams ?? "0"),
+      Number(stockBeforeLockRace?.weightGrams ?? "0"),
+      "Full returns after concurrent create/return restore stock baseline",
+      0.0001,
+    );
+  }
+
   const summaryAfter = await apiJson<{
     totalSalesCreditAed: number;
     categoryBreakdown: Array<{ category: string; soldGrams: number }>;

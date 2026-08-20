@@ -203,6 +203,11 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
   }
 
   const result = await db.transaction(async (tx) => {
+    // All wholesale stock/FIFO mutations use one lock order: advisory lock
+    // first, then stock_levels and stock_purchases rows. Returns follow the
+    // same order, preventing create-vs-return deadlocks.
+    await acquireStockMutationLock(tx as unknown as Tx);
+
     // Lock wholesale_invoices table for number sequencing
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('wholesale_invoice_number'))`);
 
