@@ -1,0 +1,28 @@
+================================================================================
+WHOLESALE INVOICE PREVIEW MODAL & ADMIN-ONLY DELETE FUNCTIONALITY
+================================================================================
+
+Instruction for Agent:
+Implement a full Tax Invoice View modal for Wholesale Invoices and an Admin-Only Delete endpoint/permission logic as specified below.
+
+1. Wholesale Invoice View Modal (Eye Icon Action):
+   - In the Wholesale Invoices table, ensure clicking the Eye (View) icon opens a high-fidelity Tax Invoice preview modal matching the retail invoice template.
+   - Design Requirements (Matching the uploaded invoice layout):
+     * Header: "Hazari Gold L.L.C" logo, address, phone, email, TRN, QR code, and top "TAX INVOICE / PARTY COPY" badge.
+     * Meta Section: Invoice No, Date, Payment Terms, Metal Rate (AED/g), Place of Supply.
+     * Trader Details: TRADER / PARTY DETAILS box (Name: Shakil, Phone, Email).
+     * Line Items Table: S.No, Stock Description, Gross Wt, Purity, Pure Wt, Making Rate, Making Amt (AED), Total (AED).
+     * Summary Totals: Gold Value, Round Off Discount, Total Amount Including VAT (AED), Amount in Words, Payment Mode.
+     * Footer: Customer's Signature, Checked By, Authorised Signature with Company Seal stamp.
+     * Actions: Print and PDF Download buttons inside the preview modal.
+
+2. Admin-Only Delete Feature (`DELETE /api/wholesale/invoices/:id`):
+   - Add a Delete action button/icon to the Wholesale Invoices table and preview modal.
+   - PERMISSION RESTRICTION: Allow deleting a wholesale invoice ONLY if the logged-in user has the 'admin' role. Hide or disable this action for non-admin users.
+   - Backend Invariant Safety:
+     * On admin deletion, void/remove the invoice record.
+     * Automatically restore the deducted inventory/FIFO stock back into the Vault Stock.
+     * Revert the associated trader cash and pure metal ledger movements to maintain 100% accounting integrity.
+
+Please apply both the frontend preview modal and backend admin-only delete logic directly!
+================================================================================
