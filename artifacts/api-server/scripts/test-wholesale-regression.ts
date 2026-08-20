@@ -32,6 +32,7 @@ import {
   wholesaleReturnsTable,
   wholesaleReturnLinesTable,
   traderLedgerEntriesTable,
+  invoiceItemsTable,
   stockLevelsTable,
   stockPurchasesTable,
   stockMovementsTable,
@@ -82,6 +83,7 @@ let failCount = 0;
 // Track created DB IDs for cleanup
 const toClean: {
   traderIds: number[];
+  retailInvoiceIds: number[];
   invoiceIds: number[];
   returnIds: number[];
   stockPurchaseIds: number[];
@@ -89,6 +91,7 @@ const toClean: {
   transientCategories: string[];
 } = {
   traderIds: [],
+  retailInvoiceIds: [],
   invoiceIds: [],
   returnIds: [],
   stockPurchaseIds: [],
@@ -529,6 +532,9 @@ async function cleanupRegisteredFixture(
 
 async function cleanup(): Promise<void> {
   console.log("\n─── Cleaning up fixtures ───");
+  for (const invoiceId of toClean.retailInvoiceIds) {
+    await cleanupRegisteredFixture("invoice", invoiceId);
+  }
   for (const invoiceId of toClean.invoiceIds) {
     await cleanupRegisteredFixture("wholesale_invoice", invoiceId);
   }
@@ -543,6 +549,10 @@ async function cleanup(): Promise<void> {
   }
   for (const category of toClean.transientCategories) {
     await db.transaction(async (tx) => {
+      const [linkedRetailItem] = await tx.select({ id: invoiceItemsTable.id })
+        .from(invoiceItemsTable)
+        .where(eq(invoiceItemsTable.category, category))
+        .limit(1);
       const [linkedItem] = await tx.select({ id: wholesaleInvoiceItemsTable.id })
         .from(wholesaleInvoiceItemsTable)
         .where(eq(wholesaleInvoiceItemsTable.category, category))
@@ -550,7 +560,7 @@ async function cleanup(): Promise<void> {
       const [level] = await tx.select({ weightGrams: stockLevelsTable.weightGrams })
         .from(stockLevelsTable)
         .where(eq(stockLevelsTable.category, category));
-      if (linkedItem || (level && Math.abs(Number(level.weightGrams)) > 0.0001)) {
+      if (linkedRetailItem || linkedItem || (level && Math.abs(Number(level.weightGrams)) > 0.0001)) {
         console.warn(`    kept linked or non-zero transient category ${category} for investigation`);
         return;
       }
@@ -1436,6 +1446,172 @@ async function run(): Promise<void> {
     0.01,
   );
 
+  // Dashboard APIs must completely ignore automated-test categories. This
+  // fixture deliberately creates purchase cost, retail and wholesale revenue,
+  // FIFO COGS, making charges, and remaining stock under a hidden category.
+  console.log("\n─── Test: Dashboard excludes automated-test categories from rows and totals ───");
+  const dashboardFixtureDate = new Date().toISOString().slice(0, 10);
+  const dashboardFixtureRange = `startDate=${dashboardFixtureDate}&endDate=${dashboardFixtureDate}`;
+  const loadDashboardVisibilitySnapshot = async () => {
+    const [kpis, summary, legacyDashboard, categorySummary] = await Promise.all([
+      apiJson<Record<string, unknown>>(`/dashboard/kpis?${dashboardFixtureRange}`),
+      apiJson<{
+        availableStockGrams: number;
+        availableStockCostAed: number;
+        silverStockGrams: number;
+        silverStockCostAed: number;
+        totalRevenueAed: number;
+        soldCostAed: number;
+        netProfitAed: number;
+        totalPhysicalRemainingGrams: number;
+        totalPurchaseDebitAed: number;
+        totalSalesCreditAed: number;
+        categoryBreakdown: Array<{ category: string }>;
+      }>("/dashboard/summary-cards"),
+      apiJson<{
+        todayTotalSale: number;
+        monthlySale: number;
+        cashCollection: number;
+        cardCollection: number;
+        bankTransferCollection: number;
+        totalProducts: number;
+        totalInvoices: number;
+        pendingPaymentsCount: number;
+        recentInvoices: Array<{ id: number }>;
+      }>("/dashboard"),
+      apiJson<Record<string, unknown>>(`/dashboard/category-summary?${dashboardFixtureRange}`),
+    ]);
+    return {
+      kpis,
+      summary,
+      legacyDashboard: {
+        todayTotalSale: legacyDashboard.todayTotalSale,
+        monthlySale: legacyDashboard.monthlySale,
+        cashCollection: legacyDashboard.cashCollection,
+        cardCollection: legacyDashboard.cardCollection,
+        bankTransferCollection: legacyDashboard.bankTransferCollection,
+        totalProducts: legacyDashboard.totalProducts,
+        totalInvoices: legacyDashboard.totalInvoices,
+        pendingPaymentsCount: legacyDashboard.pendingPaymentsCount,
+        recentInvoiceIds: legacyDashboard.recentInvoices.map((invoice) => invoice.id),
+      },
+      categorySummary,
+    };
+  };
+  const dashboardVisibilityBefore = await loadDashboardVisibilitySnapshot();
+  const hiddenDashboardCategory = `test_dashboard_hidden_${Date.now()}`;
+  toClean.transientCategories.push(hiddenDashboardCategory);
+  const hiddenDashboardPurchaseId = await db.transaction(async (tx) => {
+    const [purchase] = await tx.insert(stockPurchasesTable).values({
+      category: hiddenDashboardCategory,
+      supplierName: "TEST-DASHBOARD-HIDDEN-SUPPLIER",
+      purchaseDate: dashboardFixtureDate,
+      weightGrams: "20",
+      totalPriceAed: "6420",
+      pricePerGram: "321",
+      remainingWeightGrams: "20",
+      narrative: "Registered dashboard visibility regression fixture",
+    }).returning({ id: stockPurchasesTable.id });
+    if (!purchase) throw new Error("Hidden dashboard stock purchase was not created");
+    await tx.insert(stockLevelsTable).values({
+      category: hiddenDashboardCategory,
+      weightGrams: "20",
+    });
+    await tx.insert(stockMovementsTable).values({
+      category: hiddenDashboardCategory,
+      type: "purchase",
+      weightGrams: "20",
+      refType: "stock_purchase",
+      refId: purchase.id,
+      note: "Registered dashboard visibility regression fixture",
+    });
+    await tx.insert(pdfTestFixturesTable).values({
+      runId: suiteRunId,
+      entityType: "stock_purchase",
+      entityId: purchase.id,
+    });
+    return purchase.id;
+  });
+  toClean.stockPurchaseIds.push(hiddenDashboardPurchaseId);
+  const hiddenRetailResponse = await apiReq("/invoices", {
+    method: "POST",
+    headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
+    body: JSON.stringify({
+      customerName: "TEST-DASHBOARD-HIDDEN-RETAIL",
+      paymentMethod: "cash",
+      subtotal: 2000,
+      discount: 0,
+      total: 2000,
+      vatRate: 5,
+      vatAmount: 0,
+      totalBeforeVat: 2000,
+      totalIncludingVat: 2000,
+      roundOffDiscount: 0,
+      isPending: false,
+      items: [{
+        description: "Hidden dashboard retail fixture",
+        category: hiddenDashboardCategory,
+        quantity: 1,
+        grossWeight: 5,
+        unitPrice: 400,
+        totalPrice: 2000,
+      }],
+    }),
+  });
+  if (!hiddenRetailResponse.ok) {
+    throw new Error(`Hidden dashboard retail invoice failed (${hiddenRetailResponse.status}): ${await hiddenRetailResponse.text()}`);
+  }
+  const hiddenRetailInvoice = await hiddenRetailResponse.json() as { id: number };
+  toClean.retailInvoiceIds.push(hiddenRetailInvoice.id);
+  const hiddenWholesaleCreated = await createWholesaleInvoice({
+    traderId: trader.id,
+    traderSnapshot: { name: trader.name },
+    invoiceDate: dashboardFixtureDate,
+    pricingType: "fixed",
+    idempotencyKey: `test-dashboard-hidden-wholesale-${Date.now()}`,
+    fixtureRunId: suiteRunId,
+    items: [{
+      description: "Hidden dashboard wholesale fixture",
+      category: hiddenDashboardCategory,
+      quantity: 1,
+      grossGrams: 5,
+      purityMultiplier: 1,
+      makingAed: 25,
+      rateAedPerGram: 500,
+    }],
+  });
+  if (!hiddenWholesaleCreated.invoice) throw new Error("Hidden dashboard wholesale invoice was not created");
+  toClean.invoiceIds.push(hiddenWholesaleCreated.invoice.invoice.id);
+
+  const dashboardVisibilityAfter = await loadDashboardVisibilitySnapshot();
+  assertEq(
+    JSON.stringify(dashboardVisibilityAfter.kpis),
+    JSON.stringify(dashboardVisibilityBefore.kpis),
+    "Dashboard KPI totals ignore hidden retail and wholesale fixtures",
+  );
+  assertEq(
+    JSON.stringify(dashboardVisibilityAfter.summary),
+    JSON.stringify(dashboardVisibilityBefore.summary),
+    "Dashboard summary totals and category rows ignore hidden fixtures",
+  );
+  assertEq(
+    JSON.stringify(dashboardVisibilityAfter.legacyDashboard),
+    JSON.stringify(dashboardVisibilityBefore.legacyDashboard),
+    "Legacy dashboard totals and recent invoices ignore hidden fixtures",
+  );
+  assertEq(
+    JSON.stringify(dashboardVisibilityAfter.categorySummary),
+    JSON.stringify(dashboardVisibilityBefore.categorySummary),
+    "Dashboard category summary and payment totals ignore hidden fixtures",
+  );
+  assert(
+    dashboardVisibilityAfter.summary.categoryBreakdown.every((row) =>
+      !row.category.toLowerCase().startsWith("test_")
+      && !row.category.toLowerCase().startsWith("ws_shortfall_")
+    ),
+    "Dashboard category breakdown never returns automated-test prefixes",
+  );
+
   // Deliberate oversells use explicit shortfall FIFO slices. Returning them
   // cancels the negative stock deficit without fabricating a purchase batch.
   console.log("\n─── Test: Unbacked oversell return reconciliation ───");
@@ -1573,8 +1749,8 @@ async function run(): Promise<void> {
   );
   assertEq(
     reportAfter.invoiceCount - reportBaseline.invoiceCount,
-    5,
-    "Main KPI invoice count includes wholesale invoices",
+    4,
+    "Main KPI invoice count includes legitimate wholesale invoices but excludes automated-test categories",
   );
 
   const categoryAfter = await apiJson<{

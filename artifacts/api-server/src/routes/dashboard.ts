@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, gte, desc, sql } from "drizzle-orm";
+import { and, eq, gte, desc, sql, type SQL } from "drizzle-orm";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, pricesTable } from "@workspace/db";
 import { GetDashboardResponse, GetCategorySummaryQueryParams, GetCategorySummaryResponse } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/auth";
@@ -19,6 +19,31 @@ const CATEGORY_SUMMARY_LABEL: Record<string, string> = {
   silver: "Silver",
   custom: "Custom",
 };
+
+function dashboardCategoryIsVisibleSql(category: SQL): SQL {
+  return sql`(
+    position('test_' in lower(trim(coalesce(${category}::text, '')))) <> 1
+    AND position('ws_shortfall_' in lower(trim(coalesce(${category}::text, '')))) <> 1
+  )`;
+}
+
+function dashboardRetailInvoiceIsVisibleSql(invoiceId: SQL): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM invoice_items dashboard_hidden_ii
+    WHERE dashboard_hidden_ii.invoice_id = ${invoiceId}
+      AND NOT (${dashboardCategoryIsVisibleSql(sql`dashboard_hidden_ii.category`)})
+  )`;
+}
+
+function dashboardWholesaleInvoiceIsVisibleSql(invoiceId: SQL): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM wholesale_invoice_items dashboard_hidden_wii
+    WHERE dashboard_hidden_wii.invoice_id = ${invoiceId}
+      AND NOT (${dashboardCategoryIsVisibleSql(sql`dashboard_hidden_wii.category`)})
+  )`;
+}
 
 interface CatRow extends Record<string, unknown> {
   category: string;
@@ -57,7 +82,7 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
 
   const invWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardRetailInvoiceIsVisibleSql(sql`i.id`),
       ...(start ? [sql`i.created_at >= ${start.toISOString()}::timestamptz`] : []),
       ...(endExclusive ? [sql`i.created_at < ${endExclusive.toISOString()}::timestamptz`] : []),
     ],
@@ -66,7 +91,7 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   // stock_purchases.purchase_date is a yyyy-MM-dd text column
   const purchaseWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardCategoryIsVisibleSql(sql`category`),
       ...(q.startDate?.trim() ? [sql`purchase_date >= ${q.startDate.trim()}`] : []),
       ...(q.endDate?.trim() ? [sql`purchase_date <= ${q.endDate.trim()}`] : []),
     ],
@@ -74,7 +99,7 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   );
   const wholesaleInvoiceWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`),
       ...(q.startDate?.trim() ? [sql`wi.invoice_date >= ${q.startDate.trim()}`] : []),
       ...(q.endDate?.trim() ? [sql`wi.invoice_date <= ${q.endDate.trim()}`] : []),
     ],
@@ -82,7 +107,10 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   );
   const wholesaleLedgerWhere = sql.join(
     [
-      sql`TRUE`,
+      sql`(
+        tle.wholesale_invoice_id IS NULL
+        OR ${dashboardWholesaleInvoiceIsVisibleSql(sql`tle.wholesale_invoice_id`)}
+      )`,
       ...(q.startDate?.trim() ? [sql`tle.event_date >= ${q.startDate.trim()}`] : []),
       ...(q.endDate?.trim() ? [sql`tle.event_date <= ${q.endDate.trim()}`] : []),
     ],
@@ -90,7 +118,7 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   );
   const wholesaleReturnWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardWholesaleInvoiceIsVisibleSql(sql`wr.invoice_id`),
       ...(q.startDate?.trim() ? [sql`wr.return_date >= ${q.startDate.trim()}`] : []),
       ...(q.endDate?.trim() ? [sql`wr.return_date <= ${q.endDate.trim()}`] : []),
     ],
@@ -228,11 +256,20 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
              COALESCE(SUM(CASE WHEN category = 'silver' THEN remaining_weight_grams::numeric * price_per_gram::numeric ELSE 0 END), 0)::text AS silver_cost,
              COALESCE(SUM(total_price_aed::numeric), 0)::text AS purchase_debit
       FROM stock_purchases
+      WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
     `).then((r) => r.rows[0]),
     db.execute<{ total_revenue: string }>(sql`
       SELECT (
-        COALESCE((SELECT SUM(i.total::numeric) FROM invoices i), 0)
-        + COALESCE((SELECT SUM(wi.total_aed::numeric) FROM wholesale_invoices wi), 0)
+        COALESCE((
+          SELECT SUM(i.total::numeric)
+          FROM invoices i
+          WHERE ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
+        ), 0)
+        + COALESCE((
+          SELECT SUM(wi.total_aed::numeric)
+          FROM wholesale_invoices wi
+          WHERE ${dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`)}
+        ), 0)
       )::text AS total_revenue
     `).then((r) => r.rows[0]),
     db.execute<{ main_cogs: string; silver_cogs: string }>(sql`
@@ -241,6 +278,7 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
       FROM (
         SELECT category, cost_aed::numeric AS net_cost
         FROM inventory_consumptions
+        WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
         UNION ALL
         SELECT category,
                CASE WHEN consumed_grams::numeric > 0
@@ -249,11 +287,13 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
                          / consumed_grams::numeric
                     ELSE 0 END AS net_cost
         FROM wholesale_inventory_consumptions
+        WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
       ) costs
     `).then((r) => r.rows[0]),
     db.execute<{ category: string; purchased_grams: string }>(sql`
       SELECT category, COALESCE(SUM(weight_grams::numeric), 0)::text AS purchased_grams
       FROM stock_purchases
+      WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
       GROUP BY category
     `).then((r) => r.rows),
     db.execute<{ category: string; sold_grams: string }>(sql`
@@ -265,16 +305,21 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
                COALESCE(ii.gross_weight::numeric, 0) AS sold_grams
         FROM invoice_items ii
         WHERE ii.category IS NOT NULL
+          AND ${dashboardRetailInvoiceIsVisibleSql(sql`ii.invoice_id`)}
+          AND ${dashboardCategoryIsVisibleSql(sql`ii.category`)}
         UNION ALL
         SELECT wii.category,
                GREATEST(wii.gross_grams::numeric - wii.returned_gross_grams::numeric, 0) AS sold_grams
         FROM wholesale_invoice_items wii
+        WHERE ${dashboardWholesaleInvoiceIsVisibleSql(sql`wii.invoice_id`)}
+          AND ${dashboardCategoryIsVisibleSql(sql`wii.category`)}
       ) sales
       GROUP BY category
     `).then((r) => r.rows),
     db.execute<{ category: string; remaining_grams: string }>(sql`
       SELECT category, weight_grams::text AS remaining_grams
       FROM stock_levels
+      WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
       ORDER BY category
     `).then((r) => r.rows),
   ]);
@@ -346,8 +391,14 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
     recentRows,
   ] = await Promise.all([
     db.select().from(pricesTable).limit(1).then(r => r[0]),
-    db.select().from(invoicesTable).where(gte(invoicesTable.createdAt, startOfToday)),
-    db.select().from(invoicesTable).where(gte(invoicesTable.createdAt, startOfMonth)),
+    db.select().from(invoicesTable).where(and(
+      gte(invoicesTable.createdAt, startOfToday),
+      dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`),
+    )),
+    db.select().from(invoicesTable).where(and(
+      gte(invoicesTable.createdAt, startOfMonth),
+      dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`),
+    )),
     // Item-level aggregation: amount = sum(item.total_price), grams = sum(item.weight) per category
     db.execute<CatRow>(sql`
       SELECT
@@ -359,6 +410,8 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i.created_at >= ${startOfToday}
         AND ii.category IS NOT NULL
+        AND ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
+        AND ${dashboardCategoryIsVisibleSql(sql`ii.category`)}
       GROUP BY ii.category
     `).then(r => r.rows as CatRow[]),
     db.execute<CatRow>(sql`
@@ -371,13 +424,21 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i.created_at >= ${startOfMonth}
         AND ii.category IS NOT NULL
+        AND ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
+        AND ${dashboardCategoryIsVisibleSql(sql`ii.category`)}
       GROUP BY ii.category
     `).then(r => r.rows as CatRow[]),
     db.$count(customersTable),
-    db.$count(productsTable),
-    db.$count(invoicesTable),
-    db.select().from(invoicesTable).where(eq(invoicesTable.isPending, true)),
-    db.select().from(invoicesTable).orderBy(desc(invoicesTable.createdAt)).limit(5),
+    db.$count(productsTable, dashboardCategoryIsVisibleSql(sql`${productsTable.category}`)),
+    db.$count(invoicesTable, dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`)),
+    db.select().from(invoicesTable).where(and(
+      eq(invoicesTable.isPending, true),
+      dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`),
+    )),
+    db.select().from(invoicesTable)
+      .where(dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`))
+      .orderBy(desc(invoicesTable.createdAt))
+      .limit(5),
   ]);
 
   const goldPricePerGram = prices ? Number(prices.goldPricePerGram) : 320;
@@ -521,6 +582,8 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i.created_at >= ${start} AND i.created_at < ${end}
+        AND ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
+        AND ${dashboardCategoryIsVisibleSql(sql`ii.category`)}
       GROUP BY COALESCE(ii.category, 'custom')
     `).then(r => r.rows as CatRow[]),
     db.execute<CatRow>(sql`
@@ -543,6 +606,8 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
         FROM wholesale_invoice_items wii
         JOIN wholesale_invoices wi ON wi.id = wii.invoice_id
         WHERE wi.invoice_date >= ${startDate} AND wi.invoice_date <= ${endDate}
+          AND ${dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`)}
+          AND ${dashboardCategoryIsVisibleSql(sql`wii.category`)}
 
         UNION ALL
 
@@ -555,6 +620,8 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
         JOIN wholesale_settlements ws ON ws.id = wsa.settlement_id
         JOIN wholesale_invoice_items wii ON wii.id = wsa.invoice_item_id
         WHERE ws.settlement_date >= ${startDate} AND ws.settlement_date <= ${endDate}
+          AND ${dashboardWholesaleInvoiceIsVisibleSql(sql`ws.invoice_id`)}
+          AND ${dashboardCategoryIsVisibleSql(sql`wii.category`)}
 
         UNION ALL
 
@@ -567,11 +634,14 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
         JOIN wholesale_returns wr ON wr.id = wrl.return_id
         JOIN wholesale_invoice_items wii ON wii.id = wrl.invoice_item_id
         WHERE wr.return_date >= ${startDate} AND wr.return_date <= ${endDate}
+          AND ${dashboardWholesaleInvoiceIsVisibleSql(sql`wr.invoice_id`)}
+          AND ${dashboardCategoryIsVisibleSql(sql`wii.category`)}
       ) wholesale_events
       GROUP BY COALESCE(category, 'custom')
     `).then(r => r.rows as CatRow[]),
   ]);
-  const catRows = [...retailCatRows, ...wholesaleCatRows];
+  const catRows = [...retailCatRows, ...wholesaleCatRows]
+    .filter((row) => isDashboardInventoryCategory(row.category));
 
   // Payment method breakdown for the same date range.
   // Credit/Due sales are any invoice marked isPending, regardless of the recorded payment method.
@@ -580,11 +650,19 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
     db
       .select({ total: invoicesTable.total, paymentMethod: invoicesTable.paymentMethod, isPending: invoicesTable.isPending })
       .from(invoicesTable)
-      .where(sql`${invoicesTable.createdAt} >= ${start} AND ${invoicesTable.createdAt} < ${end}`),
+      .where(sql`
+        ${invoicesTable.createdAt} >= ${start}
+        AND ${invoicesTable.createdAt} < ${end}
+        AND ${dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`)}
+      `),
     db.execute<{ total: string }>(sql`
       SELECT COALESCE(SUM(aed_delta::numeric), 0)::text AS total
       FROM trader_ledger_entries
       WHERE event_date >= ${startDate} AND event_date <= ${endDate}
+        AND (
+          wholesale_invoice_id IS NULL
+          OR ${dashboardWholesaleInvoiceIsVisibleSql(sql`wholesale_invoice_id`)}
+        )
     `).then((r) => r.rows[0]),
   ]);
 
@@ -671,12 +749,18 @@ async function getInvoicesForDownload(category: string, period: string) {
   const allInvoices = await db
     .select()
     .from(invoicesTable)
-    .where(gte(invoicesTable.createdAt, startDate))
+    .where(and(
+      gte(invoicesTable.createdAt, startDate),
+      dashboardRetailInvoiceIsVisibleSql(sql`${invoicesTable.id}`),
+    ))
     .orderBy(desc(invoicesTable.createdAt));
 
   const rows = await Promise.all(
     allInvoices.map(async (inv) => {
-      const items = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
+      const items = await db.select().from(invoiceItemsTable).where(and(
+        eq(invoiceItemsTable.invoiceId, inv.id),
+        dashboardCategoryIsVisibleSql(sql`${invoiceItemsTable.category}`),
+      ));
       return { inv, items };
     })
   );
@@ -924,7 +1008,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
 
   const purchaseWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardCategoryIsVisibleSql(sql`category`),
       ...(startDate ? [sql`purchase_date >= ${startDate}`] : []),
       ...(endDate ? [sql`purchase_date <= ${endDate}`] : []),
       ...(category ? [sql`category = ${category}`] : []),
@@ -941,7 +1025,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   }
   const salesWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardCategoryIsVisibleSql(bucketExpr),
       ...(startDate ? [sql`i.created_at >= ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz`] : []),
       ...(endExclusive ? [sql`i.created_at < ${endExclusive}::timestamptz`] : []),
       ...(category ? [sql`${bucketExpr} = ${category}`] : []),
@@ -950,7 +1034,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   );
   const wholesaleDeliveryWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardCategoryIsVisibleSql(sql`wii.category`),
       ...(startDate ? [sql`wi.invoice_date >= ${startDate}`] : []),
       ...(endDate ? [sql`wi.invoice_date <= ${endDate}`] : []),
       ...(category ? [sql`wii.category = ${category}`] : []),
@@ -959,7 +1043,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   );
   const wholesaleFixWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardCategoryIsVisibleSql(sql`wii.category`),
       ...(startDate ? [sql`ws.settlement_date >= ${startDate}`] : []),
       ...(endDate ? [sql`ws.settlement_date <= ${endDate}`] : []),
       ...(category ? [sql`wii.category = ${category}`] : []),
@@ -968,7 +1052,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   );
   const wholesaleReturnWhere = sql.join(
     [
-      sql`TRUE`,
+      dashboardCategoryIsVisibleSql(sql`wii.category`),
       ...(startDate ? [sql`wr.return_date >= ${startDate}`] : []),
       ...(endDate ? [sql`wr.return_date <= ${endDate}`] : []),
       ...(category ? [sql`wii.category = ${category}`] : []),
@@ -1088,7 +1172,10 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
       ORDER BY created_at, invoice_number, description
     `).then((r) => r.rows),
     db.execute<{ category: string; weight_grams: string }>(sql`
-      SELECT category, weight_grams::text FROM stock_levels ORDER BY category
+      SELECT category, weight_grams::text
+      FROM stock_levels
+      WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
+      ORDER BY category
     `).then((r) => r.rows),
   ]);
   const purchases = purchaseRows.filter((row) => isDashboardInventoryCategory(row.category));
@@ -1106,7 +1193,9 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
   const avgCost = new Map<string, number>();
   const allPurch = await db.execute<{ category: string; g: string; aed: string }>(sql`
     SELECT category, SUM(weight_grams::numeric)::text AS g, SUM(total_price_aed::numeric)::text AS aed
-    FROM stock_purchases GROUP BY category
+    FROM stock_purchases
+    WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
+    GROUP BY category
   `).then((r) => r.rows);
   for (const p of allPurch) {
     const g = Number(p.g);
@@ -1221,6 +1310,7 @@ async function loadStatementData(startDate: string | null, endDate: string | nul
            remaining_weight_grams::text, total_price_aed::text
     FROM stock_purchases
     WHERE remaining_weight_grams::numeric > 0
+      AND ${dashboardCategoryIsVisibleSql(sql`category`)}
       ${category ? sql`AND category = ${category}` : sql``}
     ORDER BY category, purchase_date, id
   `).then((r) => r.rows.map((b) => {
