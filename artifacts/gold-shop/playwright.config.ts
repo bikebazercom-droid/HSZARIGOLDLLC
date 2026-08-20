@@ -19,7 +19,11 @@ const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "pdf-downloads.spec.ts",
-  timeout: 180_000,
+  // The single serialized journey provisions, exercises, and exactly cleans up
+  // many database-backed PDF fixtures. Allow the slowest development runs to
+  // finish their cleanup rather than timing out while holding the shared suite
+  // registry lock.
+  timeout: 360_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
   workers: 1,

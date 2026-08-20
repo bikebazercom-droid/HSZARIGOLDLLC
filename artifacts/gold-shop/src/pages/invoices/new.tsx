@@ -31,6 +31,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { WholesaleInvoicePreview } from "@/components/wholesale-invoice-preview";
 import { tenTolaPurityMultiplier } from "@/lib/invoice-category-rates";
+import { PurchaseBillEntryForm } from "@/components/purchase-bill-entry-form";
+import { useAuth } from "@/context/auth";
 
 interface LineItem {
   id: string;
@@ -347,6 +349,8 @@ function resolvePrimaryRate(
 export default function NewInvoice() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const queryClient = useQueryClient();
   const createInvoice = useCreateInvoice();
   const createCustomer = useCreateCustomer();
@@ -362,7 +366,10 @@ export default function NewInvoice() {
     query: { queryKey: getGetPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
   });
   const { data: products } = useListProducts({}, { query: { queryKey: getListProductsQueryKey({}) } });
-  const [entryMode, setEntryMode] = useState<"retail" | "wholesale">("retail");
+  const [entryMode, setEntryMode] = useState<"retail" | "purchase" | "wholesale">("retail");
+  useEffect(() => {
+    if (!isAdmin && entryMode === "purchase") setEntryMode("retail");
+  }, [entryMode, isAdmin]);
   const { data: wholesaleTraders, isLoading: wholesaleTradersLoading } = useListWholesaleTraders(
     {},
     { query: { queryKey: getListWholesaleTradersQueryKey({}), enabled: entryMode === "wholesale" } },
@@ -894,38 +901,96 @@ export default function NewInvoice() {
 
   const modeSelector = (
     <div
-      className="flex w-full sm:w-auto self-start rounded-lg border border-border/50 bg-muted/30 p-1"
+      className={`grid w-full gap-3 ${isAdmin ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2"}`}
       role="tablist"
       aria-label="Invoice entry type"
     >
       <button
         type="button"
         role="tab"
+        aria-label="Retail Customer"
         aria-selected={entryMode === "retail"}
         onClick={() => setEntryMode("retail")}
-        className={`flex-1 sm:flex-none rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+        className={`group relative flex flex-col items-start gap-1 overflow-hidden rounded-xl border p-4 text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
           entryMode === "retail"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            ? "border-blue-300 bg-blue-50/50 shadow-[0_0_15px_-3px_rgba(37,99,235,0.15)] dark:border-blue-800 dark:bg-blue-950/30"
+            : "border-border/50 bg-card hover:border-blue-200 hover:bg-blue-50/30 dark:hover:border-blue-900 dark:hover:bg-blue-950/20"
         }`}
       >
-        Retail Customer
+        <span className={`text-sm font-semibold tracking-tight transition-colors ${
+          entryMode === "retail" ? "text-blue-700 dark:text-blue-400" : "text-muted-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400"
+        }`}>
+          Retail Customer
+        </span>
+        <span className="text-xs text-muted-foreground opacity-80">Standard showroom invoice</span>
+        {entryMode === "retail" && (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-blue-600 dark:bg-blue-500" />
+        )}
       </button>
+
+      {isAdmin && (
+        <button
+          type="button"
+          role="tab"
+          aria-label="New Purchase Bill"
+          aria-selected={entryMode === "purchase"}
+          onClick={() => setEntryMode("purchase")}
+          className={`group relative flex flex-col items-start gap-1 overflow-hidden rounded-xl border p-4 text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
+            entryMode === "purchase"
+              ? "border-emerald-300 bg-emerald-50/50 shadow-[0_0_15px_-3px_rgba(16,185,129,0.15)] dark:border-emerald-800 dark:bg-emerald-950/30"
+              : "border-border/50 bg-card hover:border-emerald-200 hover:bg-emerald-50/30 dark:hover:border-emerald-900 dark:hover:bg-emerald-950/20"
+          }`}
+        >
+          <span className={`text-sm font-semibold tracking-tight transition-colors ${
+            entryMode === "purchase" ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+          }`}>
+            New Purchase Bill
+          </span>
+          <span className="text-xs text-muted-foreground opacity-80">Inbound supplier stock</span>
+          {entryMode === "purchase" && (
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-emerald-600 dark:bg-emerald-500" />
+          )}
+        </button>
+      )}
+
       <button
         type="button"
         role="tab"
+        aria-label="Wholesale / Trader"
         aria-selected={entryMode === "wholesale"}
         onClick={() => setEntryMode("wholesale")}
-        className={`flex-1 sm:flex-none rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+        className={`group relative flex flex-col items-start gap-1 overflow-hidden rounded-xl border p-4 text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 ${
           entryMode === "wholesale"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            ? "border-amber-300 bg-amber-50/50 shadow-[0_0_15px_-3px_rgba(245,158,11,0.15)] dark:border-amber-800 dark:bg-amber-950/30"
+            : "border-border/50 bg-card hover:border-amber-200 hover:bg-amber-50/30 dark:hover:border-amber-900 dark:hover:bg-amber-950/20"
         }`}
       >
-        Wholesale / Trader
+        <span className={`text-sm font-semibold tracking-tight transition-colors ${
+          entryMode === "wholesale" ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground group-hover:text-amber-600 dark:group-hover:text-amber-400"
+        }`}>
+          Wholesale / Trader
+        </span>
+        <span className="text-xs text-muted-foreground opacity-80">B2B trading invoice</span>
+        {entryMode === "wholesale" && (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-amber-500 dark:bg-amber-400" />
+        )}
       </button>
     </div>
   );
+
+  if (isAdmin && entryMode === "purchase") {
+    return (
+      <div className="mx-auto max-w-7xl space-y-4 px-1 pb-20 sm:space-y-6 sm:px-0">
+        <div>
+          <h1 className="mb-2 text-2xl font-bold tracking-tight text-primary sm:mb-4 sm:text-3xl">New Invoice</h1>
+          {modeSelector}
+        </div>
+        <div className="mt-2">
+          <PurchaseBillEntryForm />
+        </div>
+      </div>
+    );
+  }
 
   if (entryMode === "wholesale") {
     return (

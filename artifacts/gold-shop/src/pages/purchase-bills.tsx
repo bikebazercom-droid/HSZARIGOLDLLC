@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   useListPurchaseBills, getListPurchaseBillsQueryKey,
-  useCreatePurchaseBill, useDeletePurchaseBill,
+  useDeletePurchaseBill,
   useListStockSuppliers, getListStockSuppliersQueryKey,
   useListStockLevels, getListStockLevelsQueryKey,
   useListStockPurchases, getListStockPurchasesQueryKey,
@@ -25,9 +25,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PurchaseBillEntryForm } from "@/components/purchase-bill-entry-form";
 import { useToast } from "@/hooks/use-toast";
 import { endOfMonth, endOfYear, format, startOfMonth, startOfYear } from "date-fns";
-import { AlertTriangle, CheckCircle2, FileDown, FilePlus2, Lock, LockOpen, Plus, ShieldAlert, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, FilePlus2, Lock, LockOpen, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { STOCK_CATEGORIES, stockCategoryLabel } from "@/pages/products/stock";
 
 function fmtG(n: number | undefined | null): string {
@@ -35,25 +36,6 @@ function fmtG(n: number | undefined | null): string {
 }
 function fmtAED(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-interface LineDraft {
-  category: string;
-  grossWeight: string;
-  purity: string;
-  rate: string;
-  making: string;
-}
-const emptyLine = (): LineDraft => ({ category: "gold_9999", grossWeight: "", purity: "100", rate: "", making: "" });
-
-function lineCalc(l: LineDraft) {
-  const gross = parseFloat(l.grossWeight) || 0;
-  const purity = parseFloat(l.purity) || 0;
-  const rate = parseFloat(l.rate) || 0;
-  const making = parseFloat(l.making) || 0;
-  const pure = gross * (purity / 100);
-  const total = gross * rate + making;
-  return { gross, purity, rate, making, pure, total };
 }
 
 interface AuditLogEntry {
@@ -191,8 +173,9 @@ export default function PurchaseBillsPage() {
   const { data: liability, isLoading: liabilityLoading } = useGetSupplierLiability({
     query: { queryKey: getGetSupplierLiabilityQueryKey(), refetchOnWindowFocus: true, staleTime: 0 },
   });
-  const { data: suppliers } = useListStockSuppliers({ query: { queryKey: getListStockSuppliersQueryKey() } });
-  const createBill = useCreatePurchaseBill();
+  const { data: suppliers } = useListStockSuppliers({
+    query: { queryKey: getListStockSuppliersQueryKey() },
+  });
   const deleteBill = useDeletePurchaseBill();
   const updatePaymentStatus = useUpdatePurchaseBillPaymentStatus();
 
@@ -227,42 +210,11 @@ export default function PurchaseBillsPage() {
     });
   }, [auditLog]);
 
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const [billNo, setBillNo] = useState("");
-  const [billDate, setBillDate] = useState(todayStr);
-  const [supplierName, setSupplierName] = useState("");
-  const [supplierPhone, setSupplierPhone] = useState("");
-  const [supplierEmail, setSupplierEmail] = useState("");
-  const [supplierAddress, setSupplierAddress] = useState("");
-  const [purchaseType, setPurchaseType] = useState<"fixed" | "unfixed">("fixed");
-  const [paymentStatus, setPaymentStatus] = useState<"paid" | "unpaid" | "unfixed">("paid");
-  const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [statementSupplier, setStatementSupplier] = useState("");
   const [statementCategory, setStatementCategory] = useState("all");
   const [statementPeriod, setStatementPeriod] = useState<"all" | "today" | "thisMonth" | "thisYear" | "custom">("all");
   const [statementStartDate, setStatementStartDate] = useState("");
   const [statementEndDate, setStatementEndDate] = useState("");
-
-  const setLine = (i: number, patch: Partial<LineDraft>) =>
-    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-
-  // Unfixed purchases are created without pricing: rate/making/total stay 0
-  // and only the weights are captured. Pricing is fixed later at settlement.
-  const isUnfixedForm = purchaseType === "unfixed";
-  const calc = lines.map(lineCalc).map((c) => (isUnfixedForm ? { ...c, rate: 0, making: 0, total: 0 } : c));
-  const totals = {
-    gross: calc.reduce((s, c) => s + c.gross, 0),
-    pure: calc.reduce((s, c) => s + c.pure, 0),
-    aed: calc.reduce((s, c) => s + c.total, 0),
-  };
-
-  const resetForm = () => {
-    setBillNo(""); setBillDate(todayStr); setSupplierName("");
-    setSupplierPhone(""); setSupplierEmail(""); setSupplierAddress("");
-    setPurchaseType("fixed"); setPaymentStatus("paid"); setNotes("");
-    setLines([emptyLine()]);
-  };
 
   const invalidate = (includeAuditLog = false) => {
     queryClient.invalidateQueries({ queryKey: getListPurchaseBillsQueryKey(undefined) });
@@ -311,55 +263,6 @@ export default function PurchaseBillsPage() {
     if (statementEndDate) params.set("endDate", statementEndDate);
     const query = params.toString();
     window.open(`${import.meta.env.BASE_URL}api/purchase-bills/statement-pdf${query ? `?${query}` : ""}`, "_blank");
-  };
-
-  const handleSave = () => {
-    if (!billNo.trim()) { toast({ title: "Bill No / Ref is required", variant: "destructive" }); return; }
-    if (!supplierName.trim()) { toast({ title: "Supplier name is required", variant: "destructive" }); return; }
-    if (supplierEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supplierEmail.trim())) {
-      toast({ title: "Enter a valid supplier email", variant: "destructive" });
-      return;
-    }
-    for (let i = 0; i < lines.length; i++) {
-      const c = calc[i];
-      if (!(c.gross > 0)) { toast({ title: `Line ${i + 1}: enter a valid gross weight`, variant: "destructive" }); return; }
-      if (!(c.purity > 0 && c.purity <= 100)) { toast({ title: `Line ${i + 1}: purity must be between 0 and 100`, variant: "destructive" }); return; }
-      if (!isUnfixedForm && (!(c.rate >= 0) || lines[i].rate === "")) { toast({ title: `Line ${i + 1}: enter the purchase rate`, variant: "destructive" }); return; }
-    }
-    createBill.mutate({
-      data: {
-        billNo: billNo.trim(),
-        billDate,
-        supplierName: supplierName.trim().toUpperCase(),
-        ...(supplierPhone.trim() ? { supplierPhone: supplierPhone.trim() } : {}),
-        ...(supplierEmail.trim() ? { supplierEmail: supplierEmail.trim() } : {}),
-        ...(supplierAddress.trim() ? { supplierAddress: supplierAddress.trim() } : {}),
-        purchaseType,
-        paymentStatus,
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
-        items: lines.map((l, i) => ({
-          category: l.category as any,
-          grossWeightGrams: calc[i].gross,
-          purityPercent: calc[i].purity,
-          rateAedPerG: calc[i].rate,
-          makingChargeAed: calc[i].making,
-          lineTotalAed: Math.round(calc[i].total * 100) / 100,
-        })),
-      },
-    }, {
-      onSuccess: (bill) => {
-        toast({ title: `Purchase bill ${bill.billNo} saved`, description: `${fmtG(bill.totalGrossGrams)} g · AED ${fmtAED(bill.totalAed)} posted to stock & ledgers` });
-        // Track this supplier immediately in the session accumulator so the warning
-        // fires the next time the drawer opens for them — before the server query refreshes.
-        if (bill.paymentStatus === "unpaid" || bill.paymentStatus === "unfixed") {
-          setSessionLiableSuppliers((prev) => new Set(prev).add(bill.supplierName.toLowerCase()));
-        }
-        invalidate();
-        resetForm();
-        setOpen(false);
-      },
-      onError: (e: any) => toast({ title: "Failed to save bill", description: e?.message, variant: "destructive" }),
-    });
   };
 
   const handleDelete = (id: number, ref: string, paymentStatus: string) => {
@@ -494,19 +397,6 @@ export default function PurchaseBillsPage() {
   const settlingBill = settleId != null ? bills?.find((b) => b.id === settleId) : null;
 
   const hasOutstanding = liability != null && (liability.totalUnpaidAed > 0 || liability.totalUnfixedPureGrams > 0);
-
-  // Warning: does the supplier typed in the new-bill form already have open liabilities?
-  // We check both the server-side liability data (React Query cache) AND the client-side
-  // session accumulator so the warning fires immediately after saving a bill in the same
-  // session, even before the cache has refreshed.
-  const trimmedSupplier = supplierName.trim();
-  const supplierLiabilityRow = trimmedSupplier
-    ? liability?.rows.find((r) => r.supplierName.toLowerCase() === trimmedSupplier.toLowerCase())
-    : undefined;
-  const supplierHasLiability =
-    (supplierLiabilityRow != null &&
-      (supplierLiabilityRow.unpaidCount > 0 || supplierLiabilityRow.unfixedCount > 0)) ||
-    (trimmedSupplier !== "" && sessionLiableSuppliers.has(trimmedSupplier.toLowerCase()));
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -1298,189 +1188,14 @@ export default function PurchaseBillsPage() {
             <SheetTitle>New Purchase Bill</SheetTitle>
             <SheetDescription>Record a supplier bill. Each line item creates a stock batch and posts Metal Credit + Cash Debit to the ledgers.</SheetDescription>
           </SheetHeader>
-          <div className="space-y-4 mt-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label>Bill No / Ref</Label>
-                <Input
-                  value={billNo}
-                  onChange={(e) => setBillNo(e.target.value)}
-                  placeholder="e.g. SUP-1042"
-                  maxLength={300}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Bill Date</Label>
-                <Input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Supplier Name</Label>
-                <Input
-                  list="bill-supplier-names"
-                  value={supplierName}
-                  onChange={(e) => setSupplierName(e.target.value.toUpperCase())}
-                  placeholder="e.g. RAHIM"
-                  className="uppercase"
-                  maxLength={300}
-                />
-                <datalist id="bill-supplier-names">
-                  {suppliers?.map((s) => <option key={s} value={s} />)}
-                </datalist>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Supplier Phone Number</Label>
-                <Input
-                  type="tel"
-                  autoComplete="tel"
-                  value={supplierPhone}
-                  onChange={(e) => setSupplierPhone(e.target.value)}
-                  placeholder="e.g. +971 50 123 4567"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Supplier Email</Label>
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  value={supplierEmail}
-                  onChange={(e) => setSupplierEmail(e.target.value)}
-                  placeholder="e.g. supplier@example.com"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Supplier Address</Label>
-                <Input
-                  autoComplete="street-address"
-                  value={supplierAddress}
-                  onChange={(e) => setSupplierAddress(e.target.value)}
-                  placeholder="e.g. Deira, Dubai, UAE"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Purchase Type</Label>
-                <Select value={purchaseType} onValueChange={(v) => {
-                  setPurchaseType(v as any);
-                  // Unfixed purchases start as an unfixed metal liability by default.
-                  if (v === "unfixed") setPaymentStatus("unfixed");
-                }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="fixed">Fixed Purchase</SelectItem>
-                    <SelectItem value="unfixed">Unfixed Purchase</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Payment Status</Label>
-                <Select value={paymentStatus} onValueChange={(v) => setPaymentStatus(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="paid">Paid in Cash</SelectItem>
-                    <SelectItem value="unpaid">Unpaid / Liability</SelectItem>
-                    <SelectItem value="unfixed">Unfixed Balance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Notes (optional)</Label>
-                <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" />
-              </div>
-            </div>
-
-            {supplierHasLiability && (
-              <div className="flex gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                <div className="space-y-0.5">
-                  <p className="font-semibold">This supplier has outstanding liabilities</p>
-                  {supplierLiabilityRow ? (
-                    <p className="text-amber-800">
-                      {supplierLiabilityRow.unpaidCount > 0 && (
-                        <span>{supplierLiabilityRow.unpaidCount} unpaid bill{supplierLiabilityRow.unpaidCount > 1 ? "s" : ""} — AED {fmtAED(supplierLiabilityRow.unpaidTotalAed)}</span>
-                      )}
-                      {supplierLiabilityRow.unpaidCount > 0 && supplierLiabilityRow.unfixedCount > 0 && <span className="mx-1">·</span>}
-                      {supplierLiabilityRow.unfixedCount > 0 && (
-                        <span>{supplierLiabilityRow.unfixedCount} unfixed bill{supplierLiabilityRow.unfixedCount > 1 ? "s" : ""} — {fmtG(supplierLiabilityRow.unfixedPureGrams)} g pure</span>
-                      )}
-                    </p>
-                  ) : (
-                    <p className="text-amber-800">An unpaid or unfixed bill was added for this supplier earlier in this session.</p>
-                  )}
-                  <p className="text-xs text-amber-700">Consider settling open balances before adding more.</p>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Line Items</Label>
-                <Button variant="outline" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Line
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {lines.map((l, i) => {
-                  const c = calc[i];
-                  return (
-                    <div key={i} className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-muted-foreground">Line {i + 1}</span>
-                        {lines.length > 1 && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}>
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Category</Label>
-                          <Select value={l.category} onValueChange={(v) => setLine(i, { category: v })}>
-                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {STOCK_CATEGORIES.map((cat) => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Gross Wt (g)</Label>
-                          <Input className="h-9" type="number" min="0" step="any" value={l.grossWeight} onChange={(e) => setLine(i, { grossWeight: e.target.value })} placeholder="100" />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Purity % / Touch</Label>
-                          <Input className="h-9" type="number" min="0" max="100" step="any" value={l.purity} onChange={(e) => setLine(i, { purity: e.target.value })} placeholder="91.6" />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Rate (AED/g)</Label>
-                          <Input className="h-9" type="number" min="0" step="any" value={isUnfixedForm ? "" : l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} placeholder={isUnfixedForm ? "Fixed later" : "470"} disabled={isUnfixedForm} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Making / Premium (AED)</Label>
-                          <Input className="h-9" type="number" min="0" step="any" value={isUnfixedForm ? "" : l.making} onChange={(e) => setLine(i, { making: e.target.value })} placeholder={isUnfixedForm ? "Fixed later" : "0"} disabled={isUnfixedForm} />
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-                        <span>Net Pure Weight: <span className="font-semibold text-foreground">{fmtG(c.pure)} g</span></span>
-                        {isUnfixedForm ? (
-                          <span>Line Total: <span className="font-semibold text-foreground">AED 0.00 (unfixed — rate set at settlement)</span></span>
-                        ) : (
-                          <span>Line Total: <span className="font-semibold text-foreground">AED {fmtAED(c.total)}</span></span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Gross Weight</span><span className="font-semibold">{fmtG(totals.gross)} g</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Pure Weight</span><span className="font-semibold">{fmtG(totals.pure)} g</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Bill Total</span><span className="font-bold">AED {fmtAED(totals.aed)}</span></div>
-            </div>
-
-            <Button className="w-full" onClick={handleSave} disabled={createBill.isPending}>
-              {createBill.isPending ? "Saving..." : "Save Purchase Bill"}
-            </Button>
-          </div>
+          <PurchaseBillEntryForm
+            variant="sheet"
+            onSaved={() => setOpen(false)}
+            sessionLiableSuppliers={sessionLiableSuppliers}
+            onSessionLiableSupplier={(supplier) => {
+              setSessionLiableSuppliers((current) => new Set(current).add(supplier));
+            }}
+          />
         </SheetContent>
       </Sheet>
     </div>

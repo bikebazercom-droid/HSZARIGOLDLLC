@@ -641,6 +641,120 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await page.setViewportSize({ width: 1440, height: 1000 });
     });
 
+    await test.step("new invoice mode cards switch between retail, purchase, and wholesale entry", async () => {
+      const inlineBillNo = `PB-${runTag}-INLINE`;
+      const inlineSupplier = `${runTag} INLINE SUPPLIER`;
+
+      await page.route("**/api/purchase-bills", async (route) => {
+        const requestUrl = new URL(route.request().url());
+        if (route.request().method() === "POST" && requestUrl.pathname.endsWith("/api/purchase-bills")) {
+          await route.continue({
+            headers: {
+              ...route.request().headers(),
+              ...fixtureHeaders(runId),
+            },
+          });
+          return;
+        }
+        await route.continue();
+      });
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/invoices/new");
+
+      const retailTab = page.getByRole("tab", { name: "Retail Customer", exact: true });
+      const purchaseTab = page.getByRole("tab", { name: "New Purchase Bill", exact: true });
+      const wholesaleTab = page.getByRole("tab", { name: "Wholesale / Trader", exact: true });
+      await expect(page.getByRole("tablist", { name: "Invoice entry type" }).getByRole("tab")).toHaveCount(3);
+      await expect(retailTab).toHaveAttribute("aria-selected", "true");
+      await expect(retailTab).toHaveClass(/border-blue-300/);
+      await expect(purchaseTab).toHaveAttribute("aria-selected", "false");
+      await expect(wholesaleTab).toHaveAttribute("aria-selected", "false");
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(retailTab).toBeVisible();
+      await expect(purchaseTab).toBeVisible();
+      await expect(wholesaleTab).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+      await purchaseTab.click();
+      await expect(purchaseTab).toHaveAttribute("aria-selected", "true");
+      await expect(purchaseTab).toHaveClass(/border-emerald-300/);
+      await expect(page.getByText("Supplier Purchase Bill Entry", { exact: true })).toBeVisible();
+
+      const billNoInput = page.getByText("Bill No / Ref", { exact: true }).locator("..").getByRole("textbox");
+      await billNoInput.fill(inlineBillNo);
+      await page.getByText("Supplier Name", { exact: true }).locator("..").getByRole("combobox").fill(inlineSupplier);
+      await page.getByText("Gross Wt (g)", { exact: true }).locator("..").getByRole("spinbutton").fill("3");
+      await page.getByText("Rate (AED/g)", { exact: true }).locator("..").getByRole("spinbutton").fill("100");
+
+      const createResponsePromise = page.waitForResponse((response) => (
+        response.request().method() === "POST"
+        && new URL(response.url()).pathname.endsWith("/api/purchase-bills")
+      ));
+      await page.getByRole("button", { name: "Save Purchase Bill", exact: true }).click();
+      const createResponse = await createResponsePromise;
+      expect(createResponse.status()).toBe(201);
+      const inlineBill = await createResponse.json() as CreatedRecord & { billNo: string };
+      purchaseBillIds.push(inlineBill.id);
+      expect(inlineBill.billNo).toBe(inlineBillNo);
+      await expect(page.getByText(`Purchase bill ${inlineBillNo} saved`, { exact: true })).toBeVisible();
+      await expect(billNoInput).toHaveValue("");
+
+      await retailTab.click();
+      await expect(retailTab).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByText("Customer Details", { exact: true })).toBeVisible();
+
+      await wholesaleTab.click();
+      await expect(wholesaleTab).toHaveAttribute("aria-selected", "true");
+      await expect(wholesaleTab).toHaveClass(/border-amber-300/);
+      await expect(page.getByText("Trader Details & Pricing Type", { exact: true })).toBeVisible();
+
+      await page.goto("/purchase-bills");
+      await page.getByRole("button", { name: "New Purchase Bill", exact: true }).click();
+      const purchaseSheet = page.getByRole("dialog", { name: "New Purchase Bill" });
+      await expect(purchaseSheet).toBeVisible();
+      await expect(purchaseSheet.getByText("Bill No / Ref", { exact: true })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(purchaseSheet).not.toBeVisible();
+
+      const staffMobile = `9719${Date.now().toString().slice(-8)}`;
+      const staffPin = "4826";
+      const createStaffResponse = await page.request.post("/api/admin/users", {
+        headers: fixtureHeaders(runId),
+        data: {
+          fullName: `${runTag} STAFF`,
+          mobile: staffMobile,
+          pin: staffPin,
+          role: "staff",
+        },
+      });
+      await expectSuccessful(createStaffResponse, "create temporary staff user for invoice mode access check");
+      const staffUser = await createStaffResponse.json() as CreatedRecord;
+      const browser = page.context().browser();
+      expect(browser).not.toBeNull();
+      const staffContext = await browser!.newContext({ viewport: { width: 390, height: 844 } });
+      try {
+        const staffPage = await staffContext.newPage();
+        const baseUrl = new URL(page.url()).origin;
+        const staffLoginResponse = await staffPage.request.post(`${baseUrl}/api/auth/login`, {
+          data: { mobile: staffMobile, pin: staffPin, role: "staff" },
+        });
+        await expectSuccessful(staffLoginResponse, "log in temporary staff user");
+        await staffPage.goto(`${baseUrl}/invoices/new`);
+        await expect(staffPage.getByRole("tab", { name: "Retail Customer", exact: true })).toBeVisible();
+        await expect(staffPage.getByRole("tab", { name: "Wholesale / Trader", exact: true })).toBeVisible();
+        await expect(staffPage.getByRole("tab", { name: "New Purchase Bill", exact: true })).toHaveCount(0);
+        await expect(staffPage.getByText("Supplier Purchase Bill Entry", { exact: true })).toHaveCount(0);
+      } finally {
+        await staffContext.close();
+        const deleteStaffResponse = await page.request.delete(`/api/admin/users/${staffUser.id}`);
+        expect([204, 404]).toContain(deleteStaffResponse.status());
+      }
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    });
+
     await test.step("wholesale registration selects the trader and opens a frozen same-page PDF preview", async () => {
       const traderName = `${runTag} GOLD TRADING`;
       const traderContact = `SAMIR ${runTag}`;
