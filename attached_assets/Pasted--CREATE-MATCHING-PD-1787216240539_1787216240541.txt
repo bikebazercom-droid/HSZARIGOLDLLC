@@ -1,0 +1,37 @@
+================================================================================
+CREATE MATCHING PDF TEMPLATE FOR PURCHASE BILLS (VENDOR DETAILS & MATCHING LAYOUT)
+================================================================================
+
+Target Objective:
+Update the 'Download Bill PDF' feature in Purchase Bills so it generates a PDF using the exact same layout as the Sales Invoice template, with appropriate supplier labels.
+
+--------------------------------------------------------------------------------
+EXACT LAYOUT & LABELING REQUIREMENTS:
+--------------------------------------------------------------------------------
+
+1. HEADER & TITLE:
+   - Match the layout, Hazari Gold logo, company address, QR code, and header style of the Sales Invoice.
+   - Change the primary header badge title from "TAX INVOICE" to "PURCHASE BILL".
+   - Replace "Invoice No:" with "Bill / Ref No:".
+
+2. SUPPLIER / VENDOR DETAILS SECTION:
+   - Change the section header text to "SUPPLIER / VENDOR DETAILS".
+   - Map and display the Supplier details dynamically:
+     * Supplier / Party Name
+     * Phone Number
+     * Email Address
+     * Address / Location (if available)
+
+3. TABLE & FINANCIAL CALCULATIONS:
+   - Maintain the same professional itemized table columns (S.No., Stock Description, Gross Wt., Purity, Pure Wt., Making Rate, Making Amt, Total AED).
+   - Render Gold Value, Discount, Net Amount, Amount in Words, and Payment Mode exactly like the invoice layout.
+
+4. FOOTER & SIGNATURES:
+   - Include the 3 bottom signature blocks (`Customer's Signature`, `Checked By`, `Authorised Signature`).
+   - Position the official round Hazari Gold seal/stamp nicely above the Authorised Signature text.
+   - Include the bottom navy blue banner "Thank you for your business!".
+
+--------------------------------------------------------------------------------
+EXECUTION STEP:
+Please update the Purchase Bill PDF generator function with this layout now!
+================================================================================
