@@ -51,6 +51,7 @@ import {
   createWholesaleInvoice,
 } from "../src/services/wholesaleService.js";
 import { acquireStockMutationLock } from "../src/services/inventoryEngine.js";
+import { loadDashboardAccountLedgerData } from "../src/routes/dashboard.js";
 import ExcelJS from "exceljs";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -1451,9 +1452,12 @@ async function run(): Promise<void> {
   // FIFO COGS, making charges, and remaining stock under a hidden category.
   console.log("\n─── Test: Dashboard excludes automated-test categories from rows and totals ───");
   const dashboardFixtureDate = new Date().toISOString().slice(0, 10);
+  const dashboardOpeningDate = new Date(`${dashboardFixtureDate}T00:00:00Z`);
+  dashboardOpeningDate.setUTCDate(dashboardOpeningDate.getUTCDate() + 1);
+  const dashboardOpeningStartDate = dashboardOpeningDate.toISOString().slice(0, 10);
   const dashboardFixtureRange = `startDate=${dashboardFixtureDate}&endDate=${dashboardFixtureDate}`;
   const loadDashboardVisibilitySnapshot = async () => {
-    const [kpis, summary, legacyDashboard, categorySummary] = await Promise.all([
+    const [kpis, summary, legacyDashboard, categorySummary, ledgerPeriod, ledgerOpening] = await Promise.all([
       apiJson<Record<string, unknown>>(`/dashboard/kpis?${dashboardFixtureRange}`),
       apiJson<{
         availableStockGrams: number;
@@ -1480,6 +1484,16 @@ async function run(): Promise<void> {
         recentInvoices: Array<{ id: number }>;
       }>("/dashboard"),
       apiJson<Record<string, unknown>>(`/dashboard/category-summary?${dashboardFixtureRange}`),
+      loadDashboardAccountLedgerData({
+        party: null,
+        startDate: dashboardFixtureDate,
+        endDate: dashboardFixtureDate,
+      }),
+      loadDashboardAccountLedgerData({
+        party: null,
+        startDate: dashboardOpeningStartDate,
+        endDate: dashboardOpeningStartDate,
+      }),
     ]);
     return {
       kpis,
@@ -1496,6 +1510,8 @@ async function run(): Promise<void> {
         recentInvoiceIds: legacyDashboard.recentInvoices.map((invoice) => invoice.id),
       },
       categorySummary,
+      ledgerPeriod,
+      ledgerOpening,
     };
   };
   const dashboardVisibilityBefore = await loadDashboardVisibilitySnapshot();
@@ -1604,12 +1620,26 @@ async function run(): Promise<void> {
     JSON.stringify(dashboardVisibilityBefore.categorySummary),
     "Dashboard category summary and payment totals ignore hidden fixtures",
   );
+  assertEq(
+    JSON.stringify(dashboardVisibilityAfter.ledgerPeriod),
+    JSON.stringify(dashboardVisibilityBefore.ledgerPeriod),
+    "Dashboard account ledger period rows ignore hidden fixtures",
+  );
+  assertEq(
+    JSON.stringify(dashboardVisibilityAfter.ledgerOpening),
+    JSON.stringify(dashboardVisibilityBefore.ledgerOpening),
+    "Dashboard account ledger opening balances ignore hidden fixtures",
+  );
   assert(
     dashboardVisibilityAfter.summary.categoryBreakdown.every((row) =>
       !row.category.toLowerCase().startsWith("test_")
       && !row.category.toLowerCase().startsWith("ws_shortfall_")
     ),
     "Dashboard category breakdown never returns automated-test prefixes",
+  );
+  await assertPdf(
+    `/dashboard/ledger-pdf?${dashboardFixtureRange}`,
+    "Dashboard account ledger PDF downloads while hidden fixtures exist",
   );
 
   // Deliberate oversells use explicit shortfall FIFO slices. Returning them

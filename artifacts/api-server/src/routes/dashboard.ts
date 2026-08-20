@@ -1783,26 +1783,29 @@ router.get("/dashboard/statement-xlsx", requireAdmin, async (req, res): Promise<
   res.end();
 });
 
-// /api/dashboard/ledger-pdf?party=<name|all>&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
-// Dual-ledger account statement: every purchase posts Cash Debit + Metal Credit,
-// every sale posts Cash Credit + Metal Debit, with running balances for both.
-router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void> => {
-  const q = req.query as Record<string, string | undefined>;
-  const party = q.party?.trim() && q.party.trim().toLowerCase() !== "all" ? q.party.trim() : null;
-  const startDate = q.startDate?.trim() || null;
-  const endDate = q.endDate?.trim() || null;
-  const isValidDate = (s: string) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-    const d = new Date(`${s}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-  };
-  if ((startDate && !isValidDate(startDate)) || (endDate && !isValidDate(endDate))) {
-    res.status(400).json({ error: "startDate/endDate must be a valid YYYY-MM-DD date" });
-    return;
-  }
+interface DashboardAccountLedgerEntry {
+  date: string;
+  ref: string;
+  title: string;
+  narrative: string | null;
+  cashDebit: number;
+  cashCredit: number;
+  metalDebit: number;
+  metalCredit: number;
+}
 
+export async function loadDashboardAccountLedgerData(args: {
+  party: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}): Promise<{
+  openCash: number;
+  openMetal: number;
+  entries: DashboardAccountLedgerEntry[];
+}> {
+  const { party, startDate, endDate } = args;
   const purchWhere = sql.join([
-    sql`TRUE`,
+    dashboardCategoryIsVisibleSql(sql`category`),
     ...(party ? [sql`supplier_name ILIKE ${party}`] : []),
     ...(startDate ? [sql`purchase_date >= ${startDate}`] : []),
     ...(endDate ? [sql`purchase_date <= ${endDate}`] : []),
@@ -1814,7 +1817,7 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
     endExclusive = d.toISOString();
   }
   const salesWhere = sql.join([
-    sql`TRUE`,
+    dashboardRetailInvoiceIsVisibleSql(sql`i.id`),
     ...(party ? [sql`i.customer_name ILIKE ${party}`] : []),
     ...(startDate ? [sql`i.created_at >= ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz`] : []),
     ...(endExclusive ? [sql`i.created_at < ${endExclusive}::timestamptz`] : []),
@@ -1831,6 +1834,7 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
                COALESCE(SUM(weight_grams::numeric), 0)::text AS g
         FROM stock_purchases
         WHERE purchase_date < ${startDate}
+          AND ${dashboardCategoryIsVisibleSql(sql`category`)}
           ${party ? sql`AND supplier_name ILIKE ${party}` : sql``}
       `).then((r) => r.rows[0]),
       db.execute<{ aed: string; g: string }>(sql`
@@ -1839,9 +1843,12 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
         FROM invoices i
         LEFT JOIN LATERAL (
           SELECT COALESCE(SUM(COALESCE(gross_weight::numeric, 0)), 0) AS g
-          FROM invoice_items WHERE invoice_id = i.id
+          FROM invoice_items opening_ii
+          WHERE opening_ii.invoice_id = i.id
+            AND ${dashboardCategoryIsVisibleSql(sql`opening_ii.category`)}
         ) s ON TRUE
         WHERE i.created_at < ${new Date(`${startDate}T00:00:00`).toISOString()}::timestamptz
+          AND ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
           ${party ? sql`AND i.customer_name ILIKE ${party}` : sql``}
       `).then((r) => r.rows[0]),
     ]);
@@ -1861,17 +1868,15 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
       LEFT JOIN LATERAL (
         SELECT SUM(COALESCE(gross_weight::numeric, 0))::text AS grams,
                STRING_AGG(DISTINCT TRIM(description), ', ') AS items_desc
-        FROM invoice_items WHERE invoice_id = i.id
+        FROM invoice_items current_ii
+        WHERE current_ii.invoice_id = i.id
+          AND ${dashboardCategoryIsVisibleSql(sql`current_ii.category`)}
       ) s ON TRUE
       WHERE ${salesWhere} ORDER BY i.created_at, i.id
     `).then((r) => r.rows),
   ]);
 
-  interface LedgerEntry {
-    date: string; ref: string; title: string; narrative: string | null;
-    cashDebit: number; cashCredit: number; metalDebit: number; metalCredit: number;
-  }
-  const entries: LedgerEntry[] = [
+  const entries: DashboardAccountLedgerEntry[] = [
     ...purchases.map((p) => ({
       date: p.purchase_date,
       ref: `#BATCH-${p.id}`,
@@ -1889,6 +1894,33 @@ router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void
       metalDebit: Number(i.grams), metalCredit: 0,
     })),
   ].sort((a, b) => a.date.localeCompare(b.date) || (a.cashDebit > 0 ? -1 : 1));
+
+  return { openCash, openMetal, entries };
+}
+
+// /api/dashboard/ledger-pdf?party=<name|all>&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+// Dual-ledger account statement: every purchase posts Cash Debit + Metal Credit,
+// every sale posts Cash Credit + Metal Debit, with running balances for both.
+router.get("/dashboard/ledger-pdf", requireAdmin, async (req, res): Promise<void> => {
+  const q = req.query as Record<string, string | undefined>;
+  const party = q.party?.trim() && q.party.trim().toLowerCase() !== "all" ? q.party.trim() : null;
+  const startDate = q.startDate?.trim() || null;
+  const endDate = q.endDate?.trim() || null;
+  const isValidDate = (s: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  };
+  if ((startDate && !isValidDate(startDate)) || (endDate && !isValidDate(endDate))) {
+    res.status(400).json({ error: "startDate/endDate must be a valid YYYY-MM-DD date" });
+    return;
+  }
+
+  const { openCash, openMetal, entries } = await loadDashboardAccountLedgerData({
+    party,
+    startDate,
+    endDate,
+  });
 
   const now = new Date();
   const pdf = createBrandedPdf({
