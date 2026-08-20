@@ -12,4 +12,5 @@ export type WholesaleInvoicePricingType = typeof WholesaleInvoicePricingType[key
 export const WholesaleInvoicePricingType = {
   fixed: 'fixed',
   unfixed: 'unfixed',
+  cash: 'cash',
 } as const;

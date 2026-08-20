@@ -68,6 +68,7 @@ export default function NewWholesaleInvoice() {
     makingAed: 0,
     rateAedPerGram: null,
   }]);
+  const usesRate = pricingType !== "unfixed";
 
   const updateItem = (index: number, field: keyof WholesaleLineItem, value: any) => {
     const newItems = [...items];
@@ -96,7 +97,7 @@ export default function NewWholesaleInvoice() {
   const totalGross = items.reduce((acc, i) => acc + (i.grossGrams || 0), 0);
   const totalPure = items.reduce((acc, i) => acc + ((i.grossGrams || 0) * (i.purityMultiplier || 0)), 0);
   const totalMaking = items.reduce((acc, i) => acc + (i.makingAed || 0), 0);
-  const totalAed = items.reduce((acc, i) => acc + (i.makingAed || 0) + (pricingType === "fixed" ? (((i.grossGrams || 0) * (i.purityMultiplier || 0)) * (i.rateAedPerGram || 0)) : 0), 0);
+  const totalAed = items.reduce((acc, i) => acc + (i.makingAed || 0) + (usesRate ? (((i.grossGrams || 0) * (i.purityMultiplier || 0)) * (i.rateAedPerGram || 0)) : 0), 0);
 
   const handleSubmit = async () => {
     if (items.some(i => !i.description.trim())) {
@@ -107,8 +108,8 @@ export default function NewWholesaleInvoice() {
       toast({ title: "Validation Error", description: "All items must have a positive gross weight.", variant: "destructive" });
       return;
     }
-    if (pricingType === "fixed" && items.some(i => i.rateAedPerGram === null || i.rateAedPerGram <= 0)) {
-      toast({ title: "Validation Error", description: "Fixed invoices require a metal rate for all items.", variant: "destructive" });
+    if (usesRate && items.some(i => i.rateAedPerGram === null || i.rateAedPerGram <= 0)) {
+      toast({ title: "Validation Error", description: "Fixed and cash-payment invoices require a metal rate for all items.", variant: "destructive" });
       return;
     }
     if (!isCreatingTrader && !traderId) {
@@ -126,6 +127,7 @@ export default function NewWholesaleInvoice() {
           traderId: resolvedTraderId,
           invoiceDate,
           pricingType,
+          paymentMode: pricingType === "cash" ? "cash" : undefined,
           notes: notes || undefined,
           idempotencyKey: invoiceIdempotencyKey.current,
           items: items.map(item => ({
@@ -135,7 +137,7 @@ export default function NewWholesaleInvoice() {
             grossGrams: item.grossGrams,
             purityMultiplier: item.purityMultiplier,
             makingAed: item.makingAed,
-            rateAedPerGram: pricingType === "fixed" && item.rateAedPerGram ? item.rateAedPerGram : undefined,
+            rateAedPerGram: usesRate && item.rateAedPerGram ? item.rateAedPerGram : undefined,
           }))
         }
       }, {
@@ -193,15 +195,20 @@ export default function NewWholesaleInvoice() {
             <CardHeader className="pb-3 border-b border-border/50">
               <div className="flex justify-between items-center">
                 <CardTitle>Invoice Items</CardTitle>
-                <div className="flex bg-muted rounded-md p-1">
+                <div className="grid grid-cols-1 gap-1 rounded-md bg-muted p-1 sm:grid-cols-3">
                   <button
                     onClick={() => setPricingType("unfixed")}
                     className={`px-3 py-1.5 text-xs font-semibold rounded ${pricingType === "unfixed" ? "bg-background shadow-sm text-amber-600" : "text-muted-foreground"}`}
-                  >Unfixed (Weight Only)</button>
+                  >Unfixed Gold Delivery</button>
                   <button
                     onClick={() => setPricingType("fixed")}
                     className={`px-3 py-1.5 text-xs font-semibold rounded ${pricingType === "fixed" ? "bg-background shadow-sm text-primary" : "text-muted-foreground"}`}
-                  >Fixed (Rate Applied)</button>
+                  >Fixed Gold Pricing</button>
+                  <button
+                    type="button"
+                    onClick={() => setPricingType("cash")}
+                    className={`rounded px-3 py-1.5 text-xs font-semibold ${pricingType === "cash" ? "bg-background text-emerald-700 shadow-sm" : "text-muted-foreground"}`}
+                  >Cash Payment</button>
                 </div>
               </div>
             </CardHeader>
@@ -216,7 +223,7 @@ export default function NewWholesaleInvoice() {
                       <th className="py-2.5 px-3 text-right text-xs font-semibold w-24">Purity</th>
                       <th className="py-2.5 px-3 text-right text-xs font-semibold w-24">Pure (g)</th>
                       <th className="py-2.5 px-3 text-right text-xs font-semibold w-24">Making (AED)</th>
-                      {pricingType === "fixed" && (
+                      {usesRate && (
                         <th className="py-2.5 px-3 text-right text-xs font-semibold w-28 border-l border-border/50 bg-primary/5">Rate (AED)</th>
                       )}
                       <th className="w-10"></th>
@@ -273,7 +280,7 @@ export default function NewWholesaleInvoice() {
                               onChange={e => updateItem(index, "makingAed", parseFloat(e.target.value) || 0)}
                             />
                           </td>
-                          {pricingType === "fixed" && (
+                          {usesRate && (
                             <td className="py-3 px-3 border-l border-border/50 bg-primary/5">
                               <Input
                                 type="number" min="0" step="0.5"
@@ -392,7 +399,7 @@ export default function NewWholesaleInvoice() {
                   <span className="text-sidebar-foreground/70">Making Total</span>
                   <span>{fmt(totalMaking)} AED</span>
                 </div>
-                {pricingType === "fixed" && (
+                {usesRate && (
                   <div className="flex justify-between font-bold text-lg pt-1 text-white">
                     <span>Final Invoice AED</span>
                     <span>{fmt(totalAed)}</span>
@@ -404,7 +411,7 @@ export default function NewWholesaleInvoice() {
                 className="w-full" size="lg"
                 onClick={handleSubmit} disabled={createInvoice.isPending || createTrader.isPending}
               >
-                {createInvoice.isPending ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save {pricingType === "fixed" ? "Fixed Invoice" : "Unfixed Invoice"}</>}
+                {createInvoice.isPending ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save {pricingType === "unfixed" ? "Unfixed Invoice" : pricingType === "fixed" ? "Fixed Invoice" : "Cash-Payment Invoice"}</>}
               </Button>
             </CardContent>
           </Card>

@@ -970,6 +970,256 @@ async function run(): Promise<void> {
   assertEq(fixedInvoice2.id, fixedInvoice.id, "Idempotent retry returns same invoice id");
   assertEq(fixedInvoice2.invoiceNumber, fixedInvoice.invoiceNumber, "Idempotent retry returns same invoice number");
 
+  // ── Test 1B: Cash-payment invoice ─────────────────────────────────────────
+  console.log("\n─── Test 1B: Cash-payment invoice creation ───");
+  const cashDeliveryRange = "startDate=2025-06-01&endDate=2025-06-01";
+  const cashReturnRange = "startDate=2025-06-05&endDate=2025-06-05";
+  type CashKpis = {
+    totalRevenueAed: number;
+    cashReceivedAed: number;
+    outstandingDueAed: number;
+    invoiceCount: number;
+  };
+  type WholesaleCashDashboard = {
+    totalFixedAed: number;
+    cashInvoiceCount: number;
+  };
+  const cashDeliveryBaseline = await apiJson<CashKpis>(`/dashboard/kpis?${cashDeliveryRange}`);
+  const cashReturnBaseline = await apiJson<CashKpis>(`/dashboard/kpis?${cashReturnRange}`);
+  const wholesaleCashDashboardBaseline = await apiJson<WholesaleCashDashboard>("/wholesale/dashboard");
+
+  const missingCashRate = await apiReq("/wholesale/invoices", {
+    method: "POST",
+    body: JSON.stringify({
+      traderId: trader.id,
+      invoiceDate: "2025-06-01",
+      pricingType: "cash",
+      idempotencyKey: `test-cash-missing-rate-${Date.now()}`,
+      items: [{
+        description: "Cash missing rate rejection",
+        category: CATEGORY,
+        quantity: 1,
+        grossGrams: 1,
+        purityMultiplier: 0.9999,
+        makingAed: 10,
+      }],
+    }),
+  });
+  assertEq(missingCashRate.status, 400, "Cash invoice without a metal rate is rejected");
+
+  type CashInvoiceResult = {
+    id: number;
+    pricingType: string;
+    paymentMode: string | null;
+    status: string;
+    totalPureGrams: number;
+    totalAed: number;
+    openPureGrams: number;
+    settledAed: number;
+    items: Array<{ id: number }>;
+  };
+  const cashIdempotencyKey = `test-cash-${Date.now()}`;
+  const cashPayload = {
+    traderId: trader.id,
+    invoiceDate: "2025-06-01",
+    pricingType: "cash",
+    idempotencyKey: cashIdempotencyKey,
+    items: [{
+      description: "Gold Bars Cash Payment",
+      category: CATEGORY,
+      quantity: 1,
+      grossGrams: 10,
+      purityMultiplier: 0.9999,
+      makingAed: 100,
+      rateAedPerGram: 420,
+    }],
+  };
+  const [cashInvoice, concurrentCashRetry] = await Promise.all([
+    apiJson<CashInvoiceResult>("/wholesale/invoices", {
+      method: "POST",
+      body: JSON.stringify(cashPayload),
+    }),
+    apiJson<CashInvoiceResult>("/wholesale/invoices", {
+      method: "POST",
+      body: JSON.stringify(cashPayload),
+    }),
+  ]);
+  toClean.invoiceIds.push(cashInvoice.id);
+  assertEq(
+    concurrentCashRetry.id,
+    cashInvoice.id,
+    "Concurrent cash retries with one idempotency key return the same invoice",
+  );
+
+  assertEq(cashInvoice.pricingType, "cash", "Cash pricing type persisted");
+  assertEq(cashInvoice.paymentMode, "cash", "Cash pricing forces cash payment mode");
+  assertEq(cashInvoice.status, "settled", "Cash-payment invoice immediately settled");
+  assertClose(cashInvoice.totalPureGrams, 9.999, "Cash invoice pure grams calculated", 0.0001);
+  assertClose(cashInvoice.openPureGrams, 0, "Cash invoice has 0 open pure grams");
+  assertClose(cashInvoice.totalAed, 4299.58, "Cash invoice values metal plus making");
+  assertClose(cashInvoice.settledAed, cashInvoice.totalAed, "Cash invoice fully valued");
+
+  const cashLedger = await db.select().from(traderLedgerEntriesTable)
+    .where(eq(traderLedgerEntriesTable.wholesaleInvoiceId, cashInvoice.id));
+  const cashSaleEntries = cashLedger.filter(
+    (entry) => entry.eventType === "fixed_sale" && Number(entry.aedDelta) > 0,
+  );
+  const cashPaymentEntries = cashLedger.filter(
+    (entry) => entry.eventType === "cash_payment" && Number(entry.aedDelta) < 0,
+  );
+  assertEq(cashSaleEntries.length, 1, "Cash invoice posts one sale debit");
+  assertEq(cashPaymentEntries.length, 1, "Cash invoice posts one immediate payment");
+  assertClose(
+    cashSaleEntries.reduce((sum, entry) => sum + Number(entry.aedDelta), 0),
+    cashInvoice.totalAed,
+    "Cash sale debit equals invoice total",
+  );
+  assertClose(
+    cashPaymentEntries.reduce((sum, entry) => sum + Number(entry.aedDelta), 0),
+    -cashInvoice.totalAed,
+    "Cash payment offsets invoice total",
+  );
+  assertClose(
+    cashLedger.reduce((sum, entry) => sum + Number(entry.aedDelta), 0),
+    0,
+    "Cash invoice leaves no outstanding trader AED balance",
+  );
+
+  const cashDeliveryAfter = await apiJson<CashKpis>(`/dashboard/kpis?${cashDeliveryRange}`);
+  assertClose(
+    cashDeliveryAfter.totalRevenueAed - cashDeliveryBaseline.totalRevenueAed,
+    cashInvoice.totalAed,
+    "Cash delivery contributes its full value to dashboard revenue",
+  );
+  assertClose(
+    cashDeliveryAfter.cashReceivedAed - cashDeliveryBaseline.cashReceivedAed,
+    cashInvoice.totalAed,
+    "Cash delivery contributes its full value to cash received",
+  );
+  assertClose(
+    cashDeliveryAfter.outstandingDueAed - cashDeliveryBaseline.outstandingDueAed,
+    0,
+    "Cash delivery creates no outstanding AED balance",
+  );
+  assertEq(
+    cashDeliveryAfter.invoiceCount - cashDeliveryBaseline.invoiceCount,
+    1,
+    "Cash delivery counts as one invoice",
+  );
+  const wholesaleCashDashboardAfter = await apiJson<WholesaleCashDashboard>("/wholesale/dashboard");
+  assertClose(
+    wholesaleCashDashboardAfter.totalFixedAed - wholesaleCashDashboardBaseline.totalFixedAed,
+    cashInvoice.totalAed,
+    "Wholesale dashboard AED posted includes cash sale revenue",
+  );
+  assertEq(
+    wholesaleCashDashboardAfter.cashInvoiceCount - wholesaleCashDashboardBaseline.cashInvoiceCount,
+    1,
+    "Wholesale dashboard counts the cash invoice",
+  );
+
+  const partialCashReturn = await apiJson<{
+    id: number;
+    totalReturnedAed: number;
+  }>(`/wholesale/invoices/${cashInvoice.id}/return`, {
+    method: "POST",
+    body: JSON.stringify({
+      date: "2025-06-05",
+      idempotencyKey: `test-cash-return-partial-${Date.now()}`,
+      lines: [{ invoiceItemId: cashInvoice.items[0]!.id, grossWeightGrams: 4 }],
+    }),
+  });
+  toClean.returnIds.push(partialCashReturn.id);
+  assertClose(partialCashReturn.totalReturnedAed, 1719.83, "Cash partial return reverses pro-rata AED");
+  const partialCashReturnLedger = await db.select().from(traderLedgerEntriesTable)
+    .where(eq(traderLedgerEntriesTable.wholesaleReturnId, partialCashReturn.id));
+  assertEq(
+    partialCashReturnLedger.filter((entry) => entry.eventType === "cash_refund").length,
+    1,
+    "Cash partial return records one refund",
+  );
+  assertClose(
+    partialCashReturnLedger.reduce((sum, entry) => sum + Number(entry.aedDelta), 0),
+    0,
+    "Cash partial return and refund keep the trader balance settled",
+  );
+
+  const finalCashReturn = await apiJson<{
+    id: number;
+    totalReturnedAed: number;
+  }>(`/wholesale/invoices/${cashInvoice.id}/return`, {
+    method: "POST",
+    body: JSON.stringify({
+      date: "2025-06-05",
+      idempotencyKey: `test-cash-return-final-${Date.now()}`,
+      lines: [{ invoiceItemId: cashInvoice.items[0]!.id, grossWeightGrams: 6 }],
+    }),
+  });
+  toClean.returnIds.push(finalCashReturn.id);
+  assertClose(finalCashReturn.totalReturnedAed, 2579.75, "Final cash return reverses residual AED");
+
+  const cashAfterFullReturn = await apiJson<{
+    status: string;
+    totalGrossGrams: number;
+    totalAed: number;
+    settledAed: number;
+    openPureGrams: number;
+  }>(`/wholesale/invoices/${cashInvoice.id}`);
+  assertEq(cashAfterFullReturn.status, "settled", "Fully returned cash invoice remains settled");
+  assertClose(cashAfterFullReturn.totalGrossGrams, 0, "Full cash return clears invoice gross");
+  assertClose(cashAfterFullReturn.totalAed, 0, "Full cash return clears invoice AED");
+  assertClose(cashAfterFullReturn.settledAed, 0, "Full cash return clears settled AED");
+  assertClose(cashAfterFullReturn.openPureGrams, 0, "Full cash return keeps open pure at zero");
+
+  const cashLedgerAfterReturns = await db.select().from(traderLedgerEntriesTable)
+    .where(eq(traderLedgerEntriesTable.wholesaleInvoiceId, cashInvoice.id));
+  const cashRefundEntries = cashLedgerAfterReturns.filter((entry) => entry.eventType === "cash_refund");
+  assertEq(cashRefundEntries.length, 2, "Each cash return records one refund");
+  assertClose(
+    cashRefundEntries.reduce((sum, entry) => sum + Number(entry.aedDelta), 0),
+    cashInvoice.totalAed,
+    "Cash refunds exactly restore the amount originally paid",
+  );
+  assertClose(
+    cashLedgerAfterReturns.reduce((sum, entry) => sum + Number(entry.aedDelta), 0),
+    0,
+    "Fully returned cash invoice keeps the trader AED balance at zero",
+  );
+
+  const cashReturnAfter = await apiJson<CashKpis>(`/dashboard/kpis?${cashReturnRange}`);
+  assertClose(
+    cashReturnAfter.totalRevenueAed - cashReturnBaseline.totalRevenueAed,
+    -cashInvoice.totalAed,
+    "Cash returns reverse only sale revenue",
+  );
+  assertClose(
+    cashReturnAfter.cashReceivedAed - cashReturnBaseline.cashReceivedAed,
+    -cashInvoice.totalAed,
+    "Cash refunds reverse cash received",
+  );
+  assertClose(
+    cashReturnAfter.outstandingDueAed - cashReturnBaseline.outstandingDueAed,
+    0,
+    "Cash returns and refunds create no outstanding AED balance",
+  );
+  const wholesaleCashDashboardAfterReturns = await apiJson<WholesaleCashDashboard>("/wholesale/dashboard");
+  assertClose(
+    wholesaleCashDashboardAfterReturns.totalFixedAed - wholesaleCashDashboardBaseline.totalFixedAed,
+    0,
+    "Wholesale dashboard cash revenue returns to baseline after a full return",
+  );
+
+  // Remove this isolated fixture now so the long-running stock and dashboard
+  // assertions below retain their original baseline.
+  await cleanupRegisteredFixture("wholesale_invoice", cashInvoice.id);
+  const [postCashCleanup] = await db.select().from(stockLevelsTable)
+    .where(eq(stockLevelsTable.category, CATEGORY));
+  assertClose(
+    Number(postCashCleanup?.weightGrams ?? "0"),
+    initialStock - 50,
+    "Cash invoice cleanup restores the shared stock baseline",
+  );
+
   // ── Test 2: Unfixed invoice ───────────────────────────────────────────────
   console.log("\n─── Test 2: Unfixed invoice creation ───");
   const ikey2 = `test-unfixed-${Date.now()}`;

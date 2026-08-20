@@ -18,6 +18,12 @@ function displayDate(d: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : d;
 }
 
+function pricingTypeLabel(pricingType: string): string {
+  if (pricingType === "fixed") return "Fixed Gold Pricing";
+  if (pricingType === "cash") return "Cash Payment";
+  return "Unfixed Gold Delivery";
+}
+
 // ── Wholesale Invoice PDF ────────────────────────────────────────────────────
 
 export interface WholesaleInvoicePdfItem {
@@ -63,14 +69,23 @@ export function createWholesaleInvoicePdf(data: WholesaleInvoicePdfData): PDFKit
   const metaRows: Array<[string, string]> = [
     ["Invoice No:", data.invoiceNumber],
     ["Date:", displayDate(data.invoiceDate)],
-    ["Pricing Type:", data.pricingType === "fixed" ? "Fixed" : "Unfixed"],
+    ["Pricing Type:", pricingTypeLabel(data.pricingType)],
     ["Status:", data.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())],
   ];
   doc.fillColor(PDF_BRAND.navy).font("Helvetica-Bold").fontSize(8);
   for (const [label, val] of metaRows) {
-    doc.text(`${label} `, left, y, { continued: true, lineBreak: false });
-    doc.font("Helvetica").fillColor("#20252b").text(val, { lineBreak: false });
-    doc.font("Helvetica-Bold").fillColor(PDF_BRAND.navy);
+    doc.text(label, left, y, { width: 72, lineBreak: false });
+    if (label === "Pricing Type:") {
+      const badgeX = left + 74;
+      const badgeWidth = Math.min(width - 74, doc.font("Helvetica-Bold").widthOfString(val) + 14);
+      doc.roundedRect(badgeX, y - 3, badgeWidth, 13, 4).fill(PDF_BRAND.gold);
+      doc.fillColor(PDF_BRAND.navy).font("Helvetica-Bold").fontSize(7)
+        .text(val, badgeX + 7, y, { width: badgeWidth - 14, lineBreak: false });
+    } else {
+      doc.font("Helvetica").fillColor("#20252b").fontSize(8)
+        .text(val, left + 74, y, { width: width - 74, lineBreak: false });
+    }
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_BRAND.navy);
     y += 14;
   }
 
@@ -353,6 +368,8 @@ export function createTraderStatementPdf(data: TraderStatementPdfData): PDFKit.P
     const eventLabel: Record<string, string> = {
       delivery: "Delivery (unfixed)",
       fixed_sale: "Fixed Sale",
+      cash_payment: "Cash Payment",
+      cash_refund: "Cash Refund",
       rate_fix: "Rate Fix",
       physical_return: "Return",
     };
@@ -401,6 +418,7 @@ export interface WholesaleSummaryPdfData {
   invoiceCount: number;
   fixedInvoiceCount: number;
   unfixedInvoiceCount: number;
+  cashInvoiceCount: number;
   settledInvoiceCount: number;
   totalFixedAed: number;
   openPureGrams: number;
@@ -427,6 +445,7 @@ export function createWholesaleSummaryPdf(data: WholesaleSummaryPdfData): PDFKit
     ["Total Invoices", String(data.invoiceCount)],
     ["Fixed Invoices", String(data.fixedInvoiceCount)],
     ["Unfixed Invoices", String(data.unfixedInvoiceCount)],
+    ["Cash Payment Invoices", String(data.cashInvoiceCount)],
     ["Settled Invoices", String(data.settledInvoiceCount)],
     ["Total AED Posted", `AED ${money(data.totalFixedAed)}`],
     ["Open Pure Grams (Unfixed)", `${wt(data.openPureGrams)} g`],

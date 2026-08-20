@@ -20,4 +20,5 @@
 - [Wholesale oversell returns](wholesale-oversell-returns.md) — FIFO return handling distinguishes intentional oversell shortfalls from missing real purchase lots.
 - [Wholesale making-charge lifecycle](wholesale-making-charge-lifecycle.md) — unfixed making posts immediately; fixes add metal AED; returns reverse cumulative pro-rata making.
 - [Wholesale fixed-return allocation](wholesale-fixed-return-allocation.md) — returns consume open metal first, then fixed allocations; only open metal reduces the trader’s pure balance.
+- [Wholesale cash pricing](wholesale-cash-pricing.md) — cash is rate-priced and immediately settled; returns refund cash while revenue reporting excludes settlement legs.
 - [Dashboard test-category isolation](dashboard-test-category-isolation.md) — automated-test categories must be excluded at every aggregate SQL source, not merely hidden from breakdown rows.

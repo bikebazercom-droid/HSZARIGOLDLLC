@@ -23,7 +23,7 @@ export interface WholesaleInvoiceItemInput {
   /** @minimum 0 */
   makingAed: number;
   /**
-     * Required for fixed invoices; must be null/absent for unfixed
+     * Required for fixed and cash-payment invoices; must be null/absent for unfixed
      * @exclusiveMinimum 0
      */
   rateAedPerGram?: number;

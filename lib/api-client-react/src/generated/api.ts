@@ -3756,7 +3756,7 @@ export const getCreateWholesaleInvoiceUrl = () => {
 }
 
 /**
- * @summary Create a new wholesale invoice (fixed or unfixed)
+ * @summary Create a new wholesale invoice (unfixed, fixed, or cash payment)
  */
 export const createWholesaleInvoice = async (wholesaleInvoiceInput: WholesaleInvoiceInput, options?: RequestInit): Promise<WholesaleInvoice> => {
 
@@ -3804,7 +3804,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateWholesaleInvoiceMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Create a new wholesale invoice (fixed or unfixed)
+ * @summary Create a new wholesale invoice (unfixed, fixed, or cash payment)
  */
 export const useCreateWholesaleInvoice = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleInvoice>>, TError,{data: BodyType<WholesaleInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

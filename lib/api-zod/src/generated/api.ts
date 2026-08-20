@@ -1398,7 +1398,7 @@ export const GetTraderStatementResponse = zod.object({
   "entries": zod.array(zod.object({
   "id": zod.number(),
   "traderId": zod.number(),
-  "eventType": zod.enum(['delivery', 'fixed_sale', 'rate_fix', 'physical_return']),
+  "eventType": zod.enum(['delivery', 'fixed_sale', 'cash_payment', 'cash_refund', 'rate_fix', 'physical_return']),
   "eventDate": zod.string().describe('yyyy-MM-dd business date'),
   "aedDelta": zod.number(),
   "pureGoldGramsDelta": zod.number(),
@@ -1438,7 +1438,7 @@ export const ListWholesaleInvoicesResponseItem = zod.object({
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
-  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "pricingType": zod.enum(['fixed', 'unfixed', 'cash']),
   "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
@@ -1475,7 +1475,7 @@ export const ListWholesaleInvoicesResponse = zod.array(ListWholesaleInvoicesResp
 
 
 /**
- * @summary Create a new wholesale invoice (fixed or unfixed)
+ * @summary Create a new wholesale invoice (unfixed, fixed, or cash payment)
  */
 export const createWholesaleInvoiceBodyIdempotencyKeyMax = 128;
 
@@ -1502,7 +1502,7 @@ export const createWholesaleInvoiceBodyItemsItemRateAedPerGramMultipleOf = 0.000
 export const CreateWholesaleInvoiceBody = zod.object({
   "traderId": zod.number(),
   "invoiceDate": zod.string().describe('yyyy-MM-dd'),
-  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "pricingType": zod.enum(['fixed', 'unfixed', 'cash']),
   "paymentMode": zod.enum(['cash', 'card', 'bank_transfer']).optional(),
   "notes": zod.string().optional(),
   "idempotencyKey": zod.string().max(createWholesaleInvoiceBodyIdempotencyKeyMax).optional(),
@@ -1513,7 +1513,7 @@ export const CreateWholesaleInvoiceBody = zod.object({
   "grossGrams": zod.number().gt(createWholesaleInvoiceBodyItemsItemGrossGramsExclusiveMin).multipleOf(createWholesaleInvoiceBodyItemsItemGrossGramsMultipleOf),
   "purityMultiplier": zod.number().gt(createWholesaleInvoiceBodyItemsItemPurityMultiplierExclusiveMin).max(createWholesaleInvoiceBodyItemsItemPurityMultiplierMax).multipleOf(createWholesaleInvoiceBodyItemsItemPurityMultiplierMultipleOf),
   "makingAed": zod.number().min(createWholesaleInvoiceBodyItemsItemMakingAedMin).multipleOf(createWholesaleInvoiceBodyItemsItemMakingAedMultipleOf),
-  "rateAedPerGram": zod.number().gt(createWholesaleInvoiceBodyItemsItemRateAedPerGramExclusiveMin).multipleOf(createWholesaleInvoiceBodyItemsItemRateAedPerGramMultipleOf).optional().describe('Required for fixed invoices; must be null\/absent for unfixed')
+  "rateAedPerGram": zod.number().gt(createWholesaleInvoiceBodyItemsItemRateAedPerGramExclusiveMin).multipleOf(createWholesaleInvoiceBodyItemsItemRateAedPerGramMultipleOf).optional().describe('Required for fixed and cash-payment invoices; must be null\/absent for unfixed')
 })).min(1)
 })
 
@@ -1528,7 +1528,7 @@ export const CreateWholesaleInvoiceResponse = zod.object({
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
-  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "pricingType": zod.enum(['fixed', 'unfixed', 'cash']),
   "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
@@ -1581,7 +1581,7 @@ export const GetWholesaleInvoiceResponse = zod.object({
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
-  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "pricingType": zod.enum(['fixed', 'unfixed', 'cash']),
   "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
@@ -1662,7 +1662,7 @@ export const FixWholesaleRateResponse = zod.object({
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
-  "pricingType": zod.enum(['fixed', 'unfixed']),
+  "pricingType": zod.enum(['fixed', 'unfixed', 'cash']),
   "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
@@ -1762,6 +1762,7 @@ export const GetWholesaleDashboardResponse = zod.object({
   "invoiceCount": zod.number(),
   "fixedInvoiceCount": zod.number(),
   "unfixedInvoiceCount": zod.number(),
+  "cashInvoiceCount": zod.number(),
   "settledInvoiceCount": zod.number(),
   "totalFixedAed": zod.number(),
   "openPureGrams": zod.number(),

@@ -209,7 +209,7 @@ export interface CreateInvoiceArgs {
     trn?: string | null;
   };
   invoiceDate: string;
-  pricingType: "fixed" | "unfixed";
+  pricingType: "fixed" | "unfixed" | "cash";
   paymentMode?: "cash" | "card" | "bank_transfer" | null;
   notes?: string | null;
   createdByUserId?: number | null;
@@ -229,6 +229,7 @@ export interface CreateInvoiceArgs {
 
 export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
   const { pricingType, idempotencyKey } = args;
+  const isRatePriced = pricingType !== "unfixed";
 
   // Idempotency check: if the key already exists, return the existing result
   if (idempotencyKey) {
@@ -253,6 +254,27 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
     // first, then stock_levels and stock_purchases rows. Returns follow the
     // same order, preventing create-vs-return deadlocks.
     await acquireStockMutationLock(tx as unknown as Tx);
+    // A retry can pass the optimistic check above while the first request is
+    // still uncommitted. Re-check after the shared mutation lock so concurrent
+    // callers with the same key return the committed invoice instead of
+    // colliding on the unique ledger marker.
+    if (idempotencyKey) {
+      const [existingMarker] = await tx.select({
+        wholesaleInvoiceId: traderLedgerEntriesTable.wholesaleInvoiceId,
+      })
+        .from(traderLedgerEntriesTable)
+        .where(eq(traderLedgerEntriesTable.idempotencyKey, `inv_create_${idempotencyKey}`))
+        .limit(1);
+      if (existingMarker?.wholesaleInvoiceId) {
+        await assertWholesaleFixtureMutationOwnership(
+          tx as unknown as Tx,
+          args.fixtureRunId,
+          "wholesale_invoice",
+          existingMarker.wholesaleInvoiceId,
+        );
+        return { existingInvoiceId: existingMarker.wholesaleInvoiceId };
+      }
+    }
     await assertWholesaleFixtureMutationOwnership(
       tx as unknown as Tx,
       args.fixtureRunId,
@@ -284,14 +306,14 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
       const rateAedPerGram = it.rateAedPerGram == null
         ? null
         : requireDecimalScale(it.rateAedPerGram, 4, `items[${index}].rateAedPerGram`);
-      if (pricingType === "fixed" && rateAedPerGram == null) {
+      if (isRatePriced && rateAedPerGram == null) {
         throw Object.assign(
-          new Error(`items[${index}].rateAedPerGram is required for fixed invoices`),
+          new Error(`items[${index}].rateAedPerGram is required for fixed and cash-payment invoices`),
           { statusCode: 400 },
         );
       }
       const pureGrams = Math.round(grossGrams * purityMultiplier * 10000) / 10000;
-      const aed = pricingType === "fixed" && rateAedPerGram != null
+      const aed = isRatePriced && rateAedPerGram != null
         ? Math.round(pureGrams * rateAedPerGram * 100) / 100 + makingAed
         : makingAed;
       return {
@@ -311,12 +333,12 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
     const totalMakingAed = computedItems.reduce((s, i) => s + i.makingAed, 0);
     const totalAed = computedItems.reduce((s, i) => s + i.totalAed, 0);
 
-    // For fixed invoices all pure grams are fixed immediately → openPureGrams=0
-    const openPureGrams = pricingType === "fixed" ? 0 : totalPureGrams;
-    // Fixed sales post their full value immediately. Unfixed deliveries still
+    // Fixed and cash-payment invoices settle all pure grams immediately.
+    const openPureGrams = isRatePriced ? 0 : totalPureGrams;
+    // Rate-priced sales post their full value immediately. Unfixed deliveries still
     // post their making charge immediately; only the metal value remains open.
     const settledAed = totalAed;
-    const status = pricingType === "fixed" ? "settled" : "open";
+    const status = isRatePriced ? "settled" : "open";
 
     const [invoice] = await tx.insert(wholesaleInvoicesTable).values({
       invoiceNumber,
@@ -329,7 +351,7 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
       traderAddress: args.traderSnapshot.address ?? null,
       traderTrn: args.traderSnapshot.trn ?? null,
       pricingType,
-      paymentMode: args.paymentMode ?? null,
+      paymentMode: pricingType === "cash" ? "cash" : args.paymentMode ?? null,
       notes: args.notes ?? null,
       createdByUserId: args.createdByUserId ?? null,
       createdByUserName: args.createdByUserName ?? null,
@@ -353,10 +375,10 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
         grossGrams: String(it.grossGrams),
         purityMultiplier: String(it.purityMultiplier),
         pureGrams: String(it.pureGrams),
-        rateAedPerGram: (pricingType === "fixed" && it.rateAedPerGram) ? String(it.rateAedPerGram) : null,
+        rateAedPerGram: (isRatePriced && it.rateAedPerGram) ? String(it.rateAedPerGram) : null,
         makingAed: String(it.makingAed),
         totalAed: String(it.totalAed),
-        fixedPureGrams: pricingType === "fixed" ? String(it.pureGrams) : "0",
+        fixedPureGrams: isRatePriced ? String(it.pureGrams) : "0",
         returnedGrossGrams: "0",
         returnedPureGrams: "0",
         returnedMakingAed: "0",
@@ -385,8 +407,8 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
     }
 
     // Ledger entries
-    if (pricingType === "fixed") {
-      // Fixed: one AED debit per item, immediate settlement
+    if (isRatePriced) {
+      // Fixed and cash-payment sales first post the full AED sale value.
       for (const item of savedItems) {
         await tx.insert(traderLedgerEntriesTable).values({
           traderId: args.traderId,
@@ -396,11 +418,30 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
           pureGoldGramsDelta: "0",
           wholesaleInvoiceId: invoice.id,
           wholesaleItemId: item.id,
-          note: `Fixed delivery: ${item.description}`,
+          note: `${pricingType === "cash" ? "Cash" : "Fixed"} delivery: ${item.description}`,
           createdByUserId: args.createdByUserId ?? null,
           createdByUserName: args.createdByUserName ?? null,
           idempotencyKey: idempotencyKey ? `inv_create_${idempotencyKey}_item_${item.id}` : null,
         });
+      }
+      if (pricingType === "cash") {
+        // Cash pricing immediately applies an equal payment against each sale
+        // line, leaving no outstanding AED balance for the trader.
+        for (const item of savedItems) {
+          await tx.insert(traderLedgerEntriesTable).values({
+            traderId: args.traderId,
+            eventType: "cash_payment",
+            eventDate: args.invoiceDate,
+            aedDelta: String(-Number(item.totalAed)),
+            pureGoldGramsDelta: "0",
+            wholesaleInvoiceId: invoice.id,
+            wholesaleItemId: item.id,
+            note: `Immediate cash payment: ${item.description}`,
+            createdByUserId: args.createdByUserId ?? null,
+            createdByUserName: args.createdByUserName ?? null,
+            idempotencyKey: idempotencyKey ? `inv_create_${idempotencyKey}_cash_item_${item.id}` : null,
+          });
+        }
       }
     } else {
       // Unfixed: the trader owes both the delivered pure grams and the making
@@ -422,11 +463,13 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
       }
     }
 
-    // Idempotency marker entry (for both fixed and unfixed)
+    // Idempotency marker entry for every pricing type.
     if (idempotencyKey) {
       await tx.insert(traderLedgerEntriesTable).values({
         traderId: args.traderId,
-        eventType: pricingType === "fixed" ? "fixed_sale" : "delivery",
+        eventType: pricingType === "unfixed"
+          ? "delivery"
+          : pricingType === "cash" ? "cash_payment" : "fixed_sale",
         eventDate: args.invoiceDate,
         aedDelta: "0",
         pureGoldGramsDelta: "0",
@@ -450,7 +493,7 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
         traderId: args.traderId,
         traderName: args.traderSnapshot.name,
         pricingType,
-        paymentMode: args.paymentMode ?? null,
+        paymentMode: pricingType === "cash" ? "cash" : args.paymentMode ?? null,
         totalAed: invoice.totalAed,
         totalGrossGrams: invoice.totalGrossGrams,
         itemCount: savedItems.length,
@@ -466,6 +509,15 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
     return { invoice, items: savedItems };
   });
 
+  if ("existingInvoiceId" in result) {
+    const existingInvoiceId = result.existingInvoiceId;
+    if (existingInvoiceId == null) {
+      throw new Error("Idempotent wholesale invoice marker did not include an invoice ID");
+    }
+    const invoice = await loadWholesaleInvoice(existingInvoiceId);
+    if (invoice) return { invoice, idempotent: true };
+    throw new Error(`Idempotent wholesale invoice ${existingInvoiceId} was not found`);
+  }
   return { invoice: await loadWholesaleInvoice(result.invoice.id), idempotent: false };
 }
 
@@ -978,6 +1030,24 @@ export async function applyPhysicalReturn(args: ReturnArgs) {
       createdByUserName: actorName ?? null,
       idempotencyKey: ikey,
     });
+    if (lockedInvoice.pricingType === "cash" && totalReturnedAed > 0) {
+      // Cash invoices were already paid in full. A physical return therefore
+      // includes an immediate matching refund so the trader's AED balance
+      // remains settled while revenue and cash received both reverse.
+      await tx.insert(traderLedgerEntriesTable).values({
+        traderId: lockedInvoice.traderId!,
+        eventType: "cash_refund",
+        eventDate: date,
+        aedDelta: String(totalReturnedAed),
+        pureGoldGramsDelta: "0",
+        wholesaleInvoiceId: invoiceId,
+        wholesaleReturnId: wholesaleReturn.id,
+        note: `Cash refund for ${returnNumber}`,
+        createdByUserId: actorId ?? null,
+        createdByUserName: actorName ?? null,
+        idempotencyKey: idempotencyKey ? `cash_refund_${idempotencyKey}` : null,
+      });
+    }
 
     // Audit log
     await tx.insert(auditLogTable).values({
@@ -1024,7 +1094,7 @@ async function reverseFixedMetalAedForReturn(
 ): Promise<number> {
   if (fixedPureGramsToReturn <= 0.0001) return 0;
 
-  if (pricingType === "fixed") {
+  if (pricingType === "fixed" || pricingType === "cash") {
     const currentFixedPure = Number(item.fixedPureGrams);
     const previouslyReturnedFixedPure = Number(item.returnedFixedPureGrams);
     const previouslyReturnedMetalAed = Number(item.returnedMetalAed);

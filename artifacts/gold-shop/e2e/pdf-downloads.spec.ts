@@ -735,7 +735,10 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await itemNumberInputs.nth(0).fill("12.3456");
       await itemNumberInputs.nth(1).fill("7.50");
 
-      await page.getByRole("button", { name: "Fixed Gold", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Unfixed Gold Delivery", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Fixed Gold Pricing", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Cash Payment", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Fixed Gold Pricing", exact: true }).click();
       const metalRateField = page.getByText("Metal Rate (AED/g)", { exact: true }).locator("..");
       await metalRateField.locator('input[type="number"]').fill("410.25");
       await page.getByPlaceholder("Optional delivery notes").fill(`Frozen preview ${runTag}`);
@@ -750,7 +753,7 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       const invoice = await invoiceResponse.json() as {
         id: number;
         invoiceNumber: string;
-        pricingType: "fixed" | "unfixed";
+        pricingType: "fixed" | "unfixed" | "cash";
         paymentMode: "cash" | "card" | "bank_transfer" | null;
         traderName: string;
         traderContactPerson: string | null;

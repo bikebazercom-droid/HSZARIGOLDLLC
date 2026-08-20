@@ -874,6 +874,7 @@ export type WholesaleInvoicePricingType = typeof WholesaleInvoicePricingType[key
 export const WholesaleInvoicePricingType = {
   fixed: 'fixed',
   unfixed: 'unfixed',
+  cash: 'cash',
 } as const;
 
 /**
@@ -962,7 +963,7 @@ export interface WholesaleInvoiceItemInput {
   /** @minimum 0 */
   makingAed: number;
   /**
-     * Required for fixed invoices; must be null/absent for unfixed
+     * Required for fixed and cash-payment invoices; must be null/absent for unfixed
      * @exclusiveMinimum 0
      */
   rateAedPerGram?: number;
@@ -974,6 +975,7 @@ export type WholesaleInvoiceInputPricingType = typeof WholesaleInvoiceInputPrici
 export const WholesaleInvoiceInputPricingType = {
   fixed: 'fixed',
   unfixed: 'unfixed',
+  cash: 'cash',
 } as const;
 
 export type WholesaleInvoiceInputPaymentMode = typeof WholesaleInvoiceInputPaymentMode[keyof typeof WholesaleInvoiceInputPaymentMode];
@@ -1064,6 +1066,8 @@ export type TraderLedgerEntryEventType = typeof TraderLedgerEntryEventType[keyof
 export const TraderLedgerEntryEventType = {
   delivery: 'delivery',
   fixed_sale: 'fixed_sale',
+  cash_payment: 'cash_payment',
+  cash_refund: 'cash_refund',
   rate_fix: 'rate_fix',
   physical_return: 'physical_return',
 } as const;
@@ -1108,6 +1112,7 @@ export interface WholesaleDashboard {
   invoiceCount: number;
   fixedInvoiceCount: number;
   unfixedInvoiceCount: number;
+  cashInvoiceCount: number;
   settledInvoiceCount: number;
   totalFixedAed: number;
   openPureGrams: number;

@@ -150,7 +150,9 @@ export default function WholesaleDashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-xl font-bold">{dashboard?.invoiceCount ?? 0}</div>
-            <p className="text-xs text-muted-foreground">{dashboard?.fixedInvoiceCount ?? 0} fixed, {dashboard?.unfixedInvoiceCount ?? 0} unfixed</p>
+            <p className="text-xs text-muted-foreground">
+              {dashboard?.fixedInvoiceCount ?? 0} fixed, {dashboard?.unfixedInvoiceCount ?? 0} unfixed, {dashboard?.cashInvoiceCount ?? 0} cash
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -262,8 +264,11 @@ export default function WholesaleDashboard() {
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={inv.pricingType === "fixed" ? "default" : "outline"} className="text-[10px] uppercase tracking-wider">
-                        {inv.pricingType}
+                      <Badge
+                        variant={inv.pricingType === "fixed" ? "default" : "outline"}
+                        className={`text-[10px] tracking-wider ${inv.pricingType === "cash" ? "border-emerald-600/30 bg-emerald-50 text-emerald-700" : ""}`}
+                      >
+                        {inv.pricingType === "fixed" ? "Fixed Gold Pricing" : inv.pricingType === "cash" ? "Cash Payment" : "Unfixed Gold Delivery"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">{fmtG(inv.totalPureGrams)} g</TableCell>

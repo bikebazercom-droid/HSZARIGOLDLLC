@@ -12,4 +12,5 @@ export type WholesaleInvoiceInputPricingType = typeof WholesaleInvoiceInputPrici
 export const WholesaleInvoiceInputPricingType = {
   fixed: 'fixed',
   unfixed: 'unfixed',
+  cash: 'cash',
 } as const;

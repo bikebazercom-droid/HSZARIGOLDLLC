@@ -55,8 +55,10 @@ function fmtWt(n: number | null | undefined): string {
   return (n == null || n === 0) ? "-" : n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
-function pricingTypeLabel(pricingType: "fixed" | "unfixed"): string {
-  return pricingType === "fixed" ? "Fixed Gold Pricing" : "Unfixed Gold Delivery";
+function pricingTypeLabel(pricingType: "fixed" | "unfixed" | "cash"): string {
+  if (pricingType === "fixed") return "Fixed Gold Pricing";
+  if (pricingType === "cash") return "Cash Payment";
+  return "Unfixed Gold Delivery";
 }
 
 function paymentModeLabel(paymentMode: "cash" | "card" | "bank_transfer" | null | undefined): string {
@@ -109,10 +111,11 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
   });
 
   const locationUrl = settings?.locationUrl ?? "";
-  const goldValueAed = invoice?.pricingType === "fixed"
+  const isRatePriced = invoice?.pricingType !== "unfixed";
+  const goldValueAed = invoice && isRatePriced
     ? (invoice.items ?? []).reduce((sum, item) => sum + item.totalAed - item.makingAed, 0)
     : null;
-  const metalRateAed = invoice?.pricingType === "fixed" && invoice.totalPureGrams > 0
+  const metalRateAed = invoice && isRatePriced && invoice.totalPureGrams > 0
     ? (goldValueAed ?? 0) / invoice.totalPureGrams
     : null;
   const makingRate = (item: { makingAed: number; grossGrams: number }) =>
@@ -333,16 +336,33 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
 
                 <div style={{ flex: "0 0 30%", fontSize: "11px" }}>
                   {[
-                    { label: "Invoice No:", value: invoice.invoiceNumber },
-                    { label: "Date:", value: format(new Date(invoice.invoiceDate), "dd/MM/yyyy") },
-                    { label: "Pricing Type:", value: pricingTypeLabel(invoice.pricingType) },
-                    { label: "Payment Mode:", value: paymentModeLabel(invoice.paymentMode) },
-                    { label: "Metal Rate (AED/g):", value: metalRateAed == null ? "Pending rate fix" : fmt(metalRateAed) },
-                    { label: "Place of Supply:", value: "Dubai, UAE" },
-                  ].map(({ label, value }) => (
+                    { label: "Invoice No:", value: invoice.invoiceNumber, badge: false },
+                    { label: "Date:", value: format(new Date(invoice.invoiceDate), "dd/MM/yyyy"), badge: false },
+                    { label: "Pricing Type:", value: pricingTypeLabel(invoice.pricingType), badge: true },
+                    { label: "Payment Mode:", value: paymentModeLabel(invoice.paymentMode), badge: false },
+                    { label: "Metal Rate (AED/g):", value: metalRateAed == null ? "Pending rate fix" : fmt(metalRateAed), badge: false },
+                    { label: "Place of Supply:", value: "Dubai, UAE", badge: false },
+                  ].map(({ label, value, badge }) => (
                     <div key={label} style={{ display: "flex", marginBottom: "5px", alignItems: "baseline", lineHeight: "1.5" }}>
                       <span style={{ fontWeight: "bold", minWidth: "90px", color: NAVY, lineHeight: "1.5" }}>{label}</span>
-                      <span style={{ borderBottom: "1px solid #aaa", flex: 1, minWidth: "70px", paddingLeft: "4px", paddingBottom: "4px", lineHeight: "1.5" }}>{value}</span>
+                      <span style={badge ? {
+                        display: "inline-block",
+                        borderRadius: "999px",
+                        background: invoice.pricingType === "cash" ? "#dcfce7" : invoice.pricingType === "fixed" ? "#e0e7ff" : "#fef3c7",
+                        color: invoice.pricingType === "cash" ? "#166534" : invoice.pricingType === "fixed" ? NAVY : "#92400e",
+                        border: `1px solid ${invoice.pricingType === "cash" ? "#86efac" : invoice.pricingType === "fixed" ? "#a5b4fc" : "#fcd34d"}`,
+                        fontWeight: "bold",
+                        fontSize: "9px",
+                        padding: "2px 7px",
+                        lineHeight: "1.3",
+                      } : {
+                        borderBottom: "1px solid #aaa",
+                        flex: 1,
+                        minWidth: "70px",
+                        paddingLeft: "4px",
+                        paddingBottom: "4px",
+                        lineHeight: "1.5",
+                      }}>{value}</span>
                     </div>
                   ))}
                 </div>
@@ -416,7 +436,7 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
                         <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{item.purityMultiplier}</td>
                         <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{fmtWt(item.pureGrams)}</td>
                         <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>
-                          {invoice.pricingType === 'fixed' ? (item.rateAedPerGram ? fmt(item.rateAedPerGram) : "-") : "UNFIXED"}
+                          {invoice.pricingType !== "unfixed" ? (item.rateAedPerGram ? fmt(item.rateAedPerGram) : "-") : "UNFIXED"}
                         </td>
                         <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{makingRate(item) == null ? "-" : fmt(makingRate(item) ?? 0)}</td>
                         <td style={{ padding: "3px 5px", textAlign: "center", border: "1px solid #ddd" }}>{item.makingAed ? fmt(item.makingAed) : "-"}</td>
@@ -484,7 +504,15 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
                 </div>
                 <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #eee", gap: "8px" }}>
                   <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Pricing Type:</span>
-                  <span style={{ fontWeight: "bold" }}>{pricingTypeLabel(invoice.pricingType)}</span>
+                  <span style={{
+                    display: "inline-block",
+                    borderRadius: "999px",
+                    padding: "2px 9px",
+                    fontWeight: "bold",
+                    background: invoice.pricingType === "cash" ? "#dcfce7" : invoice.pricingType === "fixed" ? "#e0e7ff" : "#fef3c7",
+                    color: invoice.pricingType === "cash" ? "#166534" : invoice.pricingType === "fixed" ? NAVY : "#92400e",
+                    border: `1px solid ${invoice.pricingType === "cash" ? "#86efac" : invoice.pricingType === "fixed" ? "#a5b4fc" : "#fcd34d"}`,
+                  }}>{pricingTypeLabel(invoice.pricingType)}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", gap: "8px" }}>
                   <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Payment Mode:</span>

@@ -393,6 +393,7 @@ export default function NewInvoice() {
     makingAed: 0,
     rateAedPerGram: 0,
   }]);
+  const wholesaleUsesRate = wholesalePricingType !== "unfixed";
 
   const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
@@ -690,7 +691,7 @@ export default function NewInvoice() {
   );
   const wholesaleTotalAed = roundTo(
     wholesaleItems.reduce((sum, item) => {
-      const metalValue = wholesalePricingType === "fixed"
+      const metalValue = wholesaleUsesRate
         ? (item.grossGrams || 0) * (item.rateAedPerGram || 0)
         : 0;
       return sum + (item.makingAed || 0) + metalValue;
@@ -769,6 +770,7 @@ export default function NewInvoice() {
         traderId: resolvedTraderId,
         invoiceDate: wholesaleInvoiceDate,
         pricingType: wholesalePricingType,
+        paymentMode: wholesalePricingType === "cash" ? "cash" : undefined,
         notes: wholesaleNotes.trim() || undefined,
         idempotencyKey: wholesaleIdempotencyKey.current,
         items: wholesaleItems.map((item) => ({
@@ -778,7 +780,7 @@ export default function NewInvoice() {
           grossGrams: roundTo(item.grossGrams, 4),
           purityMultiplier: 1,
           makingAed: roundTo(item.makingAed, 2),
-          rateAedPerGram: wholesalePricingType === "fixed"
+          rateAedPerGram: wholesaleUsesRate
             ? roundTo(item.rateAedPerGram, 4)
             : undefined,
         })),
@@ -876,10 +878,14 @@ export default function NewInvoice() {
       return;
     }
     if (
-      wholesalePricingType === "fixed"
+      wholesaleUsesRate
       && wholesaleMetalRate <= 0
     ) {
-      toast({ title: "Fixed rate required", description: "Enter the metal rate for this fixed-gold invoice.", variant: "destructive" });
+      toast({
+        title: "Metal rate required",
+        description: `Enter the metal rate for this ${wholesalePricingType === "cash" ? "cash-payment" : "fixed-gold"} invoice.`,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -971,7 +977,7 @@ export default function NewInvoice() {
                     // deliberately fixed at 1.0000 and never discounts a line.
                     const pureWeight = roundTo(item.grossGrams, 4);
                     const lineTotal = roundTo(
-                      item.makingAed + (wholesalePricingType === "fixed" ? item.grossGrams * item.rateAedPerGram : 0),
+                      item.makingAed + (wholesaleUsesRate ? item.grossGrams * item.rateAedPerGram : 0),
                       2,
                     );
                     return (
@@ -1097,7 +1103,7 @@ export default function NewInvoice() {
 
               <div className="space-y-3">
                 <Label>Pricing Type</Label>
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-1">
+                <div className="grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-1 sm:grid-cols-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -1124,13 +1130,29 @@ export default function NewInvoice() {
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Fixed Gold
+                    Fixed Gold Pricing
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWholesaleSuccess(null);
+                      setWholesalePricingType("cash");
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                      wholesalePricingType === "cash"
+                        ? "bg-background text-emerald-700 shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Cash Payment
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {wholesalePricingType === "unfixed"
                     ? "Metal remains open by pure weight; making is posted now."
-                    : "Metal and making are posted in AED at the entered fixed rate."}
+                    : wholesalePricingType === "fixed"
+                      ? "Metal is fixed now; total AED is posted to the trader cash ledger."
+                      : "Metal is fixed now and the full invoice is immediately settled by cash payment."}
                 </p>
               </div>
 
@@ -1161,7 +1183,7 @@ export default function NewInvoice() {
             <CardContent className="space-y-5 pt-5">
               <div className="space-y-2">
                 <Label>Metal Rate (AED/g)</Label>
-                {wholesalePricingType === "fixed" ? (
+                {wholesaleUsesRate ? (
                   <Input
                     type="number"
                     min="0"

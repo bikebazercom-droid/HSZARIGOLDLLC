@@ -57,7 +57,7 @@ export const wholesaleInvoicesTable = pgTable(
     traderAddress: text("trader_address"),
     traderTrn: text("trader_trn"),
     // Invoice terms
-    pricingType: text("pricing_type").notNull(), // fixed | unfixed
+    pricingType: text("pricing_type").notNull(), // fixed | unfixed | cash
     paymentMode: text("payment_mode"), // cash | card | bank_transfer
     notes: text("notes"),
     // Creator snapshot
@@ -96,7 +96,7 @@ export const wholesaleInvoiceItemsTable = pgTable("wholesale_invoice_items", {
   grossGrams: numeric("gross_grams", { precision: 14, scale: 4 }).notNull(),
   purityMultiplier: numeric("purity_multiplier", { precision: 6, scale: 4 }).notNull(),
   pureGrams: numeric("pure_grams", { precision: 14, scale: 4 }).notNull(),
-  // null for unfixed items; positive AED/gram for fixed items
+  // null for unfixed items; positive AED/gram for fixed and cash-payment items
   rateAedPerGram: numeric("rate_aed_per_gram", { precision: 14, scale: 4 }),
   makingAed: numeric("making_aed", { precision: 14, scale: 2 }).notNull().default("0"),
   totalAed: numeric("total_aed", { precision: 14, scale: 2 }).notNull().default("0"),
@@ -219,8 +219,8 @@ export type WholesaleReturnLine = typeof wholesaleReturnLinesTable.$inferSelect;
 
 // ── Trader Ledger Entries ────────────────────────────────────────────────────
 // Immutable double-entry ledger. Positive = trader owes the shop.
-// aedDelta > 0: shop delivered goods/fixed rate (trader's AED debt increases)
-// aedDelta < 0: physical return (trader's AED debt decreases)
+// aedDelta > 0: shop delivered goods/fixed rate, or refunded cash
+// aedDelta < 0: cash payment or physical return
 // pureGoldGramsDelta > 0: shop delivered pure grams (trader owes grams)
 // pureGoldGramsDelta < 0: grams fixed or returned (trader's gram obligation decreases)
 
@@ -229,7 +229,7 @@ export const traderLedgerEntriesTable = pgTable(
   {
     id: serial("id").primaryKey(),
     traderId: integer("trader_id").notNull().references(() => wholesaleTradersTable.id, { onDelete: "cascade" }),
-    eventType: text("event_type").notNull(), // delivery | fixed_sale | rate_fix | physical_return
+    eventType: text("event_type").notNull(), // delivery | fixed_sale | cash_payment | cash_refund | rate_fix | physical_return
     eventDate: text("event_date").notNull().default(sql`CURRENT_DATE::text`), // yyyy-MM-dd business date
     aedDelta: numeric("aed_delta", { precision: 14, scale: 2 }).notNull().default("0"),
     pureGoldGramsDelta: numeric("pure_gold_grams_delta", { precision: 14, scale: 4 }).notNull().default("0"),

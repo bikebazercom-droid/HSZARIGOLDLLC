@@ -109,7 +109,7 @@ function parseInvoice(
     traderEmail: row.traderEmail ?? null,
     traderAddress: row.traderAddress ?? null,
     traderTrn: row.traderTrn ?? null,
-    pricingType: row.pricingType as "fixed" | "unfixed",
+    pricingType: row.pricingType as "fixed" | "unfixed" | "cash",
     paymentMode: row.paymentMode as "cash" | "card" | "bank_transfer" | null,
     notes: row.notes ?? null,
     createdByUserId: row.createdByUserId ?? null,
@@ -162,7 +162,7 @@ function parseLedgerEntry(row: typeof traderLedgerEntriesTable.$inferSelect) {
   return {
     id: row.id,
     traderId: row.traderId,
-    eventType: row.eventType as "delivery" | "fixed_sale" | "rate_fix" | "physical_return",
+    eventType: row.eventType as "delivery" | "fixed_sale" | "cash_payment" | "cash_refund" | "rate_fix" | "physical_return",
     eventDate: row.eventDate,
     aedDelta: Number(row.aedDelta),
     pureGoldGramsDelta: Number(row.pureGoldGramsDelta),
@@ -340,11 +340,11 @@ router.post("/wholesale/invoices", async (req, res): Promise<void> => {
   const [trader] = await db.select().from(wholesaleTradersTable).where(eq(wholesaleTradersTable.id, input.traderId));
   if (!trader) { res.status(400).json({ error: "Trader not found" }); return; }
 
-  // Validate: fixed requires rate per item, unfixed must not have rate
-  if (input.pricingType === "fixed") {
+  // Fixed and cash-payment pricing require a rate per item.
+  if (input.pricingType !== "unfixed") {
     for (const [i, it] of input.items.entries()) {
       if (!it.rateAedPerGram || it.rateAedPerGram <= 0) {
-        res.status(400).json({ error: `Fixed invoice: item ${i + 1} must have a positive rateAedPerGram` });
+        res.status(400).json({ error: `${input.pricingType === "cash" ? "Cash-payment" : "Fixed"} invoice: item ${i + 1} must have a positive rateAedPerGram` });
         return;
       }
     }
@@ -362,8 +362,8 @@ router.post("/wholesale/invoices", async (req, res): Promise<void> => {
         trn: trader.trn,
       },
       invoiceDate: input.invoiceDate,
-      pricingType: input.pricingType as "fixed" | "unfixed",
-      paymentMode: input.paymentMode ?? null,
+      pricingType: input.pricingType as "fixed" | "unfixed" | "cash",
+      paymentMode: input.pricingType === "cash" ? "cash" : input.paymentMode ?? null,
       notes: input.notes ?? null,
       createdByUserId: req.session?.userId ?? null,
       createdByUserName: req.session?.fullName ?? null,
@@ -523,6 +523,7 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
     invoice_count: string;
     fixed_count: string;
     unfixed_count: string;
+    cash_count: string;
     settled_count: string;
     total_fixed_aed: string;
     open_pure_grams: string;
@@ -532,10 +533,14 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
       COUNT(*)::text AS invoice_count,
       COUNT(*) FILTER (WHERE pricing_type = 'fixed')::text AS fixed_count,
       COUNT(*) FILTER (WHERE pricing_type = 'unfixed')::text AS unfixed_count,
+      COUNT(*) FILTER (WHERE pricing_type = 'cash')::text AS cash_count,
       COUNT(*) FILTER (WHERE status = 'settled')::text AS settled_count,
-      (SELECT COALESCE(SUM(aed_delta::numeric), 0)
+      (SELECT COALESCE(SUM(tle.aed_delta::numeric), 0)
        FROM trader_ledger_entries tle
-       ${ledgerConditions.length ? sql`WHERE ${and(...ledgerConditions)}` : sql``}
+       WHERE ${and(
+         sql`tle.event_type IN ('fixed_sale', 'delivery', 'rate_fix', 'physical_return')`,
+         ...ledgerConditions,
+       )}
       )::text AS total_fixed_aed,
       COALESCE(SUM(open_pure_grams::numeric), 0)::text AS open_pure_grams,
       (SELECT COALESCE(SUM(total_returned_gross_grams::numeric), 0)
@@ -554,6 +559,7 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
     invoiceCount: parseInt(stats?.invoice_count ?? "0", 10),
     fixedInvoiceCount: parseInt(stats?.fixed_count ?? "0", 10),
     unfixedInvoiceCount: parseInt(stats?.unfixed_count ?? "0", 10),
+    cashInvoiceCount: parseInt(stats?.cash_count ?? "0", 10),
     settledInvoiceCount: parseInt(stats?.settled_count ?? "0", 10),
     totalFixedAed: Math.round(Number(stats?.total_fixed_aed ?? "0") * 100) / 100,
     openPureGrams: Math.round(Number(stats?.open_pure_grams ?? "0") * 10000) / 10000,
@@ -740,6 +746,7 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
     invoice_count: string;
     fixed_count: string;
     unfixed_count: string;
+    cash_count: string;
     settled_count: string;
     total_fixed_aed: string;
     open_pure_grams: string;
@@ -749,11 +756,15 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
       COUNT(*)::text AS invoice_count,
       COUNT(*) FILTER (WHERE pricing_type = 'fixed')::text AS fixed_count,
       COUNT(*) FILTER (WHERE pricing_type = 'unfixed')::text AS unfixed_count,
+      COUNT(*) FILTER (WHERE pricing_type = 'cash')::text AS cash_count,
       COUNT(*) FILTER (WHERE status = 'settled')::text AS settled_count,
       (SELECT COALESCE(SUM(tle.aed_delta::numeric), 0)
        FROM trader_ledger_entries tle
        JOIN wholesale_invoices lwi ON lwi.id = tle.wholesale_invoice_id
-       ${ledgerConditions.length ? sql`WHERE ${and(...ledgerConditions)}` : sql``}
+       WHERE ${and(
+         sql`tle.event_type IN ('fixed_sale', 'delivery', 'rate_fix', 'physical_return')`,
+         ...ledgerConditions,
+       )}
       )::text AS total_fixed_aed,
       COALESCE(SUM(open_pure_grams::numeric), 0)::text AS open_pure_grams,
       (SELECT COALESCE(SUM(wr.total_returned_gross_grams::numeric), 0)
@@ -775,6 +786,7 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
     invoiceCount: parseInt(stats?.invoice_count ?? "0", 10),
     fixedInvoiceCount: parseInt(stats?.fixed_count ?? "0", 10),
     unfixedInvoiceCount: parseInt(stats?.unfixed_count ?? "0", 10),
+    cashInvoiceCount: parseInt(stats?.cash_count ?? "0", 10),
     settledInvoiceCount: parseInt(stats?.settled_count ?? "0", 10),
     totalFixedAed: Number(stats?.total_fixed_aed ?? "0"),
     openPureGrams: Number(stats?.open_pure_grams ?? "0"),

@@ -12,6 +12,8 @@ export type TraderLedgerEntryEventType = typeof TraderLedgerEntryEventType[keyof
 export const TraderLedgerEntryEventType = {
   delivery: 'delivery',
   fixed_sale: 'fixed_sale',
+  cash_payment: 'cash_payment',
+  cash_refund: 'cash_refund',
   rate_fix: 'rate_fix',
   physical_return: 'physical_return',
 } as const;

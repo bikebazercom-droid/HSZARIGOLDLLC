@@ -10,6 +10,7 @@ export interface WholesaleDashboard {
   invoiceCount: number;
   fixedInvoiceCount: number;
   unfixedInvoiceCount: number;
+  cashInvoiceCount: number;
   settledInvoiceCount: number;
   totalFixedAed: number;
   openPureGrams: number;

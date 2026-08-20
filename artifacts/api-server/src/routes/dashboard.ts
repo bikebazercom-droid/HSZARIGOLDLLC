@@ -166,13 +166,25 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     db.execute<{
       invoice_count: string;
       total_revenue: string;
+      cash_received: string;
+      outstanding_due: string;
       sold_grams: string;
       making_charges: string;
     }>(sql`
       SELECT
         (SELECT COUNT(*) FROM wholesale_invoices wi WHERE ${wholesaleInvoiceWhere})::text AS invoice_count,
-        (SELECT COALESCE(SUM(tle.aed_delta::numeric), 0)
+        (SELECT COALESCE(SUM(
+           CASE WHEN tle.event_type IN ('fixed_sale', 'delivery', 'rate_fix', 'physical_return')
+                THEN tle.aed_delta::numeric ELSE 0 END
+         ), 0)
          FROM trader_ledger_entries tle WHERE ${wholesaleLedgerWhere})::text AS total_revenue,
+        (SELECT COALESCE(SUM(
+           CASE WHEN tle.event_type IN ('cash_payment', 'cash_refund')
+                THEN -tle.aed_delta::numeric ELSE 0 END
+         ), 0)
+         FROM trader_ledger_entries tle WHERE ${wholesaleLedgerWhere})::text AS cash_received,
+        (SELECT COALESCE(SUM(tle.aed_delta::numeric), 0)
+         FROM trader_ledger_entries tle WHERE ${wholesaleLedgerWhere})::text AS outstanding_due,
         (
           COALESCE((
             SELECT SUM(wii.gross_grams::numeric)
@@ -228,8 +240,8 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     stockOutGrams,
     netStockGrams: stockInGrams - stockOutGrams,
     totalRevenueAed,
-    cashReceivedAed: Number(invAgg.cash_received),
-    outstandingDueAed: Number(invAgg.outstanding_due) + Number(wholesaleAgg.total_revenue),
+    cashReceivedAed: Number(invAgg.cash_received) + Number(wholesaleAgg.cash_received),
+    outstandingDueAed: Number(invAgg.outstanding_due) + Number(wholesaleAgg.outstanding_due),
     makingChargesAed: Number(itemAgg.making_charges) + Number(wholesaleAgg.making_charges),
     invoiceCount,
     avgInvoiceAed: invoiceCount > 0 ? totalRevenueAed / invoiceCount : 0,
@@ -600,7 +612,7 @@ router.get("/dashboard/category-summary", async (req, res): Promise<void> => {
       FROM (
         SELECT wii.category,
                wi.id AS invoice_id,
-               CASE WHEN wi.pricing_type = 'fixed'
+               CASE WHEN wi.pricing_type IN ('fixed', 'cash')
                     THEN wii.total_aed::numeric
                          + wii.returned_making_aed::numeric
                          + wii.returned_metal_aed::numeric
@@ -1118,7 +1130,7 @@ export async function loadStatementData(startDate: string | null, endDate: strin
                wii.description,
                wii.category AS bucket,
                wii.gross_grams::numeric::text AS grams,
-               (CASE WHEN wi.pricing_type = 'fixed'
+               (CASE WHEN wi.pricing_type IN ('fixed', 'cash')
                      THEN wii.total_aed::numeric
                           + wii.returned_making_aed::numeric
                           + wii.returned_metal_aed::numeric

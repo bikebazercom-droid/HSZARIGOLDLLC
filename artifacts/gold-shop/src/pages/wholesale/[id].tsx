@@ -158,8 +158,11 @@ export default function WholesaleInvoiceDetail() {
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary">Invoice #{invoice.invoiceNumber}</h1>
-            <Badge variant={invoice.pricingType === "fixed" ? "default" : "outline"} className="uppercase tracking-wider">
-              {invoice.pricingType}
+            <Badge
+              variant={invoice.pricingType === "fixed" ? "default" : "outline"}
+              className={`tracking-wider ${invoice.pricingType === "cash" ? "border-emerald-600/30 bg-emerald-50 text-emerald-700" : ""}`}
+            >
+              {invoice.pricingType === "fixed" ? "Fixed Gold Pricing" : invoice.pricingType === "cash" ? "Cash Payment" : "Unfixed Gold Delivery"}
             </Badge>
             {invoice.status === "open" && <Badge variant="outline" className="uppercase tracking-wider text-amber-600 border-amber-600">Open</Badge>}
             {invoice.status === "partially_settled" && <Badge className="uppercase tracking-wider bg-blue-100 text-blue-700">Partial</Badge>}
@@ -219,6 +222,9 @@ export default function WholesaleInvoiceDetail() {
                           )}
                           {invoice.pricingType === "fixed" && (
                             <div className="text-[10px] text-emerald-600">Fixed Rate</div>
+                          )}
+                          {invoice.pricingType === "cash" && (
+                            <div className="text-[10px] text-emerald-600">Cash Paid</div>
                           )}
                         </td>
                       </tr>

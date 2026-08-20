@@ -1009,7 +1009,7 @@ paths:
     post:
       operationId: createWholesaleInvoice
       tags: [wholesale]
-      summary: Create a new wholesale invoice (fixed or unfixed)
+      summary: Create a new wholesale invoice (unfixed, fixed, or cash payment)
       requestBody:
         required: true
         content:
@@ -2528,7 +2528,7 @@ components:
           type: ["string", "null"]
         pricingType:
           type: string
-          enum: [fixed, unfixed]
+          enum: [fixed, unfixed, cash]
         paymentMode:
           type: ["string", "null"]
           enum: [cash, card, bank_transfer, null]
@@ -2592,7 +2592,7 @@ components:
           type: number
           exclusiveMinimum: 0
           multipleOf: 0.0001
-          description: Required for fixed invoices; must be null/absent for unfixed
+          description: Required for fixed and cash-payment invoices; must be null/absent for unfixed
 
     WholesaleInvoiceInput:
       type: object
@@ -2605,7 +2605,7 @@ components:
           description: yyyy-MM-dd
         pricingType:
           type: string
-          enum: [fixed, unfixed]
+          enum: [fixed, unfixed, cash]
         paymentMode:
           type: string
           enum: [cash, card, bank_transfer]
@@ -2739,7 +2739,7 @@ components:
           type: integer
         eventType:
           type: string
-          enum: [delivery, fixed_sale, rate_fix, physical_return]
+          enum: [delivery, fixed_sale, cash_payment, cash_refund, rate_fix, physical_return]
         eventDate:
           type: string
           description: yyyy-MM-dd business date
@@ -2786,13 +2786,15 @@ components:
 
     WholesaleDashboard:
       type: object
-      required: [invoiceCount, fixedInvoiceCount, unfixedInvoiceCount, settledInvoiceCount, totalFixedAed, openPureGrams, returnedGrossGrams, traderCount]
+      required: [invoiceCount, fixedInvoiceCount, unfixedInvoiceCount, cashInvoiceCount, settledInvoiceCount, totalFixedAed, openPureGrams, returnedGrossGrams, traderCount]
       properties:
         invoiceCount:
           type: integer
         fixedInvoiceCount:
           type: integer
         unfixedInvoiceCount:
+          type: integer
+        cashInvoiceCount:
           type: integer
         settledInvoiceCount:
           type: integer
