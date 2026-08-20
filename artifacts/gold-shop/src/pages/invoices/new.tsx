@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useLocation } from "wouter";
 import {
   useCreateInvoice,
   useCreateCustomer,
@@ -11,19 +11,24 @@ import {
   useListProducts,
   getListProductsQueryKey,
   PriceItem,
+  useListWholesaleTraders,
+  useCreateWholesaleTrader,
+  useCreateWholesaleInvoice,
+  getListWholesaleTradersQueryKey,
+  WholesaleInvoiceInputPricingType,
+  WholesaleInvoiceItemInputCategory,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Save, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { tenTolaPurityMultiplier } from "@/lib/invoice-category-rates";
-import { InvoiceModeSelector } from "@/components/invoice-mode-selector";
 
 interface LineItem {
   id: string;
@@ -37,6 +42,17 @@ interface LineItem {
   makingRate: number;
   makingAmt: number;
   totalPrice: number;
+}
+
+interface WholesaleEntryLineItem {
+  id: string;
+  description: string;
+  category: WholesaleInvoiceItemInputCategory;
+  grossGrams: number;
+  purityMultiplier: number;
+  makingRate: number;
+  makingAed: number;
+  rateAedPerGram: number;
 }
 
 // The Purity dropdown shows ONLY raw decimal numbers — no item names or text
@@ -83,6 +99,21 @@ const LIVE_ASSET_DESCRIPTIONS = [
   "Gold Jewelry 18K",
   "Silver",
 ] as const;
+
+const WHOLESALE_STOCK_ITEMS: Array<{
+  description: string;
+  category: WholesaleInvoiceItemInputCategory;
+  purityMultiplier: number;
+}> = [
+  { description: "Gold Jewelry 22K", category: "gold_jewelry_22k", purityMultiplier: 0.916 },
+  { description: "Gold Jewelry 21K", category: "gold_jewelry_22k", purityMultiplier: 0.875 },
+  { description: "Gold Jewelry 18K", category: "gold_jewelry_22k", purityMultiplier: 0.75 },
+  { description: "GOLD 9999 (0.9999)", category: "gold_9999", purityMultiplier: 0.9999 },
+  { description: "TEN TOLA BAR (0.9999)", category: "ten_tola_bar", purityMultiplier: 0.9999 },
+  { description: "KG BAR (0.9999)", category: "kg_bar", purityMultiplier: 0.9999 },
+  { description: "995", category: "995", purityMultiplier: 0.995 },
+  { description: "Silver", category: "silver", purityMultiplier: 0.999 },
+];
 
 // Visual-only display labels for the dropdown — underlying values (above) stay
 // canonical so rate resolution is unaffected.
@@ -318,6 +349,8 @@ export default function NewInvoice() {
   const queryClient = useQueryClient();
   const createInvoice = useCreateInvoice();
   const createCustomer = useCreateCustomer();
+  const createWholesaleTrader = useCreateWholesaleTrader();
+  const createWholesaleInvoice = useCreateWholesaleInvoice();
 
   const { data: customers } = useListCustomers({}, { query: { queryKey: getListCustomersQueryKey({}) } });
   // Live rates are the absolute source of truth for every calculation on this
@@ -328,6 +361,31 @@ export default function NewInvoice() {
     query: { queryKey: getGetPricesQueryKey(), refetchInterval: 5000, refetchIntervalInBackground: true },
   });
   const { data: products } = useListProducts({}, { query: { queryKey: getListProductsQueryKey({}) } });
+  const [entryMode, setEntryMode] = useState<"retail" | "wholesale">("retail");
+  const { data: wholesaleTraders, isLoading: wholesaleTradersLoading } = useListWholesaleTraders(
+    {},
+    { query: { queryKey: getListWholesaleTradersQueryKey({}), enabled: entryMode === "wholesale" } },
+  );
+
+  const wholesaleIdempotencyKey = useRef(crypto.randomUUID());
+  const [wholesaleTraderId, setWholesaleTraderId] = useState<number | null>(null);
+  const [isAddingWholesaleTrader, setIsAddingWholesaleTrader] = useState(false);
+  const [newWholesaleTraderName, setNewWholesaleTraderName] = useState("");
+  const [newWholesaleTraderPhone, setNewWholesaleTraderPhone] = useState("");
+  const [wholesalePricingType, setWholesalePricingType] = useState<WholesaleInvoiceInputPricingType>("unfixed");
+  const [wholesaleInvoiceDate, setWholesaleInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [wholesaleNotes, setWholesaleNotes] = useState("");
+  const [wholesaleSuccess, setWholesaleSuccess] = useState<string | null>(null);
+  const [wholesaleItems, setWholesaleItems] = useState<WholesaleEntryLineItem[]>([{
+    id: crypto.randomUUID(),
+    description: "",
+    category: "gold_9999",
+    grossGrams: 0,
+    purityMultiplier: 0.9999,
+    makingRate: 0,
+    makingAed: 0,
+    rateAedPerGram: 0,
+  }]);
 
   const isManualMode = !!(prices as PricesData | undefined)?.manualInvoiceMode;
   const goldRate = prices?.goldPricePerGram ?? 320;
@@ -611,12 +669,564 @@ export default function NewInvoice() {
     }
   };
 
+  const wholesaleTotalGross = roundTo(
+    wholesaleItems.reduce((sum, item) => sum + (item.grossGrams || 0), 0),
+    4,
+  );
+  const wholesaleTotalPure = roundTo(
+    wholesaleItems.reduce(
+      (sum, item) => sum + (item.grossGrams || 0) * (item.purityMultiplier || 0),
+      0,
+    ),
+    4,
+  );
+  const wholesaleTotalMaking = roundTo(
+    wholesaleItems.reduce((sum, item) => sum + (item.makingAed || 0), 0),
+    2,
+  );
+  const wholesaleTotalAed = roundTo(
+    wholesaleItems.reduce((sum, item) => {
+      const pureWeight = (item.grossGrams || 0) * (item.purityMultiplier || 0);
+      const metalValue = wholesalePricingType === "fixed"
+        ? pureWeight * (item.rateAedPerGram || 0)
+        : 0;
+      return sum + (item.makingAed || 0) + metalValue;
+    }, 0),
+    2,
+  );
+
+  const selectWholesaleStockItem = (index: number, description: string) => {
+    const selected = WHOLESALE_STOCK_ITEMS.find((item) => item.description === description);
+    if (!selected) return;
+    setWholesaleSuccess(null);
+    setWholesaleItems((current) => current.map((item, itemIndex) => (
+      itemIndex === index
+        ? {
+            ...item,
+            description: selected.description,
+            category: selected.category,
+            purityMultiplier: selected.purityMultiplier,
+          }
+        : item
+    )));
+  };
+
+  const updateWholesaleItem = (
+    index: number,
+    field: keyof WholesaleEntryLineItem,
+    value: string | number,
+  ) => {
+    setWholesaleSuccess(null);
+    setWholesaleItems((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const updated = { ...item, [field]: value } as WholesaleEntryLineItem;
+      if (field === "grossGrams" || field === "makingRate") {
+        updated.makingAed = roundTo(
+          (updated.grossGrams || 0) * (updated.makingRate || 0),
+          2,
+        );
+      }
+      return updated;
+    }));
+  };
+
+  const addWholesaleItem = () => {
+    setWholesaleSuccess(null);
+    setWholesaleItems((current) => [...current, {
+      id: crypto.randomUUID(),
+      description: "",
+      category: "gold_9999",
+      grossGrams: 0,
+      purityMultiplier: 0.9999,
+      makingRate: 0,
+      makingAed: 0,
+      rateAedPerGram: 0,
+    }]);
+  };
+
+  const removeWholesaleItem = (id: string) => {
+    setWholesaleSuccess(null);
+    setWholesaleItems((current) => (
+      current.length > 1 ? current.filter((item) => item.id !== id) : current
+    ));
+  };
+
+  const submitWholesaleInvoice = (resolvedTraderId: number) => {
+    createWholesaleInvoice.mutate({
+      data: {
+        traderId: resolvedTraderId,
+        invoiceDate: wholesaleInvoiceDate,
+        pricingType: wholesalePricingType,
+        notes: wholesaleNotes.trim() || undefined,
+        idempotencyKey: wholesaleIdempotencyKey.current,
+        items: wholesaleItems.map((item) => ({
+          description: item.description,
+          category: item.category,
+          quantity: 1,
+          grossGrams: roundTo(item.grossGrams, 4),
+          purityMultiplier: roundTo(item.purityMultiplier, 4),
+          makingAed: roundTo(item.makingAed, 2),
+          rateAedPerGram: wholesalePricingType === "fixed"
+            ? roundTo(item.rateAedPerGram, 4)
+            : undefined,
+        })),
+      },
+    }, {
+      onSuccess: (invoice) => {
+        wholesaleIdempotencyKey.current = crypto.randomUUID();
+        setWholesaleSuccess(`Wholesale invoice ${invoice.invoiceNumber} was created successfully.`);
+        setWholesaleItems([{
+          id: crypto.randomUUID(),
+          description: "",
+          category: "gold_9999",
+          grossGrams: 0,
+          purityMultiplier: 0.9999,
+          makingRate: 0,
+          makingAed: 0,
+          rateAedPerGram: 0,
+        }]);
+        setWholesaleNotes("");
+        queryClient.invalidateQueries({
+          predicate: (query) => JSON.stringify(query.queryKey).includes("/api/wholesale"),
+        });
+        toast({
+          title: "Wholesale invoice created",
+          description: `${invoice.invoiceNumber} was saved without leaving this page.`,
+        });
+      },
+      onError: (error: any) => {
+        toast({
+          title: "Unable to create wholesale invoice",
+          description: error.message || "Please review the form and try again.",
+          variant: "destructive",
+        });
+      },
+    });
+  };
+
+  const handleWholesaleSubmit = () => {
+    setWholesaleSuccess(null);
+    if (!isAddingWholesaleTrader && !wholesaleTraderId) {
+      toast({ title: "Trader required", description: "Select an existing trader or add a new trader.", variant: "destructive" });
+      return;
+    }
+    if (isAddingWholesaleTrader && !newWholesaleTraderName.trim()) {
+      toast({ title: "Trader name required", description: "Enter the new trader's company name.", variant: "destructive" });
+      return;
+    }
+    if (wholesaleItems.some((item) => !item.description)) {
+      toast({ title: "Stock item required", description: "Select a stock item on every line.", variant: "destructive" });
+      return;
+    }
+    if (wholesaleItems.some((item) => item.grossGrams <= 0)) {
+      toast({ title: "Gross weight required", description: "Enter a positive gross weight on every line.", variant: "destructive" });
+      return;
+    }
+    if (wholesaleItems.some((item) => item.purityMultiplier <= 0 || item.purityMultiplier > 1)) {
+      toast({ title: "Invalid purity", description: "Purity must be greater than 0 and no more than 1.", variant: "destructive" });
+      return;
+    }
+    if (
+      wholesalePricingType === "fixed"
+      && wholesaleItems.some((item) => item.rateAedPerGram <= 0)
+    ) {
+      toast({ title: "Fixed rate required", description: "Enter the metal rate for every fixed-gold line.", variant: "destructive" });
+      return;
+    }
+
+    if (isAddingWholesaleTrader) {
+      createWholesaleTrader.mutate({
+        data: {
+          name: newWholesaleTraderName.trim(),
+          phone: newWholesaleTraderPhone.trim() || undefined,
+        },
+      }, {
+        onSuccess: (trader) => {
+          setWholesaleTraderId(trader.id);
+          setIsAddingWholesaleTrader(false);
+          setNewWholesaleTraderName("");
+          setNewWholesaleTraderPhone("");
+          queryClient.invalidateQueries({ queryKey: getListWholesaleTradersQueryKey({}) });
+          submitWholesaleInvoice(trader.id);
+        },
+        onError: (error: any) => {
+          toast({
+            title: "Unable to create trader",
+            description: error.message || "Please try again.",
+            variant: "destructive",
+          });
+        },
+      });
+      return;
+    }
+
+    if (wholesaleTraderId) submitWholesaleInvoice(wholesaleTraderId);
+  };
+
+  const modeSelector = (
+    <div
+      className="flex w-full sm:w-auto self-start rounded-lg border border-border/50 bg-muted/30 p-1"
+      role="tablist"
+      aria-label="Invoice entry type"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={entryMode === "retail"}
+        onClick={() => setEntryMode("retail")}
+        className={`flex-1 sm:flex-none rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+          entryMode === "retail"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        }`}
+      >
+        Retail Customer
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={entryMode === "wholesale"}
+        onClick={() => setEntryMode("wholesale")}
+        className={`flex-1 sm:flex-none rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+          entryMode === "wholesale"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        }`}
+      >
+        Wholesale / Trader
+      </button>
+    </div>
+  );
+
+  if (entryMode === "wholesale") {
+    return (
+      <div className="mx-auto max-w-7xl space-y-4 px-1 pb-20 sm:space-y-6 sm:px-0">
+        <div>
+          <h1 className="mb-2 text-2xl font-bold tracking-tight text-primary sm:mb-4 sm:text-3xl">New Invoice</h1>
+          {modeSelector}
+        </div>
+
+        {wholesaleSuccess && (
+          <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <div className="font-semibold">Wholesale invoice saved</div>
+              <div className="text-sm">{wholesaleSuccess}</div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <Card>
+              <CardHeader className="border-b border-border/50 pb-4">
+                <CardTitle>Wholesale Entry</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-5 pt-5 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Trader</Label>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0"
+                      onClick={() => {
+                        setWholesaleSuccess(null);
+                        setIsAddingWholesaleTrader((current) => !current);
+                      }}
+                    >
+                      {isAddingWholesaleTrader ? "Select existing" : "Add New Trader"}
+                    </Button>
+                  </div>
+                  {isAddingWholesaleTrader ? (
+                    <div className="grid gap-3 rounded-md border border-border/60 bg-muted/20 p-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Company Name *</Label>
+                        <Input
+                          value={newWholesaleTraderName}
+                          onChange={(event) => setNewWholesaleTraderName(event.target.value)}
+                          placeholder="Trader company"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Phone</Label>
+                        <Input
+                          value={newWholesaleTraderPhone}
+                          onChange={(event) => setNewWholesaleTraderPhone(event.target.value)}
+                          placeholder="+971..."
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <Select
+                      value={wholesaleTraderId?.toString() ?? ""}
+                      onValueChange={(value) => {
+                        setWholesaleSuccess(null);
+                        setWholesaleTraderId(Number(value));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={wholesaleTradersLoading ? "Loading traders..." : "Select existing trader"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wholesaleTraders?.map((trader) => (
+                          <SelectItem key={trader.id} value={trader.id.toString()}>
+                            {trader.name}{trader.phone ? ` · ${trader.phone}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Pricing Type</Label>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWholesaleSuccess(null);
+                        setWholesalePricingType("unfixed");
+                      }}
+                      className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                        wholesalePricingType === "unfixed"
+                          ? "bg-background text-amber-700 shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Unfixed Gold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWholesaleSuccess(null);
+                        setWholesalePricingType("fixed");
+                      }}
+                      className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                        wholesalePricingType === "fixed"
+                          ? "bg-background text-primary shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Fixed Gold
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {wholesalePricingType === "unfixed"
+                      ? "Metal remains open by pure weight; making is posted now."
+                      : "Metal and making are posted in AED at the entered fixed rate."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="border-b border-border/50 pb-3">
+                <CardTitle>Line Items</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <table className="w-full min-w-[920px] border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-[#1e3a5f] text-white">
+                        <th className="w-10 px-3 py-2.5 text-center text-xs font-semibold">#</th>
+                        <th className="min-w-[210px] px-3 py-2.5 text-left text-xs font-semibold">Stock Item</th>
+                        <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold">Gross Weight</th>
+                        <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold">Purity</th>
+                        <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold">Pure Weight</th>
+                        <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold">Making Rate</th>
+                        <th className="w-32 px-3 py-2.5 text-center text-xs font-semibold">Making Amount</th>
+                        {wholesalePricingType === "fixed" && (
+                          <th className="w-32 px-3 py-2.5 text-center text-xs font-semibold">Metal Rate</th>
+                        )}
+                        <th className="w-10 px-1 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {wholesaleItems.map((item, index) => {
+                        const pureWeight = roundTo(item.grossGrams * item.purityMultiplier, 4);
+                        return (
+                          <tr key={item.id} className="border-b border-border/50 even:bg-muted/20">
+                            <td className="px-3 py-3 text-center text-muted-foreground">{index + 1}</td>
+                            <td className="px-3 py-3">
+                              <Select value={item.description} onValueChange={(value) => selectWholesaleStockItem(index, value)}>
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Select stock item" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WHOLESALE_STOCK_ITEMS.map((stockItem) => (
+                                    <SelectItem key={stockItem.description} value={stockItem.description}>
+                                      {DESC_DISPLAY_LABEL[stockItem.description] ?? stockItem.description}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-3 py-3">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.0001"
+                                value={item.grossGrams || ""}
+                                onChange={(event) => updateWholesaleItem(index, "grossGrams", Number(event.target.value) || 0)}
+                                className="h-9 text-center"
+                                placeholder="0.0000"
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="1"
+                                step="0.0001"
+                                value={item.purityMultiplier || ""}
+                                onChange={(event) => updateWholesaleItem(index, "purityMultiplier", Number(event.target.value) || 0)}
+                                className="h-9 text-center"
+                              />
+                            </td>
+                            <td className="bg-emerald-50/50 px-3 py-3 text-center font-mono font-semibold text-emerald-700">
+                              {pureWeight.toFixed(4)}
+                            </td>
+                            <td className="px-3 py-3">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.makingRate || ""}
+                                onChange={(event) => updateWholesaleItem(index, "makingRate", Number(event.target.value) || 0)}
+                                className="h-9 text-center"
+                                placeholder="AED/g"
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.makingAed || ""}
+                                onChange={(event) => updateWholesaleItem(index, "makingAed", Number(event.target.value) || 0)}
+                                className="h-9 text-center"
+                                placeholder="AED"
+                              />
+                            </td>
+                            {wholesalePricingType === "fixed" && (
+                              <td className="bg-primary/5 px-3 py-3">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.0001"
+                                  value={item.rateAedPerGram || ""}
+                                  onChange={(event) => updateWholesaleItem(index, "rateAedPerGram", Number(event.target.value) || 0)}
+                                  className="h-9 border-primary/30 text-center font-mono"
+                                  placeholder="AED/g"
+                                />
+                              </td>
+                            )}
+                            <td className="px-1 py-3">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeWholesaleItem(item.id)}
+                                disabled={wholesaleItems.length === 1}
+                                aria-label={`Remove wholesale item ${index + 1}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <Button type="button" variant="outline" className="mt-4 w-full border-dashed" onClick={addWholesaleItem}>
+                  <Plus className="mr-2 h-4 w-4" /> Add Line Item
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div>
+            <Card className="lg:sticky lg:top-6">
+              <CardHeader className="border-b border-border/50 bg-muted/20 pb-3">
+                <CardTitle>Summary &amp; Save</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label>Invoice Date</Label>
+                  <Input
+                    type="date"
+                    value={wholesaleInvoiceDate}
+                    onChange={(event) => setWholesaleInvoiceDate(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={wholesaleNotes}
+                    onChange={(event) => setWholesaleNotes(event.target.value)}
+                    placeholder="Optional delivery notes"
+                    className="min-h-20 resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2 rounded-md bg-sidebar p-4 text-sidebar-foreground">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-sidebar-foreground/70">Gross Weight</span>
+                    <span className="font-mono">{wholesaleTotalGross.toFixed(4)} g</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold text-emerald-400">
+                    <span>Pure Weight</span>
+                    <span className="font-mono">{wholesaleTotalPure.toFixed(4)} g</span>
+                  </div>
+                  <div className="flex justify-between border-t border-sidebar-border pt-2 text-sm">
+                    <span className="text-sidebar-foreground/70">Making Amount</span>
+                    <span className="font-mono">{fmt(wholesaleTotalMaking)} AED</span>
+                  </div>
+                  {wholesalePricingType === "fixed" && (
+                    <div className="flex justify-between border-t border-sidebar-border pt-2 font-bold text-white">
+                      <span>Fixed Invoice Total</span>
+                      <span className="font-mono">{fmt(wholesaleTotalAed)} AED</span>
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full"
+                  onClick={handleWholesaleSubmit}
+                  disabled={createWholesaleInvoice.isPending || createWholesaleTrader.isPending}
+                >
+                  {createWholesaleInvoice.isPending || createWholesaleTrader.isPending ? (
+                    "Saving Wholesale Invoice..."
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Save / Create Wholesale Invoice
+                    </>
+                  )}
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Saves directly and keeps you on this invoice page.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-20 px-1 sm:px-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary mb-2 sm:mb-4">New Invoice</h1>
-          <InvoiceModeSelector mode="retail" />
+          {modeSelector}
         </div>
       </div>
       <div className="space-y-6">
