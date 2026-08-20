@@ -17,7 +17,6 @@ import {
   getListWholesaleTradersQueryKey,
   WholesaleInvoiceInputPricingType,
   WholesaleInvoiceItemInputCategory,
-  WholesaleInvoiceInputPaymentMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -379,7 +378,6 @@ export default function NewInvoice() {
   const [newWholesaleTraderAddress, setNewWholesaleTraderAddress] = useState("");
 
   const [wholesalePricingType, setWholesalePricingType] = useState<WholesaleInvoiceInputPricingType>("unfixed");
-  const [wholesalePaymentMode, setWholesalePaymentMode] = useState<WholesaleInvoiceInputPaymentMode>("cash");
   const [wholesaleMetalRate, setWholesaleMetalRate] = useState(0);
   const [wholesaleInvoiceDate, setWholesaleInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [wholesaleNotes, setWholesaleNotes] = useState("");
@@ -771,7 +769,6 @@ export default function NewInvoice() {
         traderId: resolvedTraderId,
         invoiceDate: wholesaleInvoiceDate,
         pricingType: wholesalePricingType,
-        paymentMode: wholesalePaymentMode,
         notes: wholesaleNotes.trim() || undefined,
         idempotencyKey: wholesaleIdempotencyKey.current,
         items: wholesaleItems.map((item) => ({
@@ -1135,23 +1132,6 @@ export default function NewInvoice() {
                     ? "Metal remains open by pure weight; making is posted now."
                     : "Metal and making are posted in AED at the entered fixed rate."}
                 </p>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Payment Mode</Label>
-                <Select
-                  value={wholesalePaymentMode}
-                  onValueChange={(val: any) => setWholesalePaymentMode(val)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash Payment</SelectItem>
-                    <SelectItem value="card">Card Payment</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="space-y-2">
