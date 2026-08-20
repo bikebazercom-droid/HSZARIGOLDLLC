@@ -10,6 +10,8 @@ export interface WholesaleTrader {
   id: number;
   name: string;
   /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
   phone?: string | null;
   /** @nullable */
   email?: string | null;

@@ -5,6 +5,7 @@
  * Gold Shop Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { WholesaleInvoiceInputPaymentMode } from './wholesaleInvoiceInputPaymentMode';
 import type { WholesaleInvoiceInputPricingType } from './wholesaleInvoiceInputPricingType';
 import type { WholesaleInvoiceItemInput } from './wholesaleInvoiceItemInput';
 
@@ -13,6 +14,7 @@ export interface WholesaleInvoiceInput {
   /** yyyy-MM-dd */
   invoiceDate: string;
   pricingType: WholesaleInvoiceInputPricingType;
+  paymentMode?: WholesaleInvoiceInputPaymentMode;
   notes?: string;
   /** @maxLength 128 */
   idempotencyKey?: string;

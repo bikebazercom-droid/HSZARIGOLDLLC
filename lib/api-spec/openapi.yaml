@@ -2391,6 +2391,8 @@ components:
           type: integer
         name:
           type: string
+        contactPerson:
+          type: ["string", "null"]
         phone:
           type: ["string", "null"]
         email:
@@ -2416,6 +2418,9 @@ components:
           type: string
           minLength: 1
           maxLength: 300
+        contactPerson:
+          type: string
+          maxLength: 300
         phone:
           type: string
           maxLength: 100
@@ -2438,6 +2443,9 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 300
+        contactPerson:
+          type: string
           maxLength: 300
         phone:
           type: string
@@ -2508,6 +2516,8 @@ components:
           type: ["integer", "null"]
         traderName:
           type: string
+        traderContactPerson:
+          type: ["string", "null"]
         traderPhone:
           type: ["string", "null"]
         traderEmail:
@@ -2519,6 +2529,9 @@ components:
         pricingType:
           type: string
           enum: [fixed, unfixed]
+        paymentMode:
+          type: ["string", "null"]
+          enum: [cash, card, bank_transfer, null]
         notes:
           type: ["string", "null"]
         createdByUserId:
@@ -2593,6 +2606,9 @@ components:
         pricingType:
           type: string
           enum: [fixed, unfixed]
+        paymentMode:
+          type: string
+          enum: [cash, card, bank_transfer]
         notes:
           type: string
         idempotencyKey:

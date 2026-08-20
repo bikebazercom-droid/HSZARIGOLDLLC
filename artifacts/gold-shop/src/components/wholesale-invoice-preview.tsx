@@ -55,6 +55,17 @@ function fmtWt(n: number | null | undefined): string {
   return (n == null || n === 0) ? "-" : n.toLocaleString("en-AE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
+function pricingTypeLabel(pricingType: "fixed" | "unfixed"): string {
+  return pricingType === "fixed" ? "Fixed Gold Pricing" : "Unfixed Gold Delivery";
+}
+
+function paymentModeLabel(paymentMode: "cash" | "card" | "bank_transfer" | null | undefined): string {
+  if (paymentMode === "cash") return "Cash Payment";
+  if (paymentMode === "card") return "Card Payment";
+  if (paymentMode === "bank_transfer") return "Bank Transfer";
+  return "Ledger Posting (Legacy)";
+}
+
 function numberToWords(n: number): string {
   if (n === 0) return "Zero Dirhams Only";
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven",
@@ -324,7 +335,8 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
                   {[
                     { label: "Invoice No:", value: invoice.invoiceNumber },
                     { label: "Date:", value: format(new Date(invoice.invoiceDate), "dd/MM/yyyy") },
-                    { label: "Payment Terms:", value: "Ledger Posting" },
+                    { label: "Pricing Type:", value: pricingTypeLabel(invoice.pricingType) },
+                    { label: "Payment Mode:", value: paymentModeLabel(invoice.paymentMode) },
                     { label: "Metal Rate (AED/g):", value: metalRateAed == null ? "Pending rate fix" : fmt(metalRateAed) },
                     { label: "Place of Supply:", value: "Dubai, UAE" },
                   ].map(({ label, value }) => (
@@ -367,12 +379,16 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
                       </td>
                     </tr>
                     <tr>
-                      <td style={fieldLabelCellStyle}>Email</td>
+                      <td style={fieldLabelCellStyle}>Contact</td>
                       <td style={fieldColonCellStyle}>:</td>
                       <td style={{ ...fieldValueCellStyle, borderRight: `2px solid ${NAVY}` }}>
+                        <div style={underlineFieldStyle}>{invoice.traderContactPerson || "-"}</div>
+                      </td>
+                      <td style={fieldLabelCellStyle}>Email</td>
+                      <td style={fieldColonCellStyle}>:</td>
+                      <td style={fieldValueCellStyle}>
                         <div style={underlineFieldStyle}>{invoice.traderEmail ?? ""}</div>
                       </td>
-                      <td colSpan={3} style={{ padding: "5px 8px" }}></td>
                     </tr>
                   </tbody>
                 </table>
@@ -466,9 +482,13 @@ export function WholesaleInvoicePreview({ invoiceId, onClose, onDeleteClick, isA
                   <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Amount In Words (AED):</span>
                   <span style={{ fontStyle: "italic" }}>{numberToWords(invoice.totalAed)}</span>
                 </div>
+                <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #eee", gap: "8px" }}>
+                  <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Pricing Type:</span>
+                  <span style={{ fontWeight: "bold" }}>{pricingTypeLabel(invoice.pricingType)}</span>
+                </div>
                 <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", gap: "8px" }}>
                   <span style={{ fontWeight: "bold", color: NAVY, minWidth: "160px" }}>Payment Mode:</span>
-                  <span style={{ fontWeight: "bold" }}>LEDGER POSTING ({invoice.pricingType.toUpperCase()})</span>
+                  <span style={{ fontWeight: "bold" }}>{paymentModeLabel(invoice.paymentMode)}</span>
                 </div>
               </div>
 

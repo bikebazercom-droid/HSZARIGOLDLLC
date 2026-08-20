@@ -563,11 +563,28 @@ async function run(): Promise<void> {
 
   // ── Setup: create trader + stock batch ──────────────────────────────────────
   console.log("\n─── Setup: trader + stock ───");
-  const trader = await apiJson<{ id: number; name: string }>("/wholesale/traders", {
+  const trader = await apiJson<{
+    id: number;
+    name: string;
+    contactPerson: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+  }>("/wholesale/traders", {
     method: "POST",
-    body: JSON.stringify({ name: "TEST-DELETE-TRADER", phone: "+971509999999", isActive: true }),
+    body: JSON.stringify({
+      name: "TEST-DELETE-TRADER",
+      contactPerson: "Original Test Contact",
+      email: "wholesale-delete@example.test",
+      phone: "+971509999999",
+      address: "Original Test Address, Dubai",
+      isActive: true,
+    }),
   });
   toClean.traderIds.push(trader.id);
+  assertEq(trader.contactPerson, "Original Test Contact", "Trader API persists contact person");
+  assertEq(trader.email, "wholesale-delete@example.test", "Trader API persists email");
+  assertEq(trader.address, "Original Test Address, Dubai", "Trader API persists full address");
 
   const stockPurchaseId = await createStockPurchase(200, 400);
 
@@ -604,6 +621,8 @@ async function run(): Promise<void> {
   console.log("\n─── Test 4: Fixed invoice delete ───");
   const fixedInvoice = await apiJson<{
     id: number; invoiceNumber: string; totalAed: number; status: string;
+    traderContactPerson: string | null; traderEmail: string | null; traderAddress: string | null;
+    paymentMode: string | null;
     items: Array<{ id: number; grossGrams: number }>;
   }>("/wholesale/invoices", {
     method: "POST",
@@ -611,6 +630,7 @@ async function run(): Promise<void> {
       traderId: trader.id,
       invoiceDate: "2025-01-15",
       pricingType: "fixed",
+      paymentMode: "card",
       idempotencyKey: `del-fixed-${Date.now()}`,
       items: [{
         description: "Fixed delete test",
@@ -624,6 +644,53 @@ async function run(): Promise<void> {
     }),
   });
   toClean.invoiceIds.push(fixedInvoice.id);
+  assertEq(fixedInvoice.paymentMode, "card", "Wholesale invoice API returns saved payment mode");
+  assertEq(
+    fixedInvoice.traderContactPerson,
+    "Original Test Contact",
+    "Wholesale invoice snapshots trader contact person",
+  );
+  assertEq(
+    fixedInvoice.traderEmail,
+    "wholesale-delete@example.test",
+    "Wholesale invoice snapshots trader email",
+  );
+  assertEq(
+    fixedInvoice.traderAddress,
+    "Original Test Address, Dubai",
+    "Wholesale invoice snapshots trader address",
+  );
+
+  await apiJson(`/wholesale/traders/${trader.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      contactPerson: "Updated Test Contact",
+      email: "updated-wholesale@example.test",
+      address: "Updated Test Address",
+    }),
+  });
+  const fixedSnapshot = await apiJson<{
+    traderContactPerson: string | null;
+    traderEmail: string | null;
+    traderAddress: string | null;
+    paymentMode: string | null;
+  }>(`/wholesale/invoices/${fixedInvoice.id}`);
+  assertEq(
+    fixedSnapshot.traderContactPerson,
+    "Original Test Contact",
+    "Existing invoice contact snapshot survives later trader edits",
+  );
+  assertEq(
+    fixedSnapshot.traderEmail,
+    "wholesale-delete@example.test",
+    "Existing invoice email snapshot survives later trader edits",
+  );
+  assertEq(
+    fixedSnapshot.traderAddress,
+    "Original Test Address, Dubai",
+    "Existing invoice address snapshot survives later trader edits",
+  );
+  assertEq(fixedSnapshot.paymentMode, "card", "Existing invoice payment mode remains frozen");
 
   const [batchAfterFixed] = await db.select().from(stockPurchasesTable)
     .where(eq(stockPurchasesTable.id, stockPurchaseId));

@@ -12,6 +12,8 @@ export interface WholesaleTraderInput {
      * @maxLength 300
      */
   name: string;
+  /** @maxLength 300 */
+  contactPerson?: string;
   /** @maxLength 100 */
   phone?: string;
   /** @maxLength 254 */

@@ -202,6 +202,7 @@ export interface CreateInvoiceArgs {
   traderId: number;
   traderSnapshot: {
     name: string;
+    contactPerson?: string | null;
     phone?: string | null;
     email?: string | null;
     address?: string | null;
@@ -209,6 +210,7 @@ export interface CreateInvoiceArgs {
   };
   invoiceDate: string;
   pricingType: "fixed" | "unfixed";
+  paymentMode?: "cash" | "card" | "bank_transfer" | null;
   notes?: string | null;
   createdByUserId?: number | null;
   createdByUserName?: string | null;
@@ -321,11 +323,13 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
       invoiceDate: args.invoiceDate,
       traderId: args.traderId,
       traderName: args.traderSnapshot.name,
+      traderContactPerson: args.traderSnapshot.contactPerson ?? null,
       traderPhone: args.traderSnapshot.phone ?? null,
       traderEmail: args.traderSnapshot.email ?? null,
       traderAddress: args.traderSnapshot.address ?? null,
       traderTrn: args.traderSnapshot.trn ?? null,
       pricingType,
+      paymentMode: args.paymentMode ?? null,
       notes: args.notes ?? null,
       createdByUserId: args.createdByUserId ?? null,
       createdByUserName: args.createdByUserName ?? null,
@@ -446,6 +450,7 @@ export async function createWholesaleInvoice(args: CreateInvoiceArgs) {
         traderId: args.traderId,
         traderName: args.traderSnapshot.name,
         pricingType,
+        paymentMode: args.paymentMode ?? null,
         totalAed: invoice.totalAed,
         totalGrossGrams: invoice.totalGrossGrams,
         itemCount: savedItems.length,

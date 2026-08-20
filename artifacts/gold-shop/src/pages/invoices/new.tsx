@@ -17,17 +17,20 @@ import {
   getListWholesaleTradersQueryKey,
   WholesaleInvoiceInputPricingType,
   WholesaleInvoiceItemInputCategory,
+  WholesaleInvoiceInputPaymentMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Plus, Save, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Save, Trash2, Building2, User, Phone, Mail, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { WholesaleInvoicePreview } from "@/components/wholesale-invoice-preview";
 import { tenTolaPurityMultiplier } from "@/lib/invoice-category-rates";
 
 interface LineItem {
@@ -370,12 +373,18 @@ export default function NewInvoice() {
   const [wholesaleTraderId, setWholesaleTraderId] = useState<number | null>(null);
   const [isAddingWholesaleTrader, setIsAddingWholesaleTrader] = useState(false);
   const [newWholesaleTraderName, setNewWholesaleTraderName] = useState("");
+  const [newWholesaleTraderContact, setNewWholesaleTraderContact] = useState("");
+  const [newWholesaleTraderEmail, setNewWholesaleTraderEmail] = useState("");
   const [newWholesaleTraderPhone, setNewWholesaleTraderPhone] = useState("");
+  const [newWholesaleTraderAddress, setNewWholesaleTraderAddress] = useState("");
+
   const [wholesalePricingType, setWholesalePricingType] = useState<WholesaleInvoiceInputPricingType>("unfixed");
+  const [wholesalePaymentMode, setWholesalePaymentMode] = useState<WholesaleInvoiceInputPaymentMode>("cash");
   const [wholesaleMetalRate, setWholesaleMetalRate] = useState(0);
   const [wholesaleInvoiceDate, setWholesaleInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [wholesaleNotes, setWholesaleNotes] = useState("");
   const [wholesaleSuccess, setWholesaleSuccess] = useState<string | null>(null);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<number | null>(null);
   const [wholesaleItems, setWholesaleItems] = useState<WholesaleEntryLineItem[]>([{
     id: crypto.randomUUID(),
     description: "",
@@ -762,6 +771,7 @@ export default function NewInvoice() {
         traderId: resolvedTraderId,
         invoiceDate: wholesaleInvoiceDate,
         pricingType: wholesalePricingType,
+        paymentMode: wholesalePaymentMode,
         notes: wholesaleNotes.trim() || undefined,
         idempotencyKey: wholesaleIdempotencyKey.current,
         items: wholesaleItems.map((item) => ({
@@ -779,6 +789,7 @@ export default function NewInvoice() {
     }, {
       onSuccess: (invoice) => {
         wholesaleIdempotencyKey.current = crypto.randomUUID();
+        setPreviewInvoiceId(invoice.id);
         setWholesaleSuccess(`Wholesale invoice ${invoice.invoiceNumber} was created successfully.`);
         setWholesaleItems([{
           id: crypto.randomUUID(),
@@ -796,8 +807,8 @@ export default function NewInvoice() {
           predicate: (query) => JSON.stringify(query.queryKey).includes("/api/wholesale"),
         });
         toast({
-          title: "Wholesale invoice created",
-          description: `${invoice.invoiceNumber} was saved without leaving this page.`,
+          title: "Wholesale invoice generated",
+          description: `${invoice.invoiceNumber} was successfully created.`,
         });
       },
       onError: (error: any) => {
@@ -810,14 +821,53 @@ export default function NewInvoice() {
     });
   };
 
-  const handleWholesaleSubmit = () => {
-    setWholesaleSuccess(null);
-    if (!isAddingWholesaleTrader && !wholesaleTraderId) {
-      toast({ title: "Trader required", description: "Select an existing trader or add a new trader.", variant: "destructive" });
+  const handleCreateTrader = () => {
+    if (!newWholesaleTraderName.trim()) {
+      toast({ title: "Company name required", description: "Enter the new trader's company name.", variant: "destructive" });
       return;
     }
-    if (isAddingWholesaleTrader && !newWholesaleTraderName.trim()) {
-      toast({ title: "Trader name required", description: "Enter the new trader's company name.", variant: "destructive" });
+    if (!newWholesaleTraderContact.trim()) {
+      toast({ title: "Contact person required", description: "Enter the wholesaler's contact person.", variant: "destructive" });
+      return;
+    }
+    if (newWholesaleTraderEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newWholesaleTraderEmail.trim())) {
+      toast({ title: "Valid email required", description: "Check the wholesaler's email address.", variant: "destructive" });
+      return;
+    }
+    createWholesaleTrader.mutate({
+      data: {
+        name: newWholesaleTraderName.trim(),
+        contactPerson: newWholesaleTraderContact.trim(),
+        email: newWholesaleTraderEmail.trim() || undefined,
+        phone: newWholesaleTraderPhone.trim() || undefined,
+        address: newWholesaleTraderAddress.trim() || undefined,
+      },
+    }, {
+      onSuccess: (trader) => {
+        setWholesaleTraderId(trader.id);
+        setIsAddingWholesaleTrader(false);
+        setNewWholesaleTraderName("");
+        setNewWholesaleTraderContact("");
+        setNewWholesaleTraderEmail("");
+        setNewWholesaleTraderPhone("");
+        setNewWholesaleTraderAddress("");
+        queryClient.invalidateQueries({ queryKey: getListWholesaleTradersQueryKey({}) });
+        toast({ title: "Trader Created", description: `${trader.name} was successfully registered.` });
+      },
+      onError: (error: any) => {
+        toast({
+          title: "Unable to create trader",
+          description: error.message || "Please try again.",
+          variant: "destructive",
+        });
+      },
+    });
+  };
+
+  const handleWholesaleSubmit = () => {
+    setWholesaleSuccess(null);
+    if (!wholesaleTraderId) {
+      toast({ title: "Trader required", description: "Select an existing trader or add a new one.", variant: "destructive" });
       return;
     }
     if (wholesaleItems.some((item) => !item.description)) {
@@ -833,32 +883,6 @@ export default function NewInvoice() {
       && wholesaleMetalRate <= 0
     ) {
       toast({ title: "Fixed rate required", description: "Enter the metal rate for this fixed-gold invoice.", variant: "destructive" });
-      return;
-    }
-
-    if (isAddingWholesaleTrader) {
-      createWholesaleTrader.mutate({
-        data: {
-          name: newWholesaleTraderName.trim(),
-          phone: newWholesaleTraderPhone.trim() || undefined,
-        },
-      }, {
-        onSuccess: (trader) => {
-          setWholesaleTraderId(trader.id);
-          setIsAddingWholesaleTrader(false);
-          setNewWholesaleTraderName("");
-          setNewWholesaleTraderPhone("");
-          queryClient.invalidateQueries({ queryKey: getListWholesaleTradersQueryKey({}) });
-          submitWholesaleInvoice(trader.id);
-        },
-        onError: (error: any) => {
-          toast({
-            title: "Unable to create trader",
-            description: error.message || "Please try again.",
-            variant: "destructive",
-          });
-        },
-      });
       return;
     }
 
@@ -1038,60 +1062,40 @@ export default function NewInvoice() {
             </CardHeader>
             <CardContent className="space-y-5 pt-5">
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Trader</Label>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0"
-                    onClick={() => {
-                      setWholesaleSuccess(null);
-                      setIsAddingWholesaleTrader((current) => !current);
-                    }}
-                  >
-                    {isAddingWholesaleTrader ? "Select existing" : "Add New Trader"}
-                  </Button>
-                </div>
-                {isAddingWholesaleTrader ? (
-                  <div className="grid gap-3 rounded-md border border-border/60 bg-muted/20 p-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Company Name *</Label>
-                      <Input
-                        value={newWholesaleTraderName}
-                        onChange={(event) => setNewWholesaleTraderName(event.target.value)}
-                        placeholder="Trader company"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Phone</Label>
-                      <Input
-                        value={newWholesaleTraderPhone}
-                        onChange={(event) => setNewWholesaleTraderPhone(event.target.value)}
-                        placeholder="+971..."
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <Select
-                    value={wholesaleTraderId?.toString() ?? ""}
-                    onValueChange={(value) => {
-                      setWholesaleSuccess(null);
+                <Label>Trader</Label>
+                <Select
+                  value={wholesaleTraderId?.toString() ?? ""}
+                  onValueChange={(value) => {
+                    setWholesaleSuccess(null);
+                    if (value === "add_new") {
+                      setNewWholesaleTraderName("");
+                      setNewWholesaleTraderContact("");
+                      setNewWholesaleTraderEmail("");
+                      setNewWholesaleTraderPhone("");
+                      setNewWholesaleTraderAddress("");
+                      setIsAddingWholesaleTrader(true);
+                    } else {
                       setWholesaleTraderId(Number(value));
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={wholesaleTradersLoading ? "Loading traders..." : "Select existing trader"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {wholesaleTraders?.map((trader) => (
-                        <SelectItem key={trader.id} value={trader.id.toString()}>
-                          {trader.name}{trader.phone ? ` · ${trader.phone}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={wholesaleTradersLoading ? "Loading traders..." : "Select existing trader"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="add_new" className="font-semibold text-primary">
+                      <div className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        <span>Add New Wholesaler</span>
+                      </div>
+                    </SelectItem>
+                    {wholesaleTraders?.map((trader) => (
+                      <SelectItem key={trader.id} value={trader.id.toString()}>
+                        {trader.name}{trader.phone ? ` · ${trader.phone}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-3">
@@ -1131,6 +1135,23 @@ export default function NewInvoice() {
                     ? "Metal remains open by pure weight; making is posted now."
                     : "Metal and making are posted in AED at the entered fixed rate."}
                 </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Payment Mode</Label>
+                <Select
+                  value={wholesalePaymentMode}
+                  onValueChange={(val: any) => setWholesalePaymentMode(val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash Payment</SelectItem>
+                    <SelectItem value="card">Card Payment</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -1201,14 +1222,14 @@ export default function NewInvoice() {
                 size="lg"
                 className="w-full"
                 onClick={handleWholesaleSubmit}
-                disabled={createWholesaleInvoice.isPending || createWholesaleTrader.isPending}
+                disabled={createWholesaleInvoice.isPending}
               >
-                {createWholesaleInvoice.isPending || createWholesaleTrader.isPending ? (
-                  "Saving Wholesale Invoice..."
+                {createWholesaleInvoice.isPending ? (
+                  "Generating..."
                 ) : (
                   <>
                     <Save className="mr-2 h-4 w-4" />
-                    Create / Save Wholesale Invoice
+                    Generate Wholesale Invoice
                   </>
                 )}
               </Button>
@@ -1218,6 +1239,100 @@ export default function NewInvoice() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Modal for adding a new trader */}
+        <Dialog open={isAddingWholesaleTrader} onOpenChange={setIsAddingWholesaleTrader}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Wholesaler</DialogTitle>
+              <DialogDescription>
+                Register a new trader or wholesaler to generate invoices.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="companyName" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  Company / Firm Name *
+                </Label>
+                <Input
+                  id="companyName"
+                  value={newWholesaleTraderName}
+                  onChange={(e) => setNewWholesaleTraderName(e.target.value)}
+                  placeholder="e.g. Al Safa Gold Trading LLC"
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="contactPerson" className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    Full Name (Contact Person) *
+                  </Label>
+                  <Input
+                    id="contactPerson"
+                    value={newWholesaleTraderContact}
+                    onChange={(e) => setNewWholesaleTraderContact(e.target.value)}
+                    placeholder="Contact Person"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="phone" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    Phone Number
+                  </Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={newWholesaleTraderPhone}
+                    onChange={(e) => setNewWholesaleTraderPhone(e.target.value)}
+                    placeholder="+971..."
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="email" className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  Email Address
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newWholesaleTraderEmail}
+                  onChange={(e) => setNewWholesaleTraderEmail(e.target.value)}
+                  placeholder="trader@example.com"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="address" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  Full Address / Location Details
+                </Label>
+                <Textarea
+                  id="address"
+                  value={newWholesaleTraderAddress}
+                  onChange={(e) => setNewWholesaleTraderAddress(e.target.value)}
+                  placeholder="Office 104, Gold Souq, Deira..."
+                  className="min-h-[80px]"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddingWholesaleTrader(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleCreateTrader} disabled={createWholesaleTrader.isPending}>
+                {createWholesaleTrader.isPending ? "Saving..." : "Save Trader"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview document */}
+        <WholesaleInvoicePreview
+          invoiceId={previewInvoiceId}
+          onClose={() => setPreviewInvoiceId(null)}
+          isAdmin={false}
+        />
       </div>
     );
   }

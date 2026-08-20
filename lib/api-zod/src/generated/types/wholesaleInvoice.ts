@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { WholesaleInvoiceItem } from './wholesaleInvoiceItem';
+import type { WholesaleInvoicePaymentMode } from './wholesaleInvoicePaymentMode';
 import type { WholesaleInvoicePricingType } from './wholesaleInvoicePricingType';
 import type { WholesaleInvoiceStatus } from './wholesaleInvoiceStatus';
 
@@ -17,6 +18,8 @@ export interface WholesaleInvoice {
   traderId?: number | null;
   traderName: string;
   /** @nullable */
+  traderContactPerson?: string | null;
+  /** @nullable */
   traderPhone?: string | null;
   /** @nullable */
   traderEmail?: string | null;
@@ -25,6 +28,8 @@ export interface WholesaleInvoice {
   /** @nullable */
   traderTrn?: string | null;
   pricingType: WholesaleInvoicePricingType;
+  /** @nullable */
+  paymentMode?: WholesaleInvoicePaymentMode;
   /** @nullable */
   notes?: string | null;
   /** @nullable */

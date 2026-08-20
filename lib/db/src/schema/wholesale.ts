@@ -22,6 +22,7 @@ export const wholesaleTradersTable = pgTable(
   {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
+    contactPerson: text("contact_person"),
     phone: text("phone"),
     email: text("email"),
     address: text("address"),
@@ -50,12 +51,14 @@ export const wholesaleInvoicesTable = pgTable(
     // Trader snapshot (frozen at creation)
     traderId: integer("trader_id").references(() => wholesaleTradersTable.id, { onDelete: "set null" }),
     traderName: text("trader_name").notNull(),
+    traderContactPerson: text("trader_contact_person"),
     traderPhone: text("trader_phone"),
     traderEmail: text("trader_email"),
     traderAddress: text("trader_address"),
     traderTrn: text("trader_trn"),
-    // Pricing type
+    // Invoice terms
     pricingType: text("pricing_type").notNull(), // fixed | unfixed
+    paymentMode: text("payment_mode"), // cash | card | bank_transfer
     notes: text("notes"),
     // Creator snapshot
     createdByUserId: integer("created_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),

@@ -62,6 +62,7 @@ const router: IRouter = Router();
 function parseTrader(row: typeof wholesaleTradersTable.$inferSelect) {
   return {
     ...row,
+    contactPerson: row.contactPerson ?? null,
     phone: row.phone ?? null,
     email: row.email ?? null,
     address: row.address ?? null,
@@ -103,11 +104,13 @@ function parseInvoice(
     invoiceDate: row.invoiceDate,
     traderId: row.traderId ?? null,
     traderName: row.traderName,
+    traderContactPerson: row.traderContactPerson ?? null,
     traderPhone: row.traderPhone ?? null,
     traderEmail: row.traderEmail ?? null,
     traderAddress: row.traderAddress ?? null,
     traderTrn: row.traderTrn ?? null,
     pricingType: row.pricingType as "fixed" | "unfixed",
+    paymentMode: row.paymentMode as "cash" | "card" | "bank_transfer" | null,
     notes: row.notes ?? null,
     createdByUserId: row.createdByUserId ?? null,
     createdByUserName: row.createdByUserName ?? null,
@@ -207,10 +210,11 @@ router.post("/wholesale/traders", async (req, res): Promise<void> => {
     res.status(403).json({ error: "PDF test fixture ownership was rejected" });
     return;
   }
-  const { name, phone, email, address, trn, isActive } = parsed.data;
+  const { name, contactPerson, phone, email, address, trn, isActive } = parsed.data;
   const trader = await db.transaction(async (tx) => {
     const [created] = await tx.insert(wholesaleTradersTable).values({
       name: name.trim(),
+      contactPerson: contactPerson?.trim() || null,
       phone: phone?.trim() || null,
       email: email?.trim() || null,
       address: address?.trim() || null,
@@ -236,6 +240,7 @@ router.patch("/wholesale/traders/:id", async (req, res): Promise<void> => {
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (parsed.data.name != null) updates.name = parsed.data.name.trim();
+  if (parsed.data.contactPerson != null) updates.contactPerson = parsed.data.contactPerson.trim() || null;
   if (parsed.data.phone != null) updates.phone = parsed.data.phone.trim() || null;
   if (parsed.data.email != null) updates.email = parsed.data.email.trim() || null;
   if (parsed.data.address != null) updates.address = parsed.data.address.trim() || null;
@@ -350,6 +355,7 @@ router.post("/wholesale/invoices", async (req, res): Promise<void> => {
       traderId: input.traderId,
       traderSnapshot: {
         name: trader.name,
+        contactPerson: trader.contactPerson,
         phone: trader.phone,
         email: trader.email,
         address: trader.address,
@@ -357,6 +363,7 @@ router.post("/wholesale/invoices", async (req, res): Promise<void> => {
       },
       invoiceDate: input.invoiceDate,
       pricingType: input.pricingType as "fixed" | "unfixed",
+      paymentMode: input.paymentMode ?? null,
       notes: input.notes ?? null,
       createdByUserId: req.session?.userId ?? null,
       createdByUserName: req.session?.fullName ?? null,

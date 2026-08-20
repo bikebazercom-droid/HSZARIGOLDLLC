@@ -1254,6 +1254,7 @@ export const ListWholesaleTradersQueryParams = zod.object({
 export const ListWholesaleTradersResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
@@ -1270,6 +1271,8 @@ export const ListWholesaleTradersResponse = zod.array(ListWholesaleTradersRespon
  */
 export const createWholesaleTraderBodyNameMax = 300;
 
+export const createWholesaleTraderBodyContactPersonMax = 300;
+
 export const createWholesaleTraderBodyPhoneMax = 100;
 
 export const createWholesaleTraderBodyEmailMax = 254;
@@ -1282,6 +1285,7 @@ export const createWholesaleTraderBodyTrnMax = 100;
 
 export const CreateWholesaleTraderBody = zod.object({
   "name": zod.string().min(1).max(createWholesaleTraderBodyNameMax),
+  "contactPerson": zod.string().max(createWholesaleTraderBodyContactPersonMax).optional(),
   "phone": zod.string().max(createWholesaleTraderBodyPhoneMax).optional(),
   "email": zod.string().email().max(createWholesaleTraderBodyEmailMax).optional(),
   "address": zod.string().max(createWholesaleTraderBodyAddressMax).optional(),
@@ -1292,6 +1296,7 @@ export const CreateWholesaleTraderBody = zod.object({
 export const CreateWholesaleTraderResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
@@ -1312,6 +1317,7 @@ export const GetWholesaleTraderParams = zod.object({
 export const GetWholesaleTraderResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
@@ -1331,6 +1337,8 @@ export const UpdateWholesaleTraderParams = zod.object({
 
 export const updateWholesaleTraderBodyNameMax = 300;
 
+export const updateWholesaleTraderBodyContactPersonMax = 300;
+
 export const updateWholesaleTraderBodyPhoneMax = 100;
 
 export const updateWholesaleTraderBodyEmailMax = 254;
@@ -1343,6 +1351,7 @@ export const updateWholesaleTraderBodyTrnMax = 100;
 
 export const UpdateWholesaleTraderBody = zod.object({
   "name": zod.string().min(1).max(updateWholesaleTraderBodyNameMax).optional(),
+  "contactPerson": zod.string().max(updateWholesaleTraderBodyContactPersonMax).optional(),
   "phone": zod.string().max(updateWholesaleTraderBodyPhoneMax).optional(),
   "email": zod.string().email().max(updateWholesaleTraderBodyEmailMax).optional(),
   "address": zod.string().max(updateWholesaleTraderBodyAddressMax).optional(),
@@ -1353,6 +1362,7 @@ export const UpdateWholesaleTraderBody = zod.object({
 export const UpdateWholesaleTraderResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
@@ -1376,6 +1386,7 @@ export const GetTraderStatementResponse = zod.object({
   "trader": zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
@@ -1422,11 +1433,13 @@ export const ListWholesaleInvoicesResponseItem = zod.object({
   "invoiceDate": zod.string(),
   "traderId": zod.number().nullish(),
   "traderName": zod.string(),
+  "traderContactPerson": zod.string().nullish(),
   "traderPhone": zod.string().nullish(),
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
   "pricingType": zod.enum(['fixed', 'unfixed']),
+  "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
   "createdByUserName": zod.string().nullish(),
@@ -1490,6 +1503,7 @@ export const CreateWholesaleInvoiceBody = zod.object({
   "traderId": zod.number(),
   "invoiceDate": zod.string().describe('yyyy-MM-dd'),
   "pricingType": zod.enum(['fixed', 'unfixed']),
+  "paymentMode": zod.enum(['cash', 'card', 'bank_transfer']).optional(),
   "notes": zod.string().optional(),
   "idempotencyKey": zod.string().max(createWholesaleInvoiceBodyIdempotencyKeyMax).optional(),
   "items": zod.array(zod.object({
@@ -1509,11 +1523,13 @@ export const CreateWholesaleInvoiceResponse = zod.object({
   "invoiceDate": zod.string(),
   "traderId": zod.number().nullish(),
   "traderName": zod.string(),
+  "traderContactPerson": zod.string().nullish(),
   "traderPhone": zod.string().nullish(),
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
   "pricingType": zod.enum(['fixed', 'unfixed']),
+  "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
   "createdByUserName": zod.string().nullish(),
@@ -1560,11 +1576,13 @@ export const GetWholesaleInvoiceResponse = zod.object({
   "invoiceDate": zod.string(),
   "traderId": zod.number().nullish(),
   "traderName": zod.string(),
+  "traderContactPerson": zod.string().nullish(),
   "traderPhone": zod.string().nullish(),
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
   "pricingType": zod.enum(['fixed', 'unfixed']),
+  "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
   "createdByUserName": zod.string().nullish(),
@@ -1639,11 +1657,13 @@ export const FixWholesaleRateResponse = zod.object({
   "invoiceDate": zod.string(),
   "traderId": zod.number().nullish(),
   "traderName": zod.string(),
+  "traderContactPerson": zod.string().nullish(),
   "traderPhone": zod.string().nullish(),
   "traderEmail": zod.string().nullish(),
   "traderAddress": zod.string().nullish(),
   "traderTrn": zod.string().nullish(),
   "pricingType": zod.enum(['fixed', 'unfixed']),
+  "paymentMode": zod.union([zod.literal('cash'),zod.literal('card'),zod.literal('bank_transfer'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
   "createdByUserName": zod.string().nullish(),

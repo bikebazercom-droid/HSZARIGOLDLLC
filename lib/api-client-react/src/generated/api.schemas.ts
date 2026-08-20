@@ -795,6 +795,8 @@ export interface WholesaleTrader {
   id: number;
   name: string;
   /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
   phone?: string | null;
   /** @nullable */
   email?: string | null;
@@ -813,6 +815,8 @@ export interface WholesaleTraderInput {
      * @maxLength 300
      */
   name: string;
+  /** @maxLength 300 */
+  contactPerson?: string;
   /** @maxLength 100 */
   phone?: string;
   /** @maxLength 254 */
@@ -830,6 +834,8 @@ export interface WholesaleTraderUpdate {
      * @maxLength 300
      */
   name?: string;
+  /** @maxLength 300 */
+  contactPerson?: string;
   /** @maxLength 100 */
   phone?: string;
   /** @maxLength 254 */
@@ -870,6 +876,18 @@ export const WholesaleInvoicePricingType = {
   unfixed: 'unfixed',
 } as const;
 
+/**
+ * @nullable
+ */
+export type WholesaleInvoicePaymentMode = typeof WholesaleInvoicePaymentMode[keyof typeof WholesaleInvoicePaymentMode] | null;
+
+
+export const WholesaleInvoicePaymentMode = {
+  cash: 'cash',
+  card: 'card',
+  bank_transfer: 'bank_transfer',
+} as const;
+
 export type WholesaleInvoiceStatus = typeof WholesaleInvoiceStatus[keyof typeof WholesaleInvoiceStatus];
 
 
@@ -887,6 +905,8 @@ export interface WholesaleInvoice {
   traderId?: number | null;
   traderName: string;
   /** @nullable */
+  traderContactPerson?: string | null;
+  /** @nullable */
   traderPhone?: string | null;
   /** @nullable */
   traderEmail?: string | null;
@@ -895,6 +915,8 @@ export interface WholesaleInvoice {
   /** @nullable */
   traderTrn?: string | null;
   pricingType: WholesaleInvoicePricingType;
+  /** @nullable */
+  paymentMode?: WholesaleInvoicePaymentMode;
   /** @nullable */
   notes?: string | null;
   /** @nullable */
@@ -954,11 +976,21 @@ export const WholesaleInvoiceInputPricingType = {
   unfixed: 'unfixed',
 } as const;
 
+export type WholesaleInvoiceInputPaymentMode = typeof WholesaleInvoiceInputPaymentMode[keyof typeof WholesaleInvoiceInputPaymentMode];
+
+
+export const WholesaleInvoiceInputPaymentMode = {
+  cash: 'cash',
+  card: 'card',
+  bank_transfer: 'bank_transfer',
+} as const;
+
 export interface WholesaleInvoiceInput {
   traderId: number;
   /** yyyy-MM-dd */
   invoiceDate: string;
   pricingType: WholesaleInvoiceInputPricingType;
+  paymentMode?: WholesaleInvoiceInputPaymentMode;
   notes?: string;
   /** @maxLength 128 */
   idempotencyKey?: string;
