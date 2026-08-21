@@ -1,0 +1,29 @@
+================================================================================
+LUXURY DASHBOARD UI & COLOR SCHEME OVERHAUL (GOLD & BULLION THEME)
+================================================================================
+
+Instruction for Agent:
+Redesign the main Dashboard UI to make it modern, visual, and high-contrast, perfectly tailored for a Gold & Jewellery ERP system.
+
+Design Specifications:
+
+1. Overall Dashboard Layout & Background:
+   - Change the stark white dashboard background to a sleek, modern light-slate/gray background (`#F8FAFC` or `#F1F5F9`) or add a Dark Mode toggle option.
+   - Give section headers (e.g., "Financial Control & Profit", "Physical Vault Control", "Operational KPIs") bold dark-navy typography with left accent border indicators in Gold (`#D97706`).
+
+2. Dynamic KPI Card Styling (Contextual Colors):
+   - **Profit & Income Cards** (e.g., Overall Net Profit, Net Profit): Soft Emerald Green background glow/border with green text (`#059669`).
+   - **Gold & Vault Weight Cards** (e.g., Open Pure Grams, Total Physical Remaining, Stock In): Golden/Amber accented background (`#FEF3C7` / `#D97706`).
+   - **Expense & Outstandings Cards** (e.g., Cost of Gold, Outstanding Due): Soft Coral/Rose accent background (`#FFE4E6` / `#E11D48`).
+   - **Card Structure**: Add soft shadows (`shadow-sm` / `shadow-md`), rounded corners (`rounded-xl`), and crisp top borders matching their theme color.
+
+3. Category-wise Vault Breakdown Table Upgrade:
+   - Header Row: Dark Navy background (`#0F172A`) with crisp white bold text.
+   - Row Styling: Alternating light gray zebra rows (`#FAFAFA`) with subtle hover effects.
+   - Text Contrast: Make category names bold dark navy and key weights highlighted in bold amber.
+
+4. Top Navigation & Action Buttons:
+   - Make the "New Invoice" primary button stand out with a rich Gold/Amber gradient (`from-amber-500 to-amber-600`) and subtle drop shadow.
+
+Please apply these styling improvements across the Dashboard component!
+================================================================================
