@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { STOCK_CATEGORIES } from "@/pages/products/stock";
+import { PurchaseBillPreview } from "@/components/purchase-bill-preview";
 
 interface LineDraft {
   category: string;
@@ -115,6 +116,7 @@ export function PurchaseBillEntryForm({
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [localLiableSuppliers, setLocalLiableSuppliers] = useState<Set<string>>(new Set());
+  const [previewBillId, setPreviewBillId] = useState<number | null>(null);
 
   const activeSessionLiableSuppliers = sessionLiableSuppliers ?? localLiableSuppliers;
   const isUnfixedForm = purchaseTypeUI === "unfixed";
@@ -216,7 +218,7 @@ export function PurchaseBillEntryForm({
       {
         onSuccess: (bill) => {
           toast({
-            title: `Purchase bill ${bill.billNo} saved`,
+            title: `Purchase bill ${bill.billNo} generated`,
             description: `${formatGrams(bill.totalGrossGrams)} g · AED ${formatAed(bill.totalAed)} posted to stock & ledgers`,
           });
           if (bill.paymentStatus === "unpaid" || bill.paymentStatus === "unfixed") {
@@ -226,11 +228,11 @@ export function PurchaseBillEntryForm({
           }
           invalidatePurchaseData();
           resetForm();
-          onSaved?.();
+          setPreviewBillId(bill.id);
         },
         onError: (error: unknown) => {
           toast({
-            title: "Failed to save bill",
+            title: "Failed to generate purchase bill",
             description: error instanceof Error ? error.message : undefined,
             variant: "destructive",
           });
@@ -509,29 +511,49 @@ export function PurchaseBillEntryForm({
         disabled={createBill.isPending}
       >
         <FilePlus2 className="mr-2 h-5 w-5" />
-        {createBill.isPending ? "Saving..." : "Save Purchase Bill"}
+        {createBill.isPending ? "Generating..." : "Generate Purchase Bill"}
       </Button>
     </div>
   );
 
-  if (variant === "sheet") return formContent;
+  const preview = (
+    <PurchaseBillPreview
+      billId={previewBillId}
+      onClose={() => {
+        setPreviewBillId(null);
+        onSaved?.();
+      }}
+    />
+  );
+
+  if (variant === "sheet") {
+    return (
+      <>
+        {formContent}
+        {preview}
+      </>
+    );
+  }
 
   return (
-    <Card className="overflow-hidden border-emerald-200 shadow-sm">
-      <CardHeader className="border-b border-emerald-100 bg-emerald-50/70">
-        <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-emerald-700 p-2 text-white shadow-sm">
-            <FilePlus2 className="h-5 w-5" />
+    <>
+      <Card className="overflow-hidden border-emerald-200 shadow-sm">
+        <CardHeader className="border-b border-emerald-100 bg-emerald-50/70">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-emerald-700 p-2 text-white shadow-sm">
+              <FilePlus2 className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="text-emerald-950">Supplier Purchase Bill Entry</CardTitle>
+              <p className="mt-1 text-sm text-emerald-900/70">
+                Record inbound stock or metal from a supplier. Each line creates a stock batch and supplier ledger entries.
+              </p>
+            </div>
           </div>
-          <div>
-            <CardTitle className="text-emerald-950">Supplier Purchase Bill Entry</CardTitle>
-            <p className="mt-1 text-sm text-emerald-900/70">
-              Record inbound stock or metal from a supplier. Each line creates a stock batch and supplier ledger entries.
-            </p>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-5">{formContent}</CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="pt-5">{formContent}</CardContent>
+      </Card>
+      {preview}
+    </>
   );
 }

@@ -743,7 +743,7 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
         response.request().method() === "POST"
         && new URL(response.url()).pathname.endsWith("/api/purchase-bills")
       ));
-      await page.getByRole("button", { name: "Save Purchase Bill", exact: true }).click();
+      await page.getByRole("button", { name: "Generate Purchase Bill", exact: true }).click();
       const createResponse = await createResponsePromise;
       expect(createResponse.status()).toBe(201);
       const inlineBill = await createResponse.json() as CreatedRecord & {
@@ -755,7 +755,30 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       expect(inlineBill.billNo).toBe(inlineBillNo);
       expect(inlineBill.purchaseType).toBe("fixed");
       expect(inlineBill.paymentStatus).toBe("paid");
-      await expect(page.getByText(`Purchase bill ${inlineBillNo} saved`, { exact: true })).toBeVisible();
+      await expect(page.getByText(`Purchase bill ${inlineBillNo} generated`, { exact: true })).toBeVisible();
+      const purchasePreview = page.getByRole("dialog", { name: `Purchase Bill ${inlineBillNo}` });
+      await expect(purchasePreview).toBeVisible();
+      await expect(purchasePreview).toContainText(inlineSupplier);
+      await expect(purchasePreview).toContainText("Cash Payment");
+      await expect(purchasePreview).toContainText("3.000 g");
+      await expect(purchasePreview).toContainText("AED 300.00");
+
+      const purchasePdfDownload = page.waitForEvent("download");
+      await purchasePreview.getByRole("button", { name: "Download PDF", exact: true }).click();
+      expect((await purchasePdfDownload).suggestedFilename()).toBe(`purchase-bill-${inlineBillNo}.pdf`);
+
+      await page.evaluate(() => {
+        (window as typeof window & { __purchaseBillPrintCalled?: boolean }).__purchaseBillPrintCalled = false;
+        window.print = () => {
+          (window as typeof window & { __purchaseBillPrintCalled?: boolean }).__purchaseBillPrintCalled = true;
+        };
+      });
+      await purchasePreview.getByRole("button", { name: "Print", exact: true }).click();
+      expect(await page.evaluate(() => (
+        (window as typeof window & { __purchaseBillPrintCalled?: boolean }).__purchaseBillPrintCalled
+      ))).toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(purchasePreview).toBeHidden();
       await expect(billNoInput).toHaveValue("");
 
       await retailTab.click();
