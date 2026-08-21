@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Plus, Save, Trash2, Building2, User, Phone, Mail, MapPin } from "lucide-react";
+import { CheckCircle2, Plus, Save, Trash2, Building2, Phone, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -397,10 +397,8 @@ export default function NewInvoice() {
   const [wholesaleTraderId, setWholesaleTraderId] = useState<number | null>(null);
   const [isAddingWholesaleTrader, setIsAddingWholesaleTrader] = useState(false);
   const [newWholesaleTraderName, setNewWholesaleTraderName] = useState("");
-  const [newWholesaleTraderContact, setNewWholesaleTraderContact] = useState("");
   const [newWholesaleTraderEmail, setNewWholesaleTraderEmail] = useState("");
   const [newWholesaleTraderPhone, setNewWholesaleTraderPhone] = useState("");
-  const [newWholesaleTraderAddress, setNewWholesaleTraderAddress] = useState("");
 
   const [wholesalePricingType, setWholesalePricingType] = useState<WholesaleInvoiceInputPricingType>("unfixed");
   const [wholesaleMetalRate, setWholesaleMetalRate] = useState(0);
@@ -848,11 +846,7 @@ export default function NewInvoice() {
 
   const handleCreateTrader = () => {
     if (!newWholesaleTraderName.trim()) {
-      toast({ title: "Company name required", description: "Enter the new trader's company name.", variant: "destructive" });
-      return;
-    }
-    if (!newWholesaleTraderContact.trim()) {
-      toast({ title: "Contact person required", description: "Enter the wholesaler's contact person.", variant: "destructive" });
+      toast({ title: "Trader name required", description: "Enter the new trader's name.", variant: "destructive" });
       return;
     }
     if (newWholesaleTraderEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newWholesaleTraderEmail.trim())) {
@@ -862,20 +856,16 @@ export default function NewInvoice() {
     createWholesaleTrader.mutate({
       data: {
         name: newWholesaleTraderName.trim(),
-        contactPerson: newWholesaleTraderContact.trim(),
         email: newWholesaleTraderEmail.trim() || undefined,
         phone: newWholesaleTraderPhone.trim() || undefined,
-        address: newWholesaleTraderAddress.trim() || undefined,
       },
     }, {
       onSuccess: (trader) => {
         setWholesaleTraderId(trader.id);
         setIsAddingWholesaleTrader(false);
         setNewWholesaleTraderName("");
-        setNewWholesaleTraderContact("");
         setNewWholesaleTraderEmail("");
         setNewWholesaleTraderPhone("");
-        setNewWholesaleTraderAddress("");
         queryClient.invalidateQueries({ queryKey: getListWholesaleTradersQueryKey({}) });
         toast({ title: "Trader Created", description: `${trader.name} was successfully registered.` });
       },
@@ -1171,10 +1161,8 @@ export default function NewInvoice() {
                     setWholesaleSuccess(null);
                     if (value === "add_new") {
                       setNewWholesaleTraderName("");
-                      setNewWholesaleTraderContact("");
                       setNewWholesaleTraderEmail("");
                       setNewWholesaleTraderPhone("");
-                      setNewWholesaleTraderAddress("");
                       setIsAddingWholesaleTrader(true);
                     } else {
                       setWholesaleTraderId(Number(value));
@@ -1188,7 +1176,7 @@ export default function NewInvoice() {
                     <SelectItem value="add_new" className="font-semibold text-primary">
                       <div className="flex items-center gap-2">
                         <Plus className="h-4 w-4" />
-                        <span>Add New Wholesaler</span>
+                        <span>Add New Trader</span>
                       </div>
                     </SelectItem>
                     {wholesaleTraders?.map((trader) => (
@@ -1341,54 +1329,39 @@ export default function NewInvoice() {
           </Card>
         </div>
 
-        {/* Modal for adding a new trader */}
         <Dialog open={isAddingWholesaleTrader} onOpenChange={setIsAddingWholesaleTrader}>
           <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[500px] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Add New Wholesaler</DialogTitle>
+              <DialogTitle>Add New Trader</DialogTitle>
               <DialogDescription>
-                Register a new trader or wholesaler to generate invoices.
+                Register a trader without leaving this wholesale invoice.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="companyName" className="flex items-center gap-2">
+                <Label htmlFor="wholesaleTraderName" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-muted-foreground" />
-                  Company / Firm Name *
+                  Trader / Customer Name *
                 </Label>
                 <Input
-                  id="companyName"
+                  id="wholesaleTraderName"
                   value={newWholesaleTraderName}
                   onChange={(e) => setNewWholesaleTraderName(e.target.value)}
-                  placeholder="e.g. Al Safa Gold Trading LLC"
+                  placeholder="e.g. Al Safa Gold Trading"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="contactPerson" className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    Full Name (Contact Person) *
-                  </Label>
-                  <Input
-                    id="contactPerson"
-                    value={newWholesaleTraderContact}
-                    onChange={(e) => setNewWholesaleTraderContact(e.target.value)}
-                    placeholder="Contact Person"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="phone" className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    Phone Number
-                  </Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={newWholesaleTraderPhone}
-                    onChange={(e) => setNewWholesaleTraderPhone(e.target.value)}
-                    placeholder="+971..."
-                  />
-                </div>
+              <div className="grid gap-2">
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={newWholesaleTraderPhone}
+                  onChange={(e) => setNewWholesaleTraderPhone(e.target.value)}
+                  placeholder="+971..."
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="email" className="flex items-center gap-2">
@@ -1401,19 +1374,6 @@ export default function NewInvoice() {
                   value={newWholesaleTraderEmail}
                   onChange={(e) => setNewWholesaleTraderEmail(e.target.value)}
                   placeholder="trader@example.com"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="address" className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  Full Address / Location Details
-                </Label>
-                <Textarea
-                  id="address"
-                  value={newWholesaleTraderAddress}
-                  onChange={(e) => setNewWholesaleTraderAddress(e.target.value)}
-                  placeholder="Office 104, Gold Souq, Deira..."
-                  className="min-h-[80px]"
                 />
               </div>
             </div>

@@ -814,10 +814,8 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
 
     await test.step("wholesale registration selects the trader and opens a frozen same-page PDF preview", async () => {
       const traderName = `${runTag} GOLD TRADING`;
-      const traderContact = `SAMIR ${runTag}`;
       const traderPhone = "+971 50 765 4321";
       const traderEmail = `${runTag.toLowerCase()}@example.test`;
-      const traderAddress = `SHOP 42 ${runTag} GOLD SOUQ DEIRA DUBAI UAE`;
 
       await page.route("**/api/wholesale/**", async (route) => {
         if (route.request().method() === "POST") {
@@ -840,9 +838,9 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       const traderField = page.getByText("Trader", { exact: true }).locator("..");
       const traderSelect = traderField.getByRole("combobox");
       await traderSelect.click();
-      await page.getByRole("option", { name: "Add New Wholesaler", exact: true }).click();
+      await page.getByRole("option", { name: "Add New Trader", exact: true }).click();
 
-      const registrationDialog = page.getByRole("dialog", { name: "Add New Wholesaler" });
+      const registrationDialog = page.getByRole("dialog", { name: "Add New Trader" });
       await expect(registrationDialog).toBeVisible();
       await page.setViewportSize({ width: 390, height: 844 });
       await registrationDialog.evaluate(async (element) => {
@@ -861,11 +859,9 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       expect(registrationBox!.height).toBeLessThanOrEqual(844);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
-      await registrationDialog.getByLabel(/Company \/ Firm Name/).fill(traderName);
-      await registrationDialog.getByLabel(/Full Name \(Contact Person\)/).fill(traderContact);
+      await registrationDialog.getByLabel("Trader / Customer Name *").fill(traderName);
       await registrationDialog.getByLabel("Phone Number").fill(traderPhone);
       await registrationDialog.getByLabel("Email Address").fill(traderEmail);
-      await registrationDialog.getByLabel("Full Address / Location Details").fill(traderAddress);
 
       const traderResponsePromise = page.waitForResponse((response) => (
         new URL(response.url()).pathname.endsWith("/api/wholesale/traders")
@@ -885,10 +881,10 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       wholesaleTraderIds.push(trader.id);
       expect(trader).toMatchObject({
         name: traderName,
-        contactPerson: traderContact,
+        contactPerson: null,
         phone: traderPhone,
         email: traderEmail,
-        address: traderAddress,
+        address: null,
       });
       await expect(registrationDialog).toBeHidden();
       await expect(traderSelect).toContainText(traderName);
@@ -967,10 +963,10 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
         pricingType: "fixed",
         paymentMode: null,
         traderName,
-        traderContactPerson: traderContact,
+        traderContactPerson: null,
         traderPhone,
         traderEmail,
-        traderAddress,
+        traderAddress: null,
       });
       expect(invoice.items).toHaveLength(2);
       expect(invoice.items[0].purityMultiplier).toBe(0.9999);
@@ -993,10 +989,10 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await expectSuccessful(frozenInvoiceResponse, "reload the frozen wholesale invoice");
       expect(await frozenInvoiceResponse.json()).toMatchObject({
         traderName,
-        traderContactPerson: traderContact,
+        traderContactPerson: null,
         traderPhone,
         traderEmail,
-        traderAddress,
+        traderAddress: null,
         pricingType: "fixed",
         paymentMode: null,
       });
@@ -1005,10 +1001,8 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await expect(previewDialog).toBeVisible();
       const previewDocument = previewDialog.locator("[data-invoice-doc]");
       await expect(previewDocument).toContainText(traderName);
-      await expect(previewDocument).toContainText(traderContact);
       await expect(previewDocument).toContainText(traderPhone);
       await expect(previewDocument).toContainText(traderEmail);
-      await expect(previewDocument).toContainText(traderAddress);
       await expect(previewDocument.getByText("Pricing Type:", { exact: true }).first()).toBeVisible();
       await expect(previewDocument.getByText("Fixed Gold Pricing", { exact: true }).first()).toBeVisible();
       await expect(previewDocument.getByText("Payment Mode:", { exact: true }).first()).toBeVisible();
@@ -1049,12 +1043,8 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       for (const { label, text } of [
         { label: "trader company prefix", text: `${runTag} GOLD` },
         { label: "trader company suffix", text: "TRADING" },
-        { label: "trader contact", text: "SAMIR" },
         { label: "trader phone", text: traderPhone },
         { label: "trader email domain", text: "example.test" },
-        { label: "trader address shop", text: "SHOP 42" },
-        { label: "trader address market", text: "GOLD SOUQ DEIRA" },
-        { label: "trader address city", text: "DUBAI UAE" },
         { label: "pricing type", text: "Fixed Gold Pricing" },
         { label: "payment mode", text: "Ledger Posting (Legacy)" },
       ]) {
