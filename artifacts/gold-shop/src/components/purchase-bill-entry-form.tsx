@@ -37,10 +37,23 @@ interface PurchaseBillEntryFormProps {
   onSessionLiableSupplier?: (supplierName: string) => void;
 }
 
+const PURCHASE_BILL_PURITY_PERCENT: Record<string, string> = {
+  gold_9999: "99.99",
+  ten_tola_bar: "99.99",
+  kg_bar: "99.99",
+  "995": "99.5",
+  gold_jewelry_22k: "91.6",
+  silver: "99.9",
+};
+
+function purityPercentForCategory(category: string): string {
+  return PURCHASE_BILL_PURITY_PERCENT[category] ?? "100";
+}
+
 const emptyLine = (): LineDraft => ({
   category: "gold_9999",
   grossWeight: "",
-  purity: "100",
+  purity: purityPercentForCategory("gold_9999"),
   rate: "",
   making: "",
 });
@@ -262,7 +275,13 @@ export function PurchaseBillEntryForm({
                   <tr key={index} className="border-b border-emerald-100 last:border-0 even:bg-emerald-50/30">
                     <td className="px-3 py-3 text-center text-muted-foreground">{index + 1}</td>
                     <td className="px-3 py-3">
-                      <Select value={line.category} onValueChange={(value) => setLine(index, { category: value })}>
+                      <Select
+                        value={line.category}
+                        onValueChange={(value) => setLine(index, {
+                          category: value,
+                          purity: purityPercentForCategory(value),
+                        })}
+                      >
                         <SelectTrigger
                           className="h-9"
                           aria-label={`Category for purchase line ${index + 1}`}

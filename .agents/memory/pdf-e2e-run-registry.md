@@ -13,5 +13,8 @@ Rules that must hold:
 - The suite itself exercises recovery via a probe run plus unregistered decoy records that must survive.
 - DELETE routes unregister fixture rows in the same transaction — the registry must only list records that still exist, so end-of-run verification can tell cleaned runs from interrupted ones.
 - The runner deletes run rows + admin ONLY after the suite passed AND zero fixtures remain (finalizeRun); otherwise it retains the registry and deactivates the admin for later age-gated recovery. An interruption-recovery regression script runs before the browser suite under the same flock.
+- Cleanup must remove stock-consuming retail and wholesale invoices before registered purchase bills or stock purchases; FIFO source deletion guards correctly reject batches that still have consumption rows.
 
-**Why:** SIGKILL bypasses Playwright `finally` cleanup; the shared dev DB must never lose real data or an active concurrent run's registry.
+**Why:** SIGKILL bypasses Playwright `finally` cleanup, and dependency-blind cleanup can hit a valid 409 before owned invoice deletion reverses FIFO consumption.
+
+**How to apply:** Keep cleanup and stale-run recovery exact-ID-only, but order registered fixture types by dependency: consumers first, then source batches, then parent parties/admins.

@@ -180,14 +180,6 @@ async function removeOwnedFixtures(
   wholesaleTraders: OwnedFixture[] = [],
 ): Promise<void> {
   const errors: string[] = [];
-  for (const id of [...purchaseBillIds].reverse()) {
-    const deleted = await page.request.delete(`/api/purchase-bills/${id}`, {
-      headers: { "X-Allow-Paid-Delete": "true" },
-    });
-    if (![204, 404].includes(deleted.status())) {
-      errors.push(`purchase bill ${id}: ${deleted.status()} ${await deleted.text()}`);
-    }
-  }
   for (const id of [...invoiceIds].reverse()) {
     const deleted = await page.request.delete(`/api/invoices/${id}`, {
       headers: { "X-Allow-Invoice-Delete": "true" },
@@ -200,6 +192,14 @@ async function removeOwnedFixtures(
     const deleted = await page.request.delete(`/api/wholesale/invoices/${fixture.id}`);
     if (![204, 404].includes(deleted.status())) {
       errors.push(`wholesale invoice ${fixture.id}: ${deleted.status()} ${await deleted.text()}`);
+    }
+  }
+  for (const id of [...purchaseBillIds].reverse()) {
+    const deleted = await page.request.delete(`/api/purchase-bills/${id}`, {
+      headers: { "X-Allow-Paid-Delete": "true" },
+    });
+    if (![204, 404].includes(deleted.status())) {
+      errors.push(`purchase bill ${id}: ${deleted.status()} ${await deleted.text()}`);
     }
   }
   for (const id of [...purchaseIds].reverse()) {
@@ -703,6 +703,23 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
       expect(await purchaseTable.locator("..").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
 
+      const purchaseCategory = page.getByRole("combobox", { name: "Category for purchase line 1" });
+      const purchasePurity = page.getByRole("spinbutton", { name: "Purity % / Touch for purchase line 1" });
+      await expect(purchasePurity).toHaveValue("99.99");
+      await purchaseCategory.click();
+      await page.getByRole("option", { name: "995", exact: true }).click();
+      await expect(purchasePurity).toHaveValue("99.5");
+      await purchasePurity.fill("98.25");
+      await expect(purchasePurity).toHaveValue("98.25");
+      await purchaseCategory.click();
+      await page.getByRole("option", { name: "Gold Jewelry 22K", exact: true }).click();
+      await expect(purchasePurity).toHaveValue("91.6");
+      await purchasePurity.fill("90.5");
+      await expect(purchasePurity).toHaveValue("90.5");
+      await purchaseCategory.click();
+      await page.getByRole("option", { name: "GOLD 9999", exact: true }).click();
+      await expect(purchasePurity).toHaveValue("99.99");
+
       const purchaseTypeField = page.getByText("Purchase Type", { exact: true }).locator("..");
       const purchaseTypeSelect = purchaseTypeField.getByRole("combobox");
       await expect(purchaseTypeSelect).toContainText("Cash Payment");
@@ -883,11 +900,34 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
 
       await page.setViewportSize({ width: 1440, height: 1000 });
       const itemRow = page.locator("table tbody tr").first();
-      await itemRow.getByRole("combobox").click();
+      const stockItemSelect = page.getByRole("combobox", { name: "Stock item for wholesale line 1" });
+      const wholesalePurity = page.getByRole("spinbutton", { name: "Purity for wholesale line 1" });
+      await stockItemSelect.click();
       await page.getByRole("option", { name: "GOLD 9999", exact: true }).click();
-      const itemNumberInputs = itemRow.locator('input[type="number"]');
-      await itemNumberInputs.nth(0).fill("12.3456");
-      await itemNumberInputs.nth(1).fill("7.50");
+      await expect(wholesalePurity).toHaveValue("0.9999");
+      await wholesalePurity.fill("0.9876");
+      await expect(wholesalePurity).toHaveValue("0.9876");
+      await stockItemSelect.click();
+      await page.getByRole("option", { name: "995", exact: true }).click();
+      await expect(wholesalePurity).toHaveValue("0.995");
+      await stockItemSelect.click();
+      await page.getByRole("option", { name: "Gold Jewelry 22K", exact: true }).click();
+      await expect(wholesalePurity).toHaveValue("0.916");
+      await wholesalePurity.fill("0.9");
+      await expect(wholesalePurity).toHaveValue("0.9");
+      await stockItemSelect.click();
+      await page.getByRole("option", { name: "GOLD 9999", exact: true }).click();
+      await expect(wholesalePurity).toHaveValue("0.9999");
+      await page.getByRole("spinbutton", { name: "Gross weight for wholesale line 1" }).fill("12.3456");
+      await page.getByRole("spinbutton", { name: "Making rate for wholesale line 1" }).fill("7.50");
+      await page.getByRole("button", { name: "Add Line Item", exact: true }).click();
+      const secondStockItemSelect = page.getByRole("combobox", { name: "Stock item for wholesale line 2" });
+      const secondWholesalePurity = page.getByRole("spinbutton", { name: "Purity for wholesale line 2" });
+      await secondStockItemSelect.click();
+      await page.getByRole("option", { name: "Gold Jewelry 22K", exact: true }).click();
+      await expect(secondWholesalePurity).toHaveValue("0.916");
+      await secondWholesalePurity.fill("0.91665");
+      await page.getByRole("spinbutton", { name: "Gross weight for wholesale line 2" }).fill("0.00015");
 
       await expect(page.getByRole("button", { name: "Unfixed Gold Delivery", exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Fixed Gold Pricing", exact: true })).toBeVisible();
@@ -896,6 +936,8 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       const metalRateField = page.getByText("Metal Rate (AED/g)", { exact: true }).locator("..");
       await metalRateField.locator('input[type="number"]').fill("410.25");
       await page.getByPlaceholder("Optional delivery notes").fill(`Frozen preview ${runTag}`);
+      await expect(page.getByText("Total Pure Wt", { exact: true }).locator("..")).toContainText("12.3446 g");
+      await expect(page.getByText("Grand Total (AED)", { exact: true }).locator("..")).toContainText("5,156.96 AED");
 
       const invoiceResponsePromise = page.waitForResponse((response) => (
         new URL(response.url()).pathname.endsWith("/api/wholesale/invoices")
@@ -914,6 +956,11 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
         traderPhone: string | null;
         traderEmail: string | null;
         traderAddress: string | null;
+        totalPureGrams: number;
+        items: Array<{
+          purityMultiplier: number;
+          pureGrams: number;
+        }>;
       };
       wholesaleInvoiceIds.push(invoice.id);
       expect(invoice).toMatchObject({
@@ -925,6 +972,12 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
         traderEmail,
         traderAddress,
       });
+      expect(invoice.items).toHaveLength(2);
+      expect(invoice.items[0].purityMultiplier).toBe(0.9999);
+      expect(invoice.items[0].pureGrams).toBe(12.3444);
+      expect(invoice.items[1].purityMultiplier).toBe(0.9167);
+      expect(invoice.items[1].pureGrams).toBe(0.0002);
+      expect(invoice.totalPureGrams).toBe(12.3446);
       await expect(page).toHaveURL(/\/invoices\/new$/);
 
       const changedTrader = await page.request.patch(`/api/wholesale/traders/${trader.id}`, {
