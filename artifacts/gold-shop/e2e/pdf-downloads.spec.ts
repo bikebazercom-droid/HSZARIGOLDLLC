@@ -760,8 +760,10 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await expect(purchasePreview).toBeVisible();
       await expect(purchasePreview).toContainText(inlineSupplier);
       await expect(purchasePreview).toContainText("Cash Payment");
-      await expect(purchasePreview).toContainText("3.000 g");
-      await expect(purchasePreview).toContainText("AED 300.00");
+      await expect(purchasePreview).toContainText("3.000");
+      await expect(
+        purchasePreview.getByText("NET AMOUNT (AED)", { exact: true }).locator(".."),
+      ).toContainText("300.00");
 
       const purchasePdfDownload = page.waitForEvent("download");
       await purchasePreview.getByRole("button", { name: "Download PDF", exact: true }).click();
@@ -1156,8 +1158,10 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       const text = pages.join("\n");
       const normalizedText = normalized(text);
       const ocr = normalized(ocrPdf(path));
+      const textLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 
-      expect(normalizedText).toContain("PURCHASEBILL");
+      expect(textLines).toContain("PURCHASE");
+      expect(textLines).not.toContain("PURCHASE BILL");
       expectArabicBismillah(text);
       expect(text).toContain(PURCHASE_BILL_SUPPLIER_CONTACT.phone);
       expect(text).toContain(PURCHASE_BILL_SUPPLIER_CONTACT.email);

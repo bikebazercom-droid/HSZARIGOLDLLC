@@ -1,0 +1,45 @@
+================================================================================
+EXACT SUPPLIER PURCHASE BILL TEMPLATE IMPLEMENTATION (PURCHASE-BILL-11)
+================================================================================
+
+Instruction for Agent:
+Update the Purchase Bill Preview Modal and Print/PDF Generator in the "New Purchase Bill" component to render the EXACT template design provided in `purchase-bill-11 (1)_page-0001.jpg`.
+
+Key Template Structure & Field Specifications:
+
+1. Header Block:
+   - Left: Hazari Gold L.L.C Logo & Contact Specs (Matar Abdul Rahman Khalfan Al Muhairi Building, 1st Floor, Room# 101, Deira, Dubai, UAE | Phone: +971509364193 | Email: hazarigoldllc@gmail.com | TRN: 105301944200003).
+   - Top Center: Gold Bismillah Calligraphy, Dark Navy Header Badge with text "PURCHASE", and QR Code centered below with "Scan to find us".
+   - Top Right: "PARTY COPY" Label.
+   - Meta Data Grid (Right):
+     * Bill / Ref No: [Bill Reference]
+     * Date: [DD/MM/YYYY]
+     * Payment Terms: [PAID IN CASH / UNFIXED]
+     * Purchase Type: [Fixed Purchase / Cash Payment / Unfixed Purchase]
+     * Metal Rate: [AED XX.XX/g]
+
+2. Supplier / Vendor Details Banner:
+   - Full-width Dark Navy Header Bar labeled "SUPPLIER / VENDOR DETAILS".
+   - 2-Column Grid inside the details box:
+     * Column 1: Supplier / Party Name, Phone Number
+     * Column 2: Address / Location, Email Address
+
+3. Itemized Grid Table:
+   - Columns: S.No. | Stock Description | Gross Wt. | Purity | Pure Wt. | Making Rate | Making Amt. (AED) | Total (AED)
+   - Multi-row padded layout with exact column widths matching the PDF.
+   - Summary Row at the bottom: "Total ([X] Items)", Total Gross Wt, Total Pure Wt, Total Making Amt, Grand Total (AED).
+
+4. Calculation Summary Box (Right-Aligned):
+   - GOLD VALUE @ [Rate] / gram (AED)
+   - Discount (AED)
+   - NET AMOUNT (AED) (Highlighted in Dark Navy Row with Bold White Text)
+
+5. Footer Details & Signatures:
+   - Amount In Words (AED): Capitalized word string (e.g., Eleven Dirhams Only).
+   - Payment Mode: Bold Text (e.g., PAID IN CASH).
+   - Timestamp string on bottom left: "Generated on [DD/MM/YYYY, HH:MM:SS AM/PM]".
+   - Signature Section: "Customer's Signature", "Checked By", "Authorised Signature" along with the official circular Hazari Gold seal/stamp graphic.
+   - Bottom Navy Bar: Centered text "Thank you for your business!".
+
+Bind this exact HTML/CSS template to the "Generate Purchase Bill" action directly!
+================================================================================

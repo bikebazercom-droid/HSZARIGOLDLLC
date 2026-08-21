@@ -123,7 +123,7 @@ function paymentLabel(status: string): string {
 }
 
 function purchaseTypeLabel(type: string): string {
-  return type === "fixed" ? "Fixed Purchase" : "Unfixed Purchase";
+  return type === "fixed" ? "Cash Payment" : "Unfixed Purchase";
 }
 
 function drawFirstPageHeader(doc: PDFKit.PDFDocument, data: PurchaseBillPdfData): void {
@@ -159,11 +159,10 @@ function drawFirstPageHeader(doc: PDFKit.PDFDocument, data: PurchaseBillPdfData)
     doc.restore();
   }
   doc.fillColor("white").font("Helvetica-Bold").fontSize(12)
-    .text("PURCHASE\nBILL", badgeX + 24, 34, {
+    .text("PURCHASE", badgeX + 24, 39, {
       width: badgeWidth - 48,
-      height: 29,
       align: "center",
-      lineGap: 1,
+      lineBreak: false,
     });
 
   doc.roundedRect(badgeX + 37, 73, 66, 66, 2).lineWidth(0.5).strokeColor("#d1d5db").stroke();
