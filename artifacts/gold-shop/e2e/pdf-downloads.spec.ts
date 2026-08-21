@@ -682,11 +682,45 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await expect(purchaseTab).toHaveClass(/border-emerald-300/);
       await expect(page.getByText("Supplier Purchase Bill Entry", { exact: true })).toBeVisible();
 
+      const purchaseTable = page.getByRole("table");
+      const purchaseDetailsHeading = page.getByRole("heading", { name: "Purchase Bill Details", exact: true });
+      for (const column of [
+        "Category",
+        "Gross Wt (g)",
+        "Purity % / Touch",
+        "Rate (AED/g)",
+        "Making / Premium (AED)",
+        "Line Total",
+      ]) {
+        await expect(purchaseTable.getByRole("columnheader", { name: column, exact: true })).toBeVisible();
+      }
+      const tableBox = await purchaseTable.boundingBox();
+      const detailsBox = await purchaseDetailsHeading.boundingBox();
+      expect(tableBox).not.toBeNull();
+      expect(detailsBox).not.toBeNull();
+      expect(tableBox!.y + tableBox!.height).toBeLessThan(detailsBox!.y);
+      await expect(page.getByText("Payment Status", { exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      expect(await purchaseTable.locator("..").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+
+      const purchaseTypeField = page.getByText("Purchase Type", { exact: true }).locator("..");
+      const purchaseTypeSelect = purchaseTypeField.getByRole("combobox");
+      await expect(purchaseTypeSelect).toContainText("Cash Payment");
+      await purchaseTypeSelect.click();
+      await expect(page.getByRole("option")).toHaveCount(2);
+      await expect(page.getByRole("option", { name: "Cash Payment", exact: true })).toBeVisible();
+      await page.getByRole("option", { name: "Unfixed Purchase", exact: true }).click();
+      await expect(page.getByRole("spinbutton", { name: "Rate (AED/g) for purchase line 1" })).toBeDisabled();
+      await expect(page.getByRole("spinbutton", { name: "Making / Premium (AED) for purchase line 1" })).toBeDisabled();
+      await expect(purchaseTable.getByText("AED 0.00", { exact: true })).toBeVisible();
+      await purchaseTypeSelect.click();
+      await page.getByRole("option", { name: "Cash Payment", exact: true }).click();
+
       const billNoInput = page.getByText("Bill No / Ref", { exact: true }).locator("..").getByRole("textbox");
       await billNoInput.fill(inlineBillNo);
       await page.getByText("Supplier Name", { exact: true }).locator("..").getByRole("combobox").fill(inlineSupplier);
-      await page.getByText("Gross Wt (g)", { exact: true }).locator("..").getByRole("spinbutton").fill("3");
-      await page.getByText("Rate (AED/g)", { exact: true }).locator("..").getByRole("spinbutton").fill("100");
+      await page.getByRole("spinbutton", { name: "Gross Wt (g) for purchase line 1" }).fill("3");
+      await page.getByRole("spinbutton", { name: "Rate (AED/g) for purchase line 1" }).fill("100");
 
       const createResponsePromise = page.waitForResponse((response) => (
         response.request().method() === "POST"
@@ -695,9 +729,15 @@ test("browser PDF downloads and wholesale preview keep their registered journeys
       await page.getByRole("button", { name: "Save Purchase Bill", exact: true }).click();
       const createResponse = await createResponsePromise;
       expect(createResponse.status()).toBe(201);
-      const inlineBill = await createResponse.json() as CreatedRecord & { billNo: string };
+      const inlineBill = await createResponse.json() as CreatedRecord & {
+        billNo: string;
+        purchaseType: string;
+        paymentStatus: string;
+      };
       purchaseBillIds.push(inlineBill.id);
       expect(inlineBill.billNo).toBe(inlineBillNo);
+      expect(inlineBill.purchaseType).toBe("fixed");
+      expect(inlineBill.paymentStatus).toBe("paid");
       await expect(page.getByText(`Purchase bill ${inlineBillNo} saved`, { exact: true })).toBeVisible();
       await expect(billNoInput).toHaveValue("");
 
