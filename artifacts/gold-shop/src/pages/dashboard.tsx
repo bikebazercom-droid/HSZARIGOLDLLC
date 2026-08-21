@@ -46,6 +46,33 @@ function kg(n: number | undefined | null): string {
 
 type RangeKey = "today" | "week" | "month" | "custom";
 
+const KPI_CARD_TONES = {
+  profit: {
+    card: "border-emerald-200 border-t-4 border-t-emerald-600 bg-emerald-50/80",
+    title: "text-emerald-800",
+    value: "text-emerald-700",
+    icon: "text-emerald-600",
+  },
+  vault: {
+    card: "border-amber-200 border-t-4 border-t-amber-600 bg-amber-50/85",
+    title: "text-amber-900",
+    value: "text-amber-800",
+    icon: "text-amber-600",
+  },
+  expense: {
+    card: "border-rose-200 border-t-4 border-t-rose-600 bg-rose-50/85",
+    title: "text-rose-900",
+    value: "text-rose-700",
+    icon: "text-rose-600",
+  },
+  navy: {
+    card: "border-slate-200 border-t-4 border-t-slate-800 bg-white",
+    title: "text-slate-700",
+    value: "text-slate-950",
+    icon: "text-slate-600",
+  },
+} as const;
+
 export default function Dashboard() {
   const [range, setRange] = useState<RangeKey>("month");
   const [customStart, setCustomStart] = useState("");
@@ -94,56 +121,67 @@ export default function Dashboard() {
     {
       title: "Stock IN (Purchased)", icon: ArrowDownToLine,
       value: `${fmtG(kpis.stockInGrams)} g`, sub: `${kg(kpis.stockInGrams)} KG from suppliers`,
+      tone: "vault" as const,
     },
     {
       title: "Stock OUT (Sold)", icon: ArrowUpFromLine,
       value: `${fmtG(kpis.stockOutGrams)} g`, sub: `${kg(kpis.stockOutGrams)} KG to customers`,
+      tone: "expense" as const,
     },
     {
       title: "Net Stock (IN − OUT)", icon: Scale,
       value: `${fmtG(kpis.netStockGrams)} g`, sub: `${kg(kpis.netStockGrams)} KG`,
       danger: kpis.netStockGrams < 0,
+      tone: kpis.netStockGrams < 0 ? ("expense" as const) : ("vault" as const),
     },
     {
       title: "Total Purchase Cost", icon: ShoppingCart,
       value: `AED ${fmtAED(kpis.purchaseCostAed)}`, sub: "Paid to suppliers",
+      tone: "expense" as const,
     },
     {
       title: "Total Sales Revenue", icon: Banknote,
       value: `AED ${fmtAED(kpis.totalRevenueAed)}`, sub: "All generated invoices",
+      tone: "profit" as const,
     },
     {
       title: "Net Profit", icon: TrendingUp,
       value: `AED ${fmtAED(kpis.netProfitAed)}`,
       sub: `Revenue − est. cost of sold items (AED ${fmtAED(kpis.cogsAed)})`,
       green: kpis.netProfitAed >= 0, danger: kpis.netProfitAed < 0,
+      tone: kpis.netProfitAed < 0 ? ("expense" as const) : ("profit" as const),
     },
     {
       title: "Cash Received", icon: Wallet,
       value: `AED ${fmtAED(kpis.cashReceivedAed)}`, sub: "Collected via cash/card/bank",
+      tone: "profit" as const,
     },
     {
       title: "Outstanding Due", icon: AlertCircle,
       value: `AED ${fmtAED(kpis.outstandingDueAed)}`, sub: "Pending from customers",
       danger: kpis.outstandingDueAed > 0,
+      tone: "expense" as const,
     },
     {
       title: "Making Charge Revenue", icon: Hammer,
       value: `AED ${fmtAED(kpis.makingChargesAed)}`, sub: "From making/handling charges",
+      tone: "profit" as const,
     },
     {
       title: "Invoices", icon: ReceiptText,
       value: `${kpis.invoiceCount}`, sub: `Avg AED ${fmtAED(kpis.avgInvoiceAed)} / invoice`,
+      tone: "navy" as const,
     },
   ] : [];
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="min-h-full space-y-7 rounded-2xl bg-slate-50 p-4 pb-10 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-primary">Dashboard</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">{todayDate}</p>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Hazari Gold · Command Centre</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Dashboard</h1>
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">{todayDate}</p>
         </div>
         <div className="flex gap-2 self-start sm:self-auto">
           <Dialog open={stmtOpen} onOpenChange={setStmtOpen}>
@@ -191,7 +229,12 @@ export default function Dashboard() {
             </DialogContent>
           </Dialog>
           <Link href="/invoices/new">
-            <Button size="sm"><Plus className="w-4 h-4 mr-1.5" /> New Invoice</Button>
+            <Button
+              size="sm"
+              className="border-amber-600 bg-gradient-to-r from-amber-500 to-amber-600 font-semibold text-slate-950 shadow-md shadow-amber-600/20 hover:from-amber-600 hover:to-amber-700"
+            >
+              <Plus className="mr-1.5 h-4 w-4" /> New Invoice
+            </Button>
           </Link>
         </div>
       </div>
@@ -205,29 +248,29 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Financial Control */}
-          <Card className="col-span-1 xl:col-span-2 overflow-hidden border-border/50 shadow-sm">
-            <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <Banknote className="w-4 h-4 text-muted-foreground" /> Financial Control &amp; Profit (AED)
+          <Card className="col-span-1 overflow-hidden border-slate-200 bg-white shadow-md shadow-slate-900/[0.04] xl:col-span-2">
+            <CardHeader className="border-b border-slate-100 bg-white py-4">
+              <CardTitle className="flex items-center gap-2 border-l-4 border-amber-600 pl-3 text-sm font-bold text-slate-900">
+                <Banknote className="h-4 w-4 text-amber-600" /> Financial Control &amp; Profit <span className="font-medium text-slate-400">(AED)</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
-                <div className="p-5 flex flex-col justify-center">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Purchase Debit (Cash Out)</p>
-                  <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.totalPurchaseDebitAed)}</p>
+              <div className="grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-4">
+                <div className="flex flex-col justify-center bg-rose-50/80 p-5">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-rose-800">Purchase Debit (Cash Out)</p>
+                  <p className="font-mono text-xl font-bold text-rose-700">{fmtAED(summary.totalPurchaseDebitAed)}</p>
                 </div>
-                <div className="p-5 flex flex-col justify-center">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Sales Credit (Invoiced)</p>
-                  <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.totalSalesCreditAed)}</p>
+                <div className="flex flex-col justify-center bg-emerald-50/80 p-5">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-emerald-800">Sales Credit (Invoiced)</p>
+                  <p className="font-mono text-xl font-bold text-emerald-700">{fmtAED(summary.totalSalesCreditAed)}</p>
                 </div>
-                <div className="p-5 flex flex-col justify-center">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FIFO Cost of Sold</p>
-                  <p className="text-xl font-bold font-mono text-foreground">{fmtAED(summary.soldCostAed)}</p>
+                <div className="flex flex-col justify-center bg-rose-50/50 p-5">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-rose-800">FIFO Cost of Sold</p>
+                  <p className="font-mono text-xl font-bold text-rose-700">{fmtAED(summary.soldCostAed)}</p>
                 </div>
-                <div className="p-5 bg-muted/20 flex flex-col justify-center border-t-0">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Overall Net Profit</p>
-                  <p className={`text-2xl font-bold font-mono ${summary.netProfitAed < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
+                <div className={summary.netProfitAed < 0 ? "flex flex-col justify-center bg-rose-100 p-5" : "flex flex-col justify-center bg-emerald-100 p-5"}>
+                  <p className={summary.netProfitAed < 0 ? "mb-1 text-[10px] font-bold uppercase tracking-wider text-rose-900" : "mb-1 text-[10px] font-bold uppercase tracking-wider text-emerald-900"}>Overall Net Profit</p>
+                  <p className={`font-mono text-2xl font-bold ${summary.netProfitAed < 0 ? "text-rose-700" : "text-emerald-700"}`}>
                     {fmtAED(summary.netProfitAed)}
                   </p>
                 </div>
@@ -236,29 +279,29 @@ export default function Dashboard() {
           </Card>
 
           {/* Vault Physical Control */}
-          <Card className="col-span-1 overflow-hidden border-border/50 shadow-sm">
-            <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <Database className="w-4 h-4 text-muted-foreground" /> Physical Vault Control (Grams)
+          <Card className="col-span-1 overflow-hidden border-amber-200 bg-white shadow-md shadow-amber-900/[0.05]">
+            <CardHeader className="border-b border-amber-100 bg-amber-50/50 py-4">
+              <CardTitle className="flex items-center gap-2 border-l-4 border-amber-600 pl-3 text-sm font-bold text-slate-900">
+                <Database className="h-4 w-4 text-amber-600" /> Physical Vault Control <span className="font-medium text-slate-500">(Grams)</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 divide-y sm:divide-y-0 xl:divide-y sm:divide-x xl:divide-x-0 divide-border/50 h-full">
-                <div className="p-5 flex flex-col justify-center bg-muted/10">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Total Physical Remaining</p>
-                  <p className="text-2xl font-bold font-mono text-foreground">
+              <div className="grid h-full grid-cols-1 divide-y divide-amber-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-1 xl:divide-x-0 xl:divide-y">
+                <div className="flex flex-col justify-center bg-amber-50 p-5">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-900">Total Physical Remaining</p>
+                  <p className="font-mono text-2xl font-bold text-amber-800">
                     {fmtG(summary.totalPhysicalRemainingGrams)}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">g</span>
+                    <span className="ml-1 text-sm font-normal text-amber-700">g</span>
                   </p>
                 </div>
-                <div className="p-5 grid grid-cols-2 gap-4 items-center">
+                <div className="grid grid-cols-2 items-center gap-4 bg-white p-5">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Gold &amp; Other</p>
-                    <p className="text-sm font-bold font-mono text-foreground">{fmtG(summary.availableStockGrams)} g</p>
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Gold &amp; Other</p>
+                    <p className="font-mono text-sm font-bold text-amber-700">{fmtG(summary.availableStockGrams)} g</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Silver</p>
-                    <p className="text-sm font-bold font-mono text-foreground">{fmtG(summary.silverStockGrams)} g</p>
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Silver</p>
+                    <p className="font-mono text-sm font-bold text-slate-800">{fmtG(summary.silverStockGrams)} g</p>
                   </div>
                 </div>
               </div>
@@ -269,32 +312,32 @@ export default function Dashboard() {
 
       {/* Wholesale Overview */}
       {wholesaleDash && (
-        <Card className="overflow-hidden border-border/50 shadow-sm">
-          <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
-              <Briefcase className="w-4 h-4 text-muted-foreground" /> Wholesale &amp; Traders Overview
+        <Card className="overflow-hidden border-slate-200 bg-white shadow-md shadow-slate-900/[0.04]">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 bg-white py-4">
+            <CardTitle className="flex items-center gap-2 border-l-4 border-amber-600 pl-3 text-sm font-bold text-slate-900">
+              <Briefcase className="h-4 w-4 text-amber-600" /> Wholesale &amp; Traders Overview
             </CardTitle>
             <Link href="/wholesale">
-              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2">View Wholesale Dashboard</Button>
+              <Button size="sm" variant="outline" className="h-7 border-slate-200 px-2 text-[10px] text-slate-700">View Wholesale Dashboard</Button>
             </Link>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
-              <div className="p-5 flex flex-col justify-center">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Total AED Posted</p>
-                <p className="text-lg font-bold font-mono text-foreground">{fmtAED(wholesaleDash.totalFixedAed)}</p>
+            <div className="grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-4">
+              <div className="flex flex-col justify-center bg-emerald-50/75 p-5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-emerald-800">Total AED Posted</p>
+                <p className="font-mono text-lg font-bold text-emerald-700">{fmtAED(wholesaleDash.totalFixedAed)}</p>
               </div>
-              <div className="p-5 flex flex-col justify-center bg-amber-50/30 dark:bg-amber-950/10">
-                <p className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-500 font-semibold mb-1">Open Pure Grams</p>
-                <p className="text-lg font-bold font-mono text-amber-700 dark:text-amber-500">{fmtG(wholesaleDash.openPureGrams)} g</p>
+              <div className="flex flex-col justify-center bg-amber-50 p-5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-900">Open Pure Grams</p>
+                <p className="font-mono text-lg font-bold text-amber-800">{fmtG(wholesaleDash.openPureGrams)} g</p>
               </div>
-              <div className="p-5 flex flex-col justify-center">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Returned Grams</p>
-                <p className="text-lg font-bold font-mono text-foreground">{fmtG(wholesaleDash.returnedGrossGrams)} g</p>
+              <div className="flex flex-col justify-center bg-slate-50 p-5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">Returned Grams</p>
+                <p className="font-mono text-lg font-bold text-slate-900">{fmtG(wholesaleDash.returnedGrossGrams)} g</p>
               </div>
-              <div className="p-5 flex flex-col justify-center">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Active Traders</p>
-                <p className="text-lg font-bold font-mono text-foreground">{wholesaleDash.traderCount}</p>
+              <div className="flex flex-col justify-center bg-slate-900 p-5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">Active Traders</p>
+                <p className="font-mono text-lg font-bold text-amber-400">{wholesaleDash.traderCount}</p>
               </div>
             </div>
           </CardContent>
@@ -305,40 +348,40 @@ export default function Dashboard() {
       {summaryLoading || !summary ? (
         <Skeleton className="h-64 mt-6" />
       ) : (
-        <Card className="overflow-hidden border-border/50 shadow-sm">
-          <CardHeader className="bg-muted/30 border-b border-border/50 pb-3 py-4 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
-              <Layers className="w-4 h-4 text-muted-foreground" /> Category-wise Vault Breakdown
+        <Card className="overflow-hidden border-slate-200 bg-white shadow-md shadow-slate-900/[0.04]">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 bg-white py-4">
+            <CardTitle className="flex items-center gap-2 border-l-4 border-amber-600 pl-3 text-sm font-bold text-slate-900">
+              <Layers className="h-4 w-4 text-amber-600" /> Category-wise Vault Breakdown
             </CardTitle>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-background text-muted-foreground rounded px-2.5 py-1 flex items-center gap-1 border border-border/50 shadow-sm">
+            <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-sm">
               Real-time Balance
             </span>
           </CardHeader>
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-muted/10">
+              <TableHeader className="bg-slate-900 [&_tr]:border-slate-800">
                 <TableRow>
-                  <TableHead className="font-semibold text-muted-foreground">Category Name</TableHead>
-                  <TableHead className="text-right font-semibold text-muted-foreground">Metal Purchased / In <span className="text-[10px] font-normal uppercase ml-1">(Debit g)</span></TableHead>
-                  <TableHead className="text-right font-semibold text-muted-foreground">Metal Sold / Out <span className="text-[10px] font-normal uppercase ml-1">(Credit g)</span></TableHead>
-                  <TableHead className="text-right font-semibold text-foreground bg-muted/20 w-56 border-l border-border/50">Net Remaining Vault <span className="text-[10px] font-normal uppercase ml-1">(Balance g)</span></TableHead>
+                  <TableHead className="font-bold text-white">Category Name</TableHead>
+                  <TableHead className="text-right font-bold text-white">Metal Purchased / In <span className="ml-1 text-[10px] font-medium uppercase text-slate-300">(Debit g)</span></TableHead>
+                  <TableHead className="text-right font-bold text-white">Metal Sold / Out <span className="ml-1 text-[10px] font-medium uppercase text-slate-300">(Credit g)</span></TableHead>
+                  <TableHead className="w-56 border-l border-slate-700 bg-slate-800 text-right font-bold text-amber-300">Net Remaining Vault <span className="ml-1 text-[10px] font-medium uppercase text-slate-300">(Balance g)</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {summary.categoryBreakdown.map((row) => (
-                  <TableRow key={row.category} className="hover:bg-muted/5 transition-colors">
-                    <TableCell className="font-medium text-foreground py-3">{row.label}</TableCell>
-                    <TableCell className="text-right text-muted-foreground font-mono">{fmtG(row.purchasedGrams)} <span className="text-xs">g</span></TableCell>
-                    <TableCell className="text-right text-muted-foreground font-mono">{fmtG(row.soldGrams)} <span className="text-xs">g</span></TableCell>
-                    <TableCell className="text-right font-bold text-foreground bg-muted/5 font-mono py-3 border-l border-border/50">{fmtG(row.remainingGrams)} <span className="text-xs text-muted-foreground">g</span></TableCell>
+                {summary.categoryBreakdown.map((row, index) => (
+                  <TableRow key={row.category} className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50"} border-slate-100 transition-colors hover:bg-amber-50/70`}>
+                    <TableCell className="py-3 font-bold text-slate-900">{row.label}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-600">{fmtG(row.purchasedGrams)} <span className="text-xs">g</span></TableCell>
+                    <TableCell className="text-right font-mono text-slate-600">{fmtG(row.soldGrams)} <span className="text-xs">g</span></TableCell>
+                    <TableCell className="border-l border-amber-100 bg-amber-50/60 py-3 text-right font-mono font-bold text-amber-800">{fmtG(row.remainingGrams)} <span className="text-xs font-medium text-amber-700">g</span></TableCell>
                   </TableRow>
                 ))}
                 {/* Totals Footer Row */}
-                <TableRow className="bg-muted/20 hover:bg-muted/20 border-t-2 border-border">
-                  <TableCell className="font-bold text-foreground py-3 uppercase text-[11px] tracking-wider">Total Vault</TableCell>
-                  <TableCell className="text-right text-foreground font-bold font-mono">{fmtG(summary.categoryBreakdown.reduce((acc, r) => acc + r.purchasedGrams, 0))} <span className="text-xs font-normal">g</span></TableCell>
-                  <TableCell className="text-right text-foreground font-bold font-mono">{fmtG(summary.categoryBreakdown.reduce((acc, r) => acc + r.soldGrams, 0))} <span className="text-xs font-normal">g</span></TableCell>
-                  <TableCell className="text-right font-bold text-foreground font-mono py-3 text-sm border-l border-border/50">{fmtG(summary.totalPhysicalRemainingGrams)} <span className="text-xs font-normal text-muted-foreground">g</span></TableCell>
+                <TableRow className="border-t-2 border-slate-300 bg-slate-100 hover:bg-slate-100">
+                  <TableCell className="py-3 text-[11px] font-bold uppercase tracking-wider text-slate-900">Total Vault</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{fmtG(summary.categoryBreakdown.reduce((acc, r) => acc + r.purchasedGrams, 0))} <span className="text-xs font-normal">g</span></TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{fmtG(summary.categoryBreakdown.reduce((acc, r) => acc + r.soldGrams, 0))} <span className="text-xs font-normal">g</span></TableCell>
+                  <TableCell className="border-l border-amber-200 bg-amber-100 py-3 text-right font-mono text-sm font-bold text-amber-900">{fmtG(summary.totalPhysicalRemainingGrams)} <span className="text-xs font-medium text-amber-800">g</span></TableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -347,11 +390,11 @@ export default function Dashboard() {
       )}
 
       {/* Time range filter & KPIs */}
-      <div className="pt-4 mt-6 border-t border-border/50">
+      <div className="mt-6 border-t border-slate-200 pt-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-4">
           <div>
-            <h2 className="text-base font-semibold tracking-tight text-foreground">Operational KPIs</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Metrics filtered by selected time range</p>
+            <h2 className="border-l-4 border-amber-600 pl-3 text-base font-bold tracking-tight text-slate-900">Operational KPIs</h2>
+            <p className="mt-1 text-xs text-slate-500">Metrics filtered by selected time range</p>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             {([
@@ -365,7 +408,9 @@ export default function Dashboard() {
                 size="sm"
                 variant={range === key ? "default" : "outline"}
                 onClick={() => setRange(key)}
-                className="h-8 text-xs shadow-sm"
+                className={range === key
+                  ? "h-8 border-slate-900 bg-slate-900 text-xs text-white shadow-sm hover:bg-slate-800"
+                  : "h-8 border-slate-200 bg-white text-xs text-slate-700 shadow-sm hover:border-amber-300 hover:bg-amber-50"}
               >
                 {label}
               </Button>
@@ -388,21 +433,24 @@ export default function Dashboard() {
         {/* 8-card KPI grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {kpisLoading || !kpis
-            ? [...Array(8)].map((_, i) => <Skeleton key={i} className="h-[90px]" />)
-            : kpiCards.map((c) => (
-                <Card key={c.title} className="shadow-sm border-border/50 overflow-hidden">
-                  <CardHeader className="bg-muted/10 pb-2 pt-3 px-4 flex flex-row items-center justify-between space-y-0 border-b border-border/50">
-                    <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{c.title}</CardTitle>
-                    <c.icon className="w-3.5 h-3.5 text-muted-foreground/70" />
+            ? [...Array(8)].map((_, i) => <Skeleton key={i} className="h-[112px] rounded-xl" />)
+            : kpiCards.map((c) => {
+                const tone = KPI_CARD_TONES[c.tone];
+                return (
+                <Card key={c.title} className={`overflow-hidden rounded-xl shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md ${tone.card}`}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-black/5 bg-white/30 px-4 pb-2 pt-3">
+                    <CardTitle className={`text-[11px] font-bold uppercase tracking-wider ${tone.title}`}>{c.title}</CardTitle>
+                    <c.icon className={`h-4 w-4 ${tone.icon}`} />
                   </CardHeader>
                   <CardContent className="px-4 pb-3 pt-2.5">
-                    <div className={`text-lg font-bold font-mono tracking-tight ${c.danger ? "text-destructive" : (c as { green?: boolean }).green ? "text-emerald-600 dark:text-emerald-500" : "text-foreground"}`}>
+                    <div className={`font-mono text-lg font-bold tracking-tight ${c.danger ? "text-rose-700" : tone.value}`}>
                       {c.value}
                     </div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{c.sub}</div>
+                    <div className="mt-0.5 truncate text-[10px] text-slate-600">{c.sub}</div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
         </div>
       </div>
     </div>
