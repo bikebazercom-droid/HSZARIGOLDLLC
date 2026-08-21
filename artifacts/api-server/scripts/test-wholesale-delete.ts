@@ -626,6 +626,15 @@ async function run(): Promise<void> {
     .where(eq(traderLedgerEntriesTable.traderId, trader.id));
   const ledgerBaseline = initialLedger.reduce((sum, e) => sum + Number(e.aedDelta), 0);
   const pureBaseline = initialLedger.reduce((sum, e) => sum + Number(e.pureGoldGramsDelta), 0);
+  type WholesaleDashboardKpis = {
+    invoiceCount: number;
+    openPureGrams: number;
+    totalFixedAed: number;
+    traderCount: number;
+  };
+  const fixedDateDashboardBaseline = await apiJson<WholesaleDashboardKpis>(
+    "/wholesale/dashboard?startDate=2025-01-15&endDate=2025-01-15",
+  );
 
   // ── Test 1: Staff 403 ──────────────────────────────────────────────────────
   console.log("\n─── Test 1: Staff user gets 403 ───");
@@ -670,6 +679,25 @@ async function run(): Promise<void> {
     }),
   });
   toClean.invoiceIds.push(fixedInvoice.id);
+  const fixedDateDashboardAfterCreate = await apiJson<WholesaleDashboardKpis>(
+    "/wholesale/dashboard?startDate=2025-01-15&endDate=2025-01-15",
+  );
+  assertEq(
+    fixedDateDashboardAfterCreate.invoiceCount,
+    fixedDateDashboardBaseline.invoiceCount + 1,
+    "Wholesale dashboard invoice count includes a newly created invoice",
+  );
+  assertEq(
+    fixedDateDashboardAfterCreate.traderCount,
+    fixedDateDashboardBaseline.traderCount + 1,
+    "Wholesale dashboard counts distinct traders with invoices in the selected period",
+  );
+  assertClose(
+    fixedDateDashboardAfterCreate.totalFixedAed,
+    fixedDateDashboardBaseline.totalFixedAed + fixedInvoice.totalAed,
+    "Wholesale dashboard fixed AED includes the newly created invoice",
+    0.01,
+  );
   assertEq(fixedInvoice.paymentMode, "card", "Wholesale invoice API returns saved payment mode");
   assertEq(
     fixedInvoice.traderContactPerson,
@@ -730,6 +758,31 @@ async function run(): Promise<void> {
   // Delete it
   const deleteFixed = await apiReq(`/wholesale/invoices/${fixedInvoice.id}`, { method: "DELETE" });
   assertEq(deleteFixed.status, 204, "Fixed invoice DELETE returns 204");
+  const fixedDateDashboardAfterDelete = await apiJson<WholesaleDashboardKpis>(
+    "/wholesale/dashboard?startDate=2025-01-15&endDate=2025-01-15",
+  );
+  assertEq(
+    fixedDateDashboardAfterDelete.invoiceCount,
+    fixedDateDashboardBaseline.invoiceCount,
+    "Wholesale dashboard invoice count recalculates after deletion",
+  );
+  assertEq(
+    fixedDateDashboardAfterDelete.traderCount,
+    fixedDateDashboardBaseline.traderCount,
+    "Wholesale dashboard trader count recalculates after the trader's last invoice is deleted",
+  );
+  assertClose(
+    fixedDateDashboardAfterDelete.openPureGrams,
+    fixedDateDashboardBaseline.openPureGrams,
+    "Wholesale dashboard open pure grams returns to baseline after deletion",
+    0.0001,
+  );
+  assertClose(
+    fixedDateDashboardAfterDelete.totalFixedAed,
+    fixedDateDashboardBaseline.totalFixedAed,
+    "Wholesale dashboard fixed AED returns to baseline after deletion",
+    0.01,
+  );
 
   // Verify FIFO restoration
   const [batchAfterDelete] = await db.select().from(stockPurchasesTable)

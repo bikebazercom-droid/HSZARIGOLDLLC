@@ -521,6 +521,7 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
 
   const [stats] = await db.execute<{
     invoice_count: string;
+    trader_count: string;
     fixed_count: string;
     unfixed_count: string;
     cash_count: string;
@@ -531,6 +532,7 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
   }>(sql`
     SELECT
       COUNT(*)::text AS invoice_count,
+      COUNT(DISTINCT trader_id)::text AS trader_count,
       COUNT(*) FILTER (WHERE pricing_type = 'fixed')::text AS fixed_count,
       COUNT(*) FILTER (WHERE pricing_type = 'unfixed')::text AS unfixed_count,
       COUNT(*) FILTER (WHERE pricing_type = 'cash')::text AS cash_count,
@@ -551,10 +553,6 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
     ${conditions.length ? sql`WHERE ${and(...conditions)}` : sql``}
   `).then((r) => r.rows);
 
-  const traderCount = await db.execute<{ cnt: string }>(
-    sql`SELECT COUNT(*)::text AS cnt FROM wholesale_traders WHERE is_active = true`,
-  ).then((r) => Number(r.rows[0]?.cnt ?? "0"));
-
   res.json(GetWholesaleDashboardResponse.parse({
     invoiceCount: parseInt(stats?.invoice_count ?? "0", 10),
     fixedInvoiceCount: parseInt(stats?.fixed_count ?? "0", 10),
@@ -564,7 +562,7 @@ router.get("/wholesale/dashboard", async (req, res): Promise<void> => {
     totalFixedAed: Math.round(Number(stats?.total_fixed_aed ?? "0") * 100) / 100,
     openPureGrams: Math.round(Number(stats?.open_pure_grams ?? "0") * 10000) / 10000,
     returnedGrossGrams: Math.round(Number(stats?.returned_gross_grams ?? "0") * 10000) / 10000,
-    traderCount,
+    traderCount: parseInt(stats?.trader_count ?? "0", 10),
   }));
 });
 
@@ -744,6 +742,7 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
 
   const [stats] = await db.execute<{
     invoice_count: string;
+    trader_count: string;
     fixed_count: string;
     unfixed_count: string;
     cash_count: string;
@@ -754,6 +753,7 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
   }>(sql`
     SELECT
       COUNT(*)::text AS invoice_count,
+      COUNT(DISTINCT trader_id)::text AS trader_count,
       COUNT(*) FILTER (WHERE pricing_type = 'fixed')::text AS fixed_count,
       COUNT(*) FILTER (WHERE pricing_type = 'unfixed')::text AS unfixed_count,
       COUNT(*) FILTER (WHERE pricing_type = 'cash')::text AS cash_count,
@@ -776,10 +776,6 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
     ${conditions.length ? sql`WHERE ${and(...conditions)}` : sql``}
   `).then((r) => r.rows);
 
-  const traderCount = await db.execute<{ cnt: string }>(
-    sql`SELECT COUNT(*)::text AS cnt FROM wholesale_traders WHERE is_active = true`,
-  ).then((r) => Number(r.rows[0]?.cnt ?? "0"));
-
   const doc = createWholesaleSummaryPdf({
     startDate: startDate ?? null,
     endDate: endDate ?? null,
@@ -791,7 +787,7 @@ router.get("/wholesale/summary/pdf", async (req, res): Promise<void> => {
     totalFixedAed: Number(stats?.total_fixed_aed ?? "0"),
     openPureGrams: Number(stats?.open_pure_grams ?? "0"),
     returnedGrossGrams: Number(stats?.returned_gross_grams ?? "0"),
-    traderCount,
+    traderCount: parseInt(stats?.trader_count ?? "0", 10),
   });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="wholesale-summary.pdf"`);

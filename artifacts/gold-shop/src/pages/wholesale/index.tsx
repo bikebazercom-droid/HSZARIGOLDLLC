@@ -97,13 +97,17 @@ export default function WholesaleDashboard() {
 
     const invoiceNumber = invoiceToDelete?.invoiceNumber;
     deleteInvoice.mutate({ id: deleteInvoiceId }, {
-      onSuccess: () => {
+      onSuccess: async () => {
         setDeleteInvoiceId(null);
         setPreviewInvoiceId(null);
-        queryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           predicate: (query) => {
-            const key = JSON.stringify(query.queryKey);
-            return key.includes("/api/wholesale") || key.includes("/api/stock");
+            const key = query.queryKey[0];
+            return typeof key === "string" && (
+              key.startsWith("/api/wholesale")
+              || key.startsWith("/api/stock")
+              || key.startsWith("/api/dashboard")
+            );
           },
         });
         toast({
