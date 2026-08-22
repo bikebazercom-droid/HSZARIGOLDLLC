@@ -3,49 +3,44 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 
-const TARGET_MOBILE   = "01855580555";
-const TARGET_FULLNAME = "admin";
-const TARGET_PIN      = "1234";
-
 export async function seedAdminUser(): Promise<void> {
+  const isProduction = process.env.NODE_ENV === "production";
   const existing = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.username, "admin"))
     .limit(1);
 
-  if (existing.length === 0) {
-    const pinHash = await bcrypt.hash(TARGET_PIN, 10);
-    await db.insert(usersTable).values({
-      username:     "admin",
-      mobile:       TARGET_MOBILE,
-      passwordHash: pinHash,
-      fullName:     TARGET_FULLNAME,
-      role:         "admin",
-      isActive:     true,
-    });
-    logger.info({ mobile: TARGET_MOBILE }, "Default admin created");
+  if (existing.length > 0) {
+    // Never overwrite an existing administrator's credentials at startup.
     return;
   }
 
-  const admin = existing[0];
+  const mobile = process.env.INITIAL_ADMIN_MOBILE;
+  const fullName = process.env.INITIAL_ADMIN_FULL_NAME || "Administrator";
+  const pin = process.env.INITIAL_ADMIN_PIN;
 
-  // If the stored credentials don't match our target, do a full reset
-  // so the admin can always log in with the canonical mobile + PIN.
-  if (admin.mobile !== TARGET_MOBILE || admin.fullName !== TARGET_FULLNAME) {
-    const pinHash = await bcrypt.hash(TARGET_PIN, 10);
-    await db
-      .update(usersTable)
-      .set({
-        mobile:       TARGET_MOBILE,
-        fullName:     TARGET_FULLNAME,
-        passwordHash: pinHash,
-        isActive:     true,
-      })
-      .where(eq(usersTable.username, "admin"));
-    logger.info(
-      { mobile: TARGET_MOBILE, fullName: TARGET_FULLNAME },
-      "Admin credentials fully reset to target (mobile + PIN)",
+  if (!mobile || !pin) {
+    if (isProduction) {
+      throw new Error(
+        "INITIAL_ADMIN_MOBILE and INITIAL_ADMIN_PIN are required to create the first production administrator.",
+      );
+    }
+
+    logger.warn(
+      "No admin exists and INITIAL_ADMIN_MOBILE/INITIAL_ADMIN_PIN were not provided; skipping development admin creation.",
     );
+    return;
   }
+
+  const pinHash = await bcrypt.hash(pin, 10);
+  await db.insert(usersTable).values({
+    username: "admin",
+    mobile,
+    passwordHash: pinHash,
+    fullName,
+    role: "admin",
+    isActive: true,
+  });
+  logger.info({ mobile }, "Initial admin created");
 }

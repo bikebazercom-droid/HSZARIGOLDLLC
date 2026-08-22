@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "BsIChgGdAOMqMbsLj3VQr"
@@ -30,3 +29,10 @@ id = "QWF5kkyGP6n-aDzPq_LrP"
 uri = "file://attached_assets/generated_images/gold_bar_stack.png"
 type = "image"
 title = "gold bar stack"
+
+[[outputs]]
+id = "nBGefhio49SaJdAG_cAiJ"
+uri = "file://releases/Hazari-Gold-Hostinger-Production.zip"
+type = "unspecified"
+title = "Hazari Gold — Hostinger Production Package"
+description = "Hostinger-ready Node.js Web App ZIP containing the compiled React frontend, compiled API server, PDF assets, PostgreSQL schema-only setup, package manifest, environment template, and deployment guide. No credentials or database data are included."
