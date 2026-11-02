@@ -56107,6 +56107,11 @@ __export(src_exports, {
 });
 function createPoolConfig() {
   const url2 = new URL(process.env.DATABASE_URL);
+  const sslMode = url2.searchParams.get("sslmode");
+  const ssl = url2.searchParams.get("ssl");
+  if (process.env.NODE_ENV !== "production" && (!sslMode || sslMode === "disable") && (!ssl || ssl === "false")) {
+    return { connectionString: url2.toString() };
+  }
   for (const option of [
     "ssl",
     "sslmode",
