@@ -51,28 +51,52 @@ const assertSingletonSchema = async (
   assert.equal(constraint.rows[0]?.exists, true, "singleton check constraint is present");
 };
 
-const runFixture = async (legacyNullableColumn: boolean): Promise<void> => {
+type MigrationFixture = "missing-table" | "nullable-key" | "missing-key";
+
+const runFixture = async (fixture: MigrationFixture): Promise<void> => {
   const schemaName = `prices_migration_test_${randomUUID().replaceAll("-", "")}`;
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`CREATE SCHEMA ${sql.identifier(schemaName)}`);
     await tx.execute(sql`SET LOCAL search_path TO ${sql.identifier(schemaName)}, public`);
 
-    if (legacyNullableColumn) {
-      await tx.execute(sql`
-        CREATE TABLE prices (
-          id integer PRIMARY KEY,
-          singleton_key integer,
-          updated_at timestamptz
-        )
-      `);
-      await tx.execute(sql`
-        INSERT INTO prices (id, singleton_key, updated_at)
-        VALUES
-          (1, NULL, '2026-01-01T00:00:00Z'),
-          (2, 7, '2026-02-01T00:00:00Z'),
-          (3, 1, '2025-12-01T00:00:00Z')
-      `);
+    if (fixture !== "missing-table") {
+      if (fixture === "nullable-key") {
+        await tx.execute(sql`
+          CREATE TABLE prices (
+            id integer PRIMARY KEY,
+            singleton_key integer,
+            updated_at timestamptz
+          )
+        `);
+      } else {
+        await tx.execute(sql`
+          CREATE TABLE prices (
+            id integer PRIMARY KEY,
+            updated_at timestamptz
+          )
+        `);
+      }
+
+      if (fixture === "nullable-key") {
+        await tx.execute(sql`
+          INSERT INTO prices (id, singleton_key, updated_at)
+          VALUES
+            (1, NULL, '2026-01-01T00:00:00Z'),
+            (2, 7, '2026-02-01T00:00:00Z'),
+            (3, 1, '2025-12-01T00:00:00Z'),
+            (4, NULL, NULL)
+        `);
+      } else {
+        await tx.execute(sql`
+          INSERT INTO prices (id, updated_at)
+          VALUES
+            (1, '2026-01-01T00:00:00Z'),
+            (2, '2026-02-01T00:00:00Z'),
+            (3, '2025-12-01T00:00:00Z'),
+            (4, NULL)
+        `);
+      }
     }
 
     const execute = async (query: Parameters<typeof tx.execute>[0]): Promise<void> => {
@@ -81,9 +105,9 @@ const runFixture = async (legacyNullableColumn: boolean): Promise<void> => {
 
     await applyPricesSingletonMigration(execute);
     await applyPricesSingletonMigration(execute);
-    await assertSingletonSchema(tx, legacyNullableColumn ? 1 : 0);
+    await assertSingletonSchema(tx, fixture === "missing-table" ? 0 : 1);
 
-    if (legacyNullableColumn) {
+    if (fixture !== "missing-table") {
       const keeper = await tx.execute<{ id: number }>(sql`SELECT id FROM prices`);
       assert.equal(keeper.rows[0]?.id, 2, "newest legacy price row is retained");
     }
@@ -99,10 +123,12 @@ const main = async (): Promise<void> => {
     );
   }
 
-  await runFixture(false);
+  await runFixture("missing-table");
   console.log("Missing-table migration fixture passed.");
-  await runFixture(true);
+  await runFixture("nullable-key");
   console.log("Nullable legacy-column migration fixture passed.");
+  await runFixture("missing-key");
+  console.log("Missing-column migration fixture passed.");
 };
 
 main()

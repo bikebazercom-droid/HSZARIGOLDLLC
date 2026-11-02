@@ -112,6 +112,8 @@ For the prebuilt GitHub package use Node.js 22.x (or another version `>=20`), `n
 
 The initial admin PIN is only inserted for a new admin account by default. If an existing seeded admin must be reset to the configured `INITIAL_ADMIN_MOBILE`, `INITIAL_ADMIN_FULL_NAME`, and `INITIAL_ADMIN_PIN`, temporarily set `INITIAL_ADMIN_RESET_EXISTING=true` for a startup, verify the login, then remove that flag. Without this explicit flag, existing admin credentials are never overwritten on routine restarts.
 
+The prices singleton migration safely creates a missing table and backfills nullable legacy singleton keys before enforcing `NOT NULL`; on failure, startup logs include the nested PostgreSQL cause code and message.
+
 If a terminal is available after deployment, the equivalent manual commands are:
 
 ```bash

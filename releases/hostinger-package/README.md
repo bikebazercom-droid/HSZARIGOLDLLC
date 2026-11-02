@@ -105,6 +105,8 @@ The Node process binds to `0.0.0.0` using Hostinger's `PORT`. It starts listenin
 
 The initial admin settings create an account only when one does not exist. To intentionally reset an existing bootstrap admin, temporarily set `INITIAL_ADMIN_RESET_EXISTING=true`; startup will update its mobile, name, role, active state, and bcrypt PIN hash from the initial-admin settings. Verify login, then remove the flag. Routine restarts never overwrite existing admin credentials.
 
+The prices singleton migration creates the `prices` table if it is absent, adds the singleton column as nullable before backfilling existing NULL values, preserves the newest row when consolidating legacy duplicates, and only then applies the default, `NOT NULL`, unique index, and check constraint. Startup logs include the nested PostgreSQL cause code and message if a migration still fails.
+
 ## 4. Verify the deployment
 
 1. Wait for Hostinger's deployment to finish and check the Node.js runtime logs if it fails.
