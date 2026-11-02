@@ -22,3 +22,4 @@
 - [Wholesale fixed-return allocation](wholesale-fixed-return-allocation.md) — returns consume open metal first, then fixed allocations; only open metal reduces the trader’s pure balance.
 - [Wholesale cash pricing](wholesale-cash-pricing.md) — cash is rate-priced and immediately settled; returns refund cash while revenue reporting excludes settlement legs.
 - [Dashboard test-category isolation](dashboard-test-category-isolation.md) — automated-test categories must be excluded at every aggregate SQL source, not merely hidden from breakdown rows.
+- [Hostinger PostgreSQL TLS choice](hostinger-postgres-tls.md) — Hostinger's Supabase pool intentionally encrypts without certificate verification; confirm before changing this user-directed tradeoff.
