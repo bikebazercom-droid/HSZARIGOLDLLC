@@ -69,7 +69,7 @@ The build script verifies that the precompiled server, frontend, and required PD
 
 ### Alternative: deploy from the GitHub repository
 
-If you use Hostinger's GitHub deployment rather than the ZIP:
+If you use Hostinger's GitHub deployment rather than the ZIP, set the Root directory to `releases/hostinger-package`. Do not use `/` with the `npm` package manager: the repository root is a pnpm monorepo whose `preinstall` script intentionally rejects npm and whose build script invokes pnpm.
 
 | Hostinger field | Value |
 | --- | --- |
@@ -107,6 +107,8 @@ The package scripts are:
   }
 }
 ```
+
+For the prebuilt GitHub package use Node.js 22.x (or another version `>=20`), `npm run build`, `npm start`, and entry file `index.mjs`. Set `NODE_ENV=production`, `SESSION_SECRET`, and `DATABASE_URL`; set `STATIC_DIR=./public` explicitly even though the bundle has this production default. Hostinger should inject `PORT` (the app binds `0.0.0.0` to that value). `DATABASE_SSL_REJECT_UNAUTHORIZED` is not read by the current source; production TLS verification is configured in code.
 
 If a terminal is available after deployment, the equivalent manual commands are:
 

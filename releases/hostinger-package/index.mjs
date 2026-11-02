@@ -2,6 +2,9 @@ import { createRequire as __bannerCrReq } from 'node:module';
 import __bannerPath from 'node:path';
 import __bannerUrl from 'node:url';
 
+process.env.NODE_ENV ??= 'production';
+if (process.env.NODE_ENV === 'production') process.env.STATIC_DIR ??= './public';
+
 globalThis.require = __bannerCrReq(import.meta.url);
 globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
 globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
@@ -149150,7 +149153,12 @@ var PostgresSessionStore = class extends import_express_session.default.Store {
         logger.error({ err: error40 }, "PostgreSQL session store initialization failed");
       });
     }
-    await this.ready;
+    try {
+      await this.ready;
+    } catch (error40) {
+      this.ready = void 0;
+      throw error40;
+    }
   }
   async initialize() {
     await pool.query(`
@@ -149211,6 +149219,21 @@ var PostgresSessionStore = class extends import_express_session.default.Store {
   }
 };
 
+// src/lib/startupState.ts
+var startupState = {
+  ready: false,
+  step: "server_starting"
+};
+function setStartupStep(step) {
+  startupState = { ready: false, step };
+}
+function markStartupReady() {
+  startupState = { ready: true, step: null };
+}
+function getStartupState() {
+  return startupState;
+}
+
 // src/app.ts
 var app = (0, import_express16.default)();
 var isProduction2 = process.env.NODE_ENV === "production";
@@ -149251,6 +149274,27 @@ app.use(
 );
 app.use(import_express16.default.json({ limit: "5mb" }));
 app.use(import_express16.default.urlencoded({ extended: true, limit: "5mb" }));
+app.get("/api/healthz", (_req, res) => {
+  res.json(HealthCheckResponse.parse({ status: "ok" }));
+});
+app.get("/api/readyz", (_req, res) => {
+  const state = getStartupState();
+  res.status(state.ready ? 200 : 503).json({ status: state.ready ? "ready" : "starting" });
+});
+app.use("/api", (req, res, next) => {
+  if (req.path === "/healthz" || req.path === "/readyz") {
+    next();
+    return;
+  }
+  if (!getStartupState().ready) {
+    res.status(503).json({
+      status: "starting",
+      message: "Application database initialization is in progress."
+    });
+    return;
+  }
+  next();
+});
 app.use(
   (0, import_express_session2.default)({
     secret: sessionSecret || "hazari-gold-secret-key",
@@ -149578,6 +149622,7 @@ async function migratePricesSingleton() {
 }
 
 // src/index.ts
+var STARTUP_RETRY_DELAYS_MS = [2e3, 5e3, 15e3, 3e4];
 var rawPort = process.env["PORT"];
 if (!rawPort) {
   throw new Error(
@@ -149596,6 +149641,7 @@ httpServer.on("error", (err) => {
   process.exitCode = 1;
 });
 async function runStartupStep(step, initialize) {
+  setStartupStep(step);
   logger.info({ step }, "Startup initialization started");
   try {
     await initialize();
@@ -149609,23 +149655,47 @@ async function runStartupStep(step, initialize) {
     throw error40;
   }
 }
-async function startServer() {
-  await runStartupStep("database_connection", async () => {
-    await pool.query("SELECT 1");
-  });
-  await runStartupStep("postgres_session_store", initializeAppDependencies);
-  await runStartupStep("prices_singleton_migration", migratePricesSingleton);
-  await runStartupStep("category_migration", migrateCategoryNames);
-  await runStartupStep("admin_seed", seedAdminUser);
-  await runStartupStep("price_items_seed", initializePriceItems);
-  startAuditLogCleanup();
-  httpServer.listen(port, bindHost, () => {
-    logger.info({ host: bindHost, port }, "Server listening");
-  });
+async function initializeDatabaseWithRetry() {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      await runStartupStep("database_connection", async () => {
+        await pool.query("SELECT 1");
+      });
+      await runStartupStep("postgres_session_store", initializeAppDependencies);
+      await runStartupStep("prices_singleton_migration", migratePricesSingleton);
+      await runStartupStep("category_migration", migrateCategoryNames);
+      await runStartupStep("admin_seed", seedAdminUser);
+      await runStartupStep("price_items_seed", initializePriceItems);
+      await runStartupStep("audit_log_cleanup", async () => {
+        startAuditLogCleanup();
+      });
+      markStartupReady();
+      logger.info("Database initialization completed; API is ready");
+      return;
+    } catch (error40) {
+      const retryDelayMs = STARTUP_RETRY_DELAYS_MS[Math.min(attempt - 1, STARTUP_RETRY_DELAYS_MS.length - 1)];
+      logger.warn(
+        { attempt, retryDelayMs, err: error40 },
+        "Database initialization failed; HTTP server remains available and initialization will retry"
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
 }
-startServer().catch((err) => {
-  logger.fatal({ err }, "Server startup failed; see the preceding startup step for the database or migration error");
-  process.exitCode = 1;
+httpServer.listen(port, bindHost, () => {
+  logger.info({ host: bindHost, port }, "HTTP server listening");
+  void initializeDatabaseWithRetry().catch((error40) => {
+    logger.fatal(
+      { err: error40 },
+      "Unexpected database initialization loop failure; HTTP listener remains active"
+    );
+    console.error(
+      "[startup] initialization retry loop failed:",
+      error40 instanceof Error ? error40.stack ?? error40.message : error40
+    );
+  });
 });
 /*! Bundled license information:
 

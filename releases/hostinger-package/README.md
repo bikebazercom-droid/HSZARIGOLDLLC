@@ -33,10 +33,10 @@ Add these in hPanel under the Node.js Web App's environment variables. Add each 
 | Variable | Required | Value |
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Supabase Session pooler URI copied from **Connect**; session port `5432`. |
-| `NODE_ENV` | Yes | `production` (enables PostgreSQL sessions and production security settings). |
+| `NODE_ENV` | Recommended | `production` (the packaged entry defaults to production if this is omitted). |
 | `SESSION_SECRET` | Yes | A long, random, unique secret. Keep it private. |
 | `PORT` | Hostinger-managed | Hostinger supplies this at runtime. Set it manually only if hPanel explicitly asks for it. |
-| `STATIC_DIR` | Yes | `./public` (serves the React app from the production package). |
+| `STATIC_DIR` | Optional | `./public` is the packaged production default; set it explicitly to avoid ambiguity. |
 | `INITIAL_ADMIN_MOBILE` | New database only | Initial administrator's mobile number. |
 | `INITIAL_ADMIN_PIN` | New database only | Initial administrator's PIN. |
 | `INITIAL_ADMIN_FULL_NAME` | Optional, new database only | Initial administrator's display name. |

@@ -114,6 +114,9 @@ async function buildAll() {
 import __bannerPath from 'node:path';
 import __bannerUrl from 'node:url';
 
+process.env.NODE_ENV ??= 'production';
+if (process.env.NODE_ENV === 'production') process.env.STATIC_DIR ??= './public';
+
 globalThis.require = __bannerCrReq(import.meta.url);
 globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
 globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
