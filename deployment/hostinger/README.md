@@ -4,26 +4,23 @@ This is a prebuilt production package. One Node.js process serves the compiled R
 
 ## 1. Connect the app to Supabase PostgreSQL
 
-The app already uses PostgreSQL through `pg` and Drizzle. It reads `DATABASE_URL` in `lib/db/src/index.ts`; no Supabase JavaScript SDK or connection code change is required.
-
-The existing connection code is:
+The app already uses PostgreSQL through `pg` and Drizzle. It reads `DATABASE_URL` in `lib/db/src/index.ts`; no Supabase JavaScript SDK is required. If the host does not trust Supabase's database certificate chain, set `DATABASE_SSL_CA` to the PEM certificate downloaded from Supabase. The pool uses that CA while keeping certificate and hostname verification enabled:
 
 ```ts
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL must be set.");
+ssl: {
+  ca: caCertificate,
+  rejectUnauthorized: true,
 }
-
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-export const db = drizzle(pool, { schema });
 ```
+
+When `DATABASE_SSL_CA` is present, the app removes SSL query parameters from `DATABASE_URL` before passing the explicit TLS options to `pg`, preventing the URL's `sslmode` from replacing the CA configuration. Do not set `rejectUnauthorized: false`.
 
 1. Create or open the Supabase project.
 2. In Supabase, select **Connect** and copy the **Session pooler** connection string. Use session mode on port `5432`; it supports IPv4 and prepared statements. Hostinger Web Apps may be on an IPv4-only network. Do not construct the pooler hostname yourself.
 3. Replace the password placeholder with the Supabase database password. URL-encode special characters in the password.
 4. In Hostinger's Environment Variables, set `DATABASE_URL` to the complete connection string. Do not commit it or put it in the ZIP.
-5. For a **new, empty** Supabase database, import `database-schema.sql` once from a secure computer with PostgreSQL tools:
+5. If Node reports `self-signed certificate in certificate chain`, download the database CA certificate from Supabase **Database Settings → SSL Configuration**, then set `DATABASE_SSL_CA` in Hostinger to the full PEM contents, including the BEGIN/END lines. The certificate is not a password; keep it in Hostinger's environment settings rather than the repository.
+6. For a **new, empty** Supabase database, import `database-schema.sql` once from a secure computer with PostgreSQL tools:
 
    ```bash
    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database-schema.sql
@@ -44,6 +41,7 @@ Add these in hPanel under the Node.js Web App's environment variables. Add each 
 | `SESSION_SECRET` | Yes | A long, random, unique secret. Keep it private. |
 | `PORT` | Hostinger-managed | Hostinger supplies this at runtime. Set it manually only if hPanel explicitly asks for it. |
 | `STATIC_DIR` | ZIP package only | `./public` for the prebuilt ZIP; the repository-root `index.mjs` locates the built frontend automatically. |
+| `DATABASE_SSL_CA` | If needed | Full PEM certificate from Supabase Database Settings → SSL Configuration, when Hostinger does not trust the certificate chain. |
 | `INITIAL_ADMIN_MOBILE` | New database only | Initial administrator's mobile number. |
 | `INITIAL_ADMIN_PIN` | New database only | Initial administrator's PIN. |
 | `INITIAL_ADMIN_FULL_NAME` | Optional, new database only | Initial administrator's display name. |

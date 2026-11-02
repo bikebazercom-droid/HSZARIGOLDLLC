@@ -56105,6 +56105,36 @@ __export(src_exports, {
   wholesaleSettlementsTable: () => wholesaleSettlementsTable,
   wholesaleTradersTable: () => wholesaleTradersTable
 });
+function createPoolConfig() {
+  const connectionString = process.env.DATABASE_URL;
+  const caCertificate = process.env.DATABASE_SSL_CA?.replace(/\\n/g, "\n").trim();
+  if (!caCertificate) {
+    return { connectionString };
+  }
+  if (!caCertificate.includes("-----BEGIN CERTIFICATE-----")) {
+    throw new Error("DATABASE_SSL_CA must contain a PEM CA certificate.");
+  }
+  const url2 = new URL(connectionString);
+  for (const option of [
+    "ssl",
+    "sslmode",
+    "sslrootcert",
+    "sslcert",
+    "sslkey",
+    "sslpassword",
+    "uselibpqcompat",
+    "sslnegotiation"
+  ]) {
+    url2.searchParams.delete(option);
+  }
+  return {
+    connectionString: url2.toString(),
+    ssl: {
+      ca: caCertificate,
+      rejectUnauthorized: true
+    }
+  };
+}
 var Pool3, pool, db;
 var init_src = __esm({
   "../../lib/db/src/index.ts"() {
@@ -56119,7 +56149,7 @@ var init_src = __esm({
         "DATABASE_URL must be set. Did you forget to provision a database?"
       );
     }
-    pool = new Pool3({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool3(createPoolConfig());
     db = drizzle(pool, { schema: schema_exports });
   }
 });
@@ -150021,3 +150051,4 @@ tmp/lib/tmp.js:
    * MIT Licensed
    *)
 */
+//# sourceMappingURL=index.mjs.map
