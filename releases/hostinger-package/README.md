@@ -103,6 +103,8 @@ Hostinger's managed deployment normally installs dependencies and starts the con
 
 The Node process binds to `0.0.0.0` using Hostinger's `PORT`. It starts listening before database initialization, so the liveness route `/api/healthz` can respond while startup retries. `/api/readyz` reports readiness; business API calls return `503` until database connection, session storage, and required migrations finish. Initialization failures are logged with the failing stage and retried with increasing delays instead of terminating the process.
 
+The initial admin settings create an account only when one does not exist. To intentionally reset an existing bootstrap admin, temporarily set `INITIAL_ADMIN_RESET_EXISTING=true`; startup will update its mobile, name, role, active state, and bcrypt PIN hash from the initial-admin settings. Verify login, then remove the flag. Routine restarts never overwrite existing admin credentials.
+
 ## 4. Verify the deployment
 
 1. Wait for Hostinger's deployment to finish and check the Node.js runtime logs if it fails.

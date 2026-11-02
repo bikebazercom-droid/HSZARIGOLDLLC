@@ -110,6 +110,8 @@ The package scripts are:
 
 For the prebuilt GitHub package use Node.js 22.x (or another version `>=20`), `npm run build`, `npm start`, and entry file `index.mjs`. Set `NODE_ENV=production`, `SESSION_SECRET`, and `DATABASE_URL`; set `STATIC_DIR=./public` explicitly even though the bundle has this production default. Hostinger should inject `PORT` (the app binds `0.0.0.0` to that value). `DATABASE_SSL_REJECT_UNAUTHORIZED` is not read by the current source; production TLS verification is configured in code.
 
+The initial admin PIN is only inserted for a new admin account by default. If an existing seeded admin must be reset to the configured `INITIAL_ADMIN_MOBILE`, `INITIAL_ADMIN_FULL_NAME`, and `INITIAL_ADMIN_PIN`, temporarily set `INITIAL_ADMIN_RESET_EXISTING=true` for a startup, verify the login, then remove that flag. Without this explicit flag, existing admin credentials are never overwritten on routine restarts.
+
 If a terminal is available after deployment, the equivalent manual commands are:
 
 ```bash

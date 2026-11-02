@@ -140322,6 +140322,9 @@ var health_default = router;
 
 // src/routes/auth.ts
 var import_express2 = __toESM(require_express2(), 1);
+init_src();
+init_drizzle_orm();
+init_auth();
 
 // ../../node_modules/.pnpm/bcryptjs@3.0.3/node_modules/bcryptjs/index.js
 import nodeCrypto from "crypto";
@@ -142046,33 +142049,67 @@ var bcryptjs_default = {
   decodeBase64
 };
 
+// src/lib/authCredentials.ts
+function normalizeMobile(value) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return trimmed.startsWith("+") ? `+${digits}` : digits;
+}
+function isFourDigitPin(value) {
+  return typeof value === "string" && /^\d{4}$/.test(value);
+}
+async function pinMatchesHash(pin, hash2) {
+  try {
+    return await bcryptjs_default.compare(pin, hash2);
+  } catch {
+    return false;
+  }
+}
+async function findUserByMobileAndPin(candidates, normalizedMobile, pin) {
+  for (const candidate of candidates) {
+    if (normalizeMobile(candidate.mobile) === normalizedMobile && await pinMatchesHash(pin, candidate.passwordHash)) {
+      return candidate;
+    }
+  }
+  return void 0;
+}
+function decideExistingAdminSeedAction(bootstrapCredentialsMatch, resetRequested) {
+  if (bootstrapCredentialsMatch) return "unchanged";
+  return resetRequested ? "reset" : "preserve";
+}
+
 // src/routes/auth.ts
-init_src();
-init_drizzle_orm();
-init_auth();
 var router2 = (0, import_express2.Router)();
 router2.post("/auth/login", async (req, res) => {
-  const { mobile, pin, role } = req.body;
-  if (!mobile || !pin || !role) {
-    res.status(400).json({ error: "Mobile, PIN and role are required" });
+  const body = req.body;
+  if (!body || typeof body !== "object" || typeof body.mobile !== "string" || !body.mobile.trim() || !isFourDigitPin(body.pin) || body.role !== "admin" && body.role !== "staff") {
+    res.status(400).json({
+      error: "Enter a mobile number, a four-digit PIN, and a valid account type."
+    });
     return;
   }
-  const normalizedMobile = mobile.trim().replace(/\s+/g, "");
-  const normalizedRole = role === "admin" ? "admin" : "staff";
-  const [user] = await db.select().from(usersTable).where(
+  const normalizedMobile = normalizeMobile(body.mobile);
+  if (!normalizedMobile) {
+    res.status(400).json({ error: "Enter a valid mobile number." });
+    return;
+  }
+  const matchingMobileUsers = await db.select().from(usersTable).where(
     and(
-      eq(usersTable.mobile, normalizedMobile),
-      eq(usersTable.role, normalizedRole),
+      eq(usersTable.role, body.role),
       eq(usersTable.isActive, true)
     )
-  ).limit(1);
+  );
+  const candidates = matchingMobileUsers.sort((a, b) => {
+    if (body.role !== "admin") return 0;
+    return Number(b.username === "admin") - Number(a.username === "admin");
+  });
+  const user = await findUserByMobileAndPin(
+    candidates,
+    normalizedMobile,
+    body.pin
+  );
   if (!user) {
     res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
-  const valid = await bcryptjs_default.compare(pin, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Invalid PIN" });
     return;
   }
   req.session.userId = user.id;
@@ -149333,13 +149370,47 @@ init_src();
 init_drizzle_orm();
 async function seedAdminUser() {
   const isProduction3 = process.env.NODE_ENV === "production";
-  const existing = await db.select().from(usersTable).where(eq(usersTable.username, "admin")).limit(1);
-  if (existing.length > 0) {
-    return;
-  }
-  const mobile = process.env.INITIAL_ADMIN_MOBILE;
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.username, "admin")).limit(1);
+  const configuredMobile = process.env.INITIAL_ADMIN_MOBILE;
+  const mobile = configuredMobile ? normalizeMobile(configuredMobile) : "";
   const fullName = process.env.INITIAL_ADMIN_FULL_NAME || "Administrator";
   const pin = process.env.INITIAL_ADMIN_PIN;
+  const resetRequested = process.env.INITIAL_ADMIN_RESET_EXISTING === "true";
+  if (existing) {
+    if (!mobile || !isFourDigitPin(pin)) {
+      logger.info(
+        "Bootstrap admin already exists; initial-admin values are incomplete, leaving the existing account unchanged."
+      );
+      return;
+    }
+    const pinMatches = await pinMatchesHash(pin, existing.passwordHash);
+    const identityMatches = normalizeMobile(existing.mobile) === mobile && existing.fullName.trim() === fullName.trim() && existing.role === "admin" && existing.isActive;
+    const action = decideExistingAdminSeedAction(
+      pinMatches && identityMatches,
+      resetRequested
+    );
+    if (action === "unchanged") {
+      logger.info("Bootstrap admin exists and its configured login credentials match.");
+      return;
+    }
+    if (action === "preserve") {
+      logger.warn(
+        "Bootstrap admin exists but does not match the configured initial credentials; existing credentials were preserved. Set INITIAL_ADMIN_RESET_EXISTING=true for an intentional one-time reset."
+      );
+      return;
+    }
+    await db.update(usersTable).set({
+      mobile,
+      fullName: fullName.trim(),
+      passwordHash: await bcryptjs_default.hash(pin, 10),
+      role: "admin",
+      isActive: true
+    }).where(eq(usersTable.id, existing.id));
+    logger.warn(
+      "Existing bootstrap admin credentials were reset from the initial-admin settings; remove INITIAL_ADMIN_RESET_EXISTING after this startup."
+    );
+    return;
+  }
   if (!mobile || !pin) {
     if (isProduction3) {
       throw new Error(
@@ -149351,6 +149422,9 @@ async function seedAdminUser() {
     );
     return;
   }
+  if (!isFourDigitPin(pin)) {
+    throw new Error("INITIAL_ADMIN_PIN must contain exactly four digits.");
+  }
   const pinHash = await bcryptjs_default.hash(pin, 10);
   await db.insert(usersTable).values({
     username: "admin",
@@ -149360,7 +149434,7 @@ async function seedAdminUser() {
     role: "admin",
     isActive: true
   });
-  logger.info({ mobile }, "Initial admin created");
+  logger.info("Initial admin created.");
 }
 
 // src/services/auditLogCleanup.ts

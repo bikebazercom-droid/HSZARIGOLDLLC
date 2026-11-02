@@ -1,46 +1,65 @@
 import { Router, type IRouter } from "express";
-import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import {
+  findUserByMobileAndPin,
+  isFourDigitPin,
+  normalizeMobile,
+} from "../lib/authCredentials.js";
 
 const router: IRouter = Router();
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const { mobile, pin, role } = req.body as {
+  const body = req.body as {
     mobile?: string;
     pin?: string;
     role?: string;
   };
 
-  if (!mobile || !pin || !role) {
-    res.status(400).json({ error: "Mobile, PIN and role are required" });
+  if (
+    !body ||
+    typeof body !== "object" ||
+    typeof body.mobile !== "string" ||
+    !body.mobile.trim() ||
+    !isFourDigitPin(body.pin) ||
+    (body.role !== "admin" && body.role !== "staff")
+  ) {
+    res.status(400).json({
+      error: "Enter a mobile number, a four-digit PIN, and a valid account type.",
+    });
     return;
   }
 
-  const normalizedMobile = mobile.trim().replace(/\s+/g, "");
-  const normalizedRole = role === "admin" ? "admin" : "staff";
+  const normalizedMobile = normalizeMobile(body.mobile);
+  if (!normalizedMobile) {
+    res.status(400).json({ error: "Enter a valid mobile number." });
+    return;
+  }
 
-  const [user] = await db
+  const matchingMobileUsers = await db
     .select()
     .from(usersTable)
     .where(
       and(
-        eq(usersTable.mobile, normalizedMobile),
-        eq(usersTable.role, normalizedRole),
+        eq(usersTable.role, body.role),
         eq(usersTable.isActive, true)
       )
-    )
-    .limit(1);
+    );
+
+  const candidates = matchingMobileUsers.sort((a, b) => {
+    if (body.role !== "admin") return 0;
+    return Number(b.username === "admin") - Number(a.username === "admin");
+  });
+
+  const user = await findUserByMobileAndPin(
+    candidates,
+    normalizedMobile,
+    body.pin,
+  );
 
   if (!user) {
     res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
-
-  const valid = await bcrypt.compare(pin, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Invalid PIN" });
     return;
   }
 
