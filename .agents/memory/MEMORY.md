@@ -23,3 +23,4 @@
 - [Wholesale cash pricing](wholesale-cash-pricing.md) — cash is rate-priced and immediately settled; returns refund cash while revenue reporting excludes settlement legs.
 - [Dashboard test-category isolation](dashboard-test-category-isolation.md) — automated-test categories must be excluded at every aggregate SQL source, not merely hidden from breakdown rows.
 - [Hostinger PostgreSQL TLS choice](hostinger-postgres-tls.md) — Hostinger's Supabase pool intentionally encrypts without certificate verification; confirm before changing this user-directed tradeoff.
+- [Hostinger startup schema bootstrap](hostinger-startup-schema.md) — production startup must create required core tables before any dependent data migrations or seeds run.

@@ -12,6 +12,7 @@
     "typecheck:category-statement-test": "tsc -p tsconfig.category-statement-test.json --noEmit",
     "test:auth-credentials": "tsx scripts/test-auth-credentials.ts",
     "test:prices-singleton-migration": "tsx scripts/test-prices-singleton-migration.ts",
+    "test:startup-tables-migration": "tsx scripts/test-startup-tables-migration.ts",
     "test:invoice-delete-guard": "flock --exclusive --wait 300 /tmp/gold-shop-suite-registry.lock tsx scripts/test-invoice-delete-guard.ts",
     "test:invoice-category-rates": "tsx scripts/test-invoice-category-rates.ts",
     "test:invoice-delete-audit": "flock --exclusive --wait 300 /tmp/gold-shop-suite-registry.lock tsx scripts/test-invoice-delete-audit.ts",

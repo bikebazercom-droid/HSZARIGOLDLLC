@@ -7,6 +7,7 @@ import { initSocketIO } from "./lib/socket.js";
 import { startAuditLogCleanup } from "./services/auditLogCleanup.js";
 import { migrateCategoryNames } from "./lib/categoryMigration.js";
 import { migratePricesSingleton } from "./lib/pricesSingletonMigration.js";
+import { ensureStartupTables } from "./lib/startupTablesMigration.js";
 import { initializePriceItems } from "./routes/price-items.js";
 import {
   markStartupReady,
@@ -90,6 +91,7 @@ async function initializeDatabaseWithRetry(): Promise<void> {
       await runStartupStep("database_connection", async () => {
         await pool.query("SELECT 1");
       });
+      await runStartupStep("startup_tables_migration", ensureStartupTables);
       await runStartupStep("postgres_session_store", initializeAppDependencies);
       await runStartupStep("prices_singleton_migration", migratePricesSingleton);
       await runStartupStep("category_migration", migrateCategoryNames);
