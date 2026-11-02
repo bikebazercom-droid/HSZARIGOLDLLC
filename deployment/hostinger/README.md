@@ -43,7 +43,7 @@ Add these in hPanel under the Node.js Web App's environment variables. Add each 
 | `NODE_ENV` | Yes | `production` |
 | `SESSION_SECRET` | Yes | A long, random, unique secret. Keep it private. |
 | `PORT` | Hostinger-managed | Hostinger supplies this at runtime. Set it manually only if hPanel explicitly asks for it. |
-| `STATIC_DIR` | Yes | `./public` |
+| `STATIC_DIR` | ZIP package only | `./public` for the prebuilt ZIP; the repository-root `index.mjs` locates the built frontend automatically. |
 | `INITIAL_ADMIN_MOBILE` | New database only | Initial administrator's mobile number. |
 | `INITIAL_ADMIN_PIN` | New database only | Initial administrator's PIN. |
 | `INITIAL_ADMIN_FULL_NAME` | Optional, new database only | Initial administrator's display name. |
@@ -85,7 +85,22 @@ If you use Hostinger's GitHub deployment rather than the ZIP:
 | Start command, if shown | `npm start` |
 | Package manager | `npm` |
 
-This subdirectory contains the same prebuilt app layout and its own `package.json` and `package-lock.json`. Do not deploy the monorepo root as the app root.
+This subdirectory contains the same prebuilt app layout and its own `package.json` and `package-lock.json`. For the prebuilt-package method, set the app root to this subdirectory; direct monorepo-root deployment is supported below.
+
+### If deploying the monorepo root
+
+The repository root also includes an entry script for Hostinger. It starts the built API server from `artifacts/api-server/dist/index.mjs` and selects the built Gold Shop frontend from `artifacts/gold-shop/dist/public` (or the prebuilt package's `public/` directory).
+
+| Hostinger field | Value |
+| --- | --- |
+| Root directory | `/` or repository root |
+| Build command | `pnpm run build` |
+| Output directory | Leave empty |
+| Entry file | `index.mjs` |
+| Start command, if shown | `pnpm start` |
+| Package manager | `pnpm` |
+
+The entry script checks that the API and frontend build outputs exist before starting. Do not configure Apache `.htaccess` rewrites for this Node.js app; Express serves both the frontend and `/api` routes from the Node process.
 
 The package scripts are:
 
