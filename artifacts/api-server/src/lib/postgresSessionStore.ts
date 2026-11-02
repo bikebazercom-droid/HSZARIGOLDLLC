@@ -12,16 +12,27 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
 export class PostgresSessionStore extends session.Store {
-  private readonly ready: Promise<void>;
+  private ready: Promise<void> | undefined;
   private readonly pruneTimer: NodeJS.Timeout;
 
   constructor() {
     super();
-    this.ready = this.initialize();
     this.pruneTimer = setInterval(() => {
       void this.pruneExpired();
     }, PRUNE_INTERVAL_MS);
     this.pruneTimer.unref();
+  }
+
+  async waitUntilReady(): Promise<void> {
+    if (!this.ready) {
+      this.ready = this.initialize();
+      // Keep the rejection handled even if initialization is attempted outside
+      // the startup path; waitUntilReady still rethrows to its caller.
+      void this.ready.catch((error) => {
+        logger.error({ err: error }, "PostgreSQL session store initialization failed");
+      });
+    }
+    await this.ready;
   }
 
   private async initialize(): Promise<void> {
@@ -48,7 +59,7 @@ export class PostgresSessionStore extends session.Store {
   }
 
   get(sid: string, callback: SessionReadCallback): void {
-    void this.ready
+    void this.waitUntilReady()
       .then(async () => {
         const result = await pool.query<{
           sess: SessionData;
@@ -70,7 +81,7 @@ export class PostgresSessionStore extends session.Store {
       ? new Date(sessionData.cookie.expires)
       : new Date(Date.now() + SESSION_TTL_MS);
 
-    void this.ready
+    void this.waitUntilReady()
       .then(() =>
         pool.query(
           `INSERT INTO user_sessions (sid, sess, expire)
@@ -85,7 +96,7 @@ export class PostgresSessionStore extends session.Store {
   }
 
   destroy(sid: string, callback?: SessionCallback): void {
-    void this.ready
+    void this.waitUntilReady()
       .then(() => pool.query("DELETE FROM user_sessions WHERE sid = $1", [sid]))
       .then(() => callback?.())
       .catch((error) => callback?.(error));
@@ -96,7 +107,7 @@ export class PostgresSessionStore extends session.Store {
       ? new Date(sessionData.cookie.expires)
       : new Date(Date.now() + SESSION_TTL_MS);
 
-    void this.ready
+    void this.waitUntilReady()
       .then(() =>
         pool.query(
           "UPDATE user_sessions SET expire = $2 WHERE sid = $1",

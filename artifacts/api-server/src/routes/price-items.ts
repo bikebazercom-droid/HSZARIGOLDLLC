@@ -160,7 +160,10 @@ async function migratePurityFactors(): Promise<void> {
   }
 }
 
-seedIfEmpty().then(() => migratePurityFactors());
+export async function initializePriceItems(): Promise<void> {
+  await seedIfEmpty();
+  await migratePurityFactors();
+}
 
 // ── Serialisation helper ──────────────────────────────────────────────────────
 function toJson(row: typeof priceItemsTable.$inferSelect) {

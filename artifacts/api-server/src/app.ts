@@ -11,6 +11,7 @@ const app: Express = express();
 const isProduction = process.env.NODE_ENV === "production";
 const staticDir = process.env.STATIC_DIR;
 const sessionSecret = process.env.SESSION_SECRET;
+const postgresSessionStore = isProduction ? new PostgresSessionStore() : undefined;
 
 if (isProduction && !sessionSecret) {
   throw new Error("SESSION_SECRET is required when NODE_ENV=production.");
@@ -61,7 +62,7 @@ app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(
   session({
     secret: sessionSecret || "hazari-gold-secret-key",
-    store: isProduction ? new PostgresSessionStore() : undefined,
+    store: postgresSessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -96,6 +97,10 @@ if (staticDir) {
 
     res.sendFile("index.html", { root: resolvedStaticDir });
   });
+}
+
+export async function initializeAppDependencies(): Promise<void> {
+  await postgresSessionStore?.waitUntilReady();
 }
 
 export default app;
