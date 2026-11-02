@@ -68,12 +68,12 @@ catalog:
 
 autoInstallPeers: false
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - core-js
-  - msw
-  - unrs-resolver
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  core-js: true
+  msw: true
+  unrs-resolver: true
 
 overrides:
   # replit uses linux-x64 only, we can exclude all other platforms
