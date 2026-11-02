@@ -56108,10 +56108,11 @@ __export(src_exports, {
 function createPoolConfig() {
   const connectionString = process.env.DATABASE_URL;
   const caCertificate = process.env.DATABASE_SSL_CA?.replace(/\\n/g, "\n").trim();
-  if (!caCertificate) {
+  const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false";
+  if (!caCertificate && rejectUnauthorized) {
     return { connectionString };
   }
-  if (!caCertificate.includes("-----BEGIN CERTIFICATE-----")) {
+  if (caCertificate && !caCertificate.includes("-----BEGIN CERTIFICATE-----")) {
     throw new Error("DATABASE_SSL_CA must contain a PEM CA certificate.");
   }
   const url2 = new URL(connectionString);
@@ -56127,11 +56128,16 @@ function createPoolConfig() {
   ]) {
     url2.searchParams.delete(option);
   }
+  if (!rejectUnauthorized) {
+    console.warn(
+      "[database] DATABASE_SSL_REJECT_UNAUTHORIZED=false disables TLS certificate verification; configure DATABASE_SSL_CA and remove this override."
+    );
+  }
   return {
     connectionString: url2.toString(),
     ssl: {
-      ca: caCertificate,
-      rejectUnauthorized: true
+      ...caCertificate ? { ca: caCertificate } : {},
+      rejectUnauthorized
     }
   };
 }
