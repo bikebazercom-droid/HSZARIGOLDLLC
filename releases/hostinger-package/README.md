@@ -33,10 +33,10 @@ Add these in hPanel under the Node.js Web App's environment variables. Add each 
 | Variable | Required | Value |
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Supabase Session pooler URI copied from **Connect**; session port `5432`. |
-| `NODE_ENV` | Yes | `production` |
+| `NODE_ENV` | Yes | `production` (enables PostgreSQL sessions and production security settings). |
 | `SESSION_SECRET` | Yes | A long, random, unique secret. Keep it private. |
 | `PORT` | Hostinger-managed | Hostinger supplies this at runtime. Set it manually only if hPanel explicitly asks for it. |
-| `STATIC_DIR` | Yes | `./public` |
+| `STATIC_DIR` | Yes | `./public` (serves the React app from the production package). |
 | `INITIAL_ADMIN_MOBILE` | New database only | Initial administrator's mobile number. |
 | `INITIAL_ADMIN_PIN` | New database only | Initial administrator's PIN. |
 | `INITIAL_ADMIN_FULL_NAME` | Optional, new database only | Initial administrator's display name. |
@@ -67,7 +67,7 @@ The build script verifies that the precompiled server, frontend, and required PD
 
 ### Alternative: deploy from the GitHub repository
 
-If you use Hostinger's GitHub deployment rather than the ZIP:
+If you use Hostinger's GitHub deployment rather than the ZIP, point the app at the prebuilt package. This avoids using the pnpm monorepo root with Hostinger's npm package manager:
 
 | Hostinger field | Value |
 | --- | --- |
@@ -78,7 +78,7 @@ If you use Hostinger's GitHub deployment rather than the ZIP:
 | Start command, if shown | `npm start` |
 | Package manager | `npm` |
 
-This subdirectory contains the same prebuilt app layout and its own `package.json` and `package-lock.json`. Do not deploy the monorepo root as the app root.
+This subdirectory contains the prebuilt app, its own `package.json`, `package-lock.json`, and Node.js engine requirement (`>=20`). Node.js 22.x is suitable. Do not deploy the monorepo root with npm: its install/build scripts require pnpm.
 
 The package scripts are:
 
@@ -100,6 +100,8 @@ npm start
 ```
 
 Hostinger's managed deployment normally installs dependencies and starts the configured entry file; do not run a second server process in parallel.
+
+The Node process binds to `0.0.0.0` using Hostinger's `PORT`. It starts listening before database initialization, so the liveness route `/api/healthz` can respond while startup retries. `/api/readyz` reports readiness; business API calls return `503` until database connection, session storage, and required migrations finish. Initialization failures are logged with the failing stage and retried with increasing delays instead of terminating the process.
 
 ## 4. Verify the deployment
 

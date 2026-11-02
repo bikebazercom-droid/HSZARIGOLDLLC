@@ -32,7 +32,12 @@ export class PostgresSessionStore extends session.Store {
         logger.error({ err: error }, "PostgreSQL session store initialization failed");
       });
     }
-    await this.ready;
+    try {
+      await this.ready;
+    } catch (error) {
+      this.ready = undefined;
+      throw error;
+    }
   }
 
   private async initialize(): Promise<void> {

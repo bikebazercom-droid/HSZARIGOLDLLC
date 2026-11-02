@@ -6,6 +6,8 @@ import path from "node:path";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { PostgresSessionStore } from "./lib/postgresSessionStore";
+import { HealthCheckResponse } from "@workspace/api-zod";
+import { getStartupState } from "./lib/startupState";
 
 const app: Express = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -58,6 +60,36 @@ app.use(
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+
+// Liveness stays healthy while database initialization retries. Readiness and
+// business API routes remain unavailable until required DB setup succeeds.
+app.get("/api/healthz", (_req, res) => {
+  res.json(HealthCheckResponse.parse({ status: "ok" }));
+});
+
+app.get("/api/readyz", (_req, res) => {
+  const state = getStartupState();
+  res
+    .status(state.ready ? 200 : 503)
+    .json({ status: state.ready ? "ready" : "starting" });
+});
+
+app.use("/api", (req, res, next) => {
+  if (req.path === "/healthz" || req.path === "/readyz") {
+    next();
+    return;
+  }
+
+  if (!getStartupState().ready) {
+    res.status(503).json({
+      status: "starting",
+      message: "Application database initialization is in progress.",
+    });
+    return;
+  }
+
+  next();
+});
 
 app.use(
   session({
