@@ -48,11 +48,34 @@ async function runStartupStep(
     await initialize();
     logger.info({ step }, "Startup initialization completed");
   } catch (error) {
-    logger.error({ step, err: error }, "Startup initialization failed");
+    let rootCause: unknown = error;
+    for (let depth = 0; depth < 5 && rootCause instanceof Error && rootCause.cause; depth += 1) {
+      rootCause = rootCause.cause;
+    }
+    const causeDetails =
+      rootCause instanceof Error
+        ? {
+            message: rootCause.message,
+            code:
+              "code" in rootCause && typeof rootCause.code === "string"
+                ? rootCause.code
+                : undefined,
+          }
+        : undefined;
+
+    logger.error(
+      { step, err: error, rootCause: causeDetails },
+      "Startup initialization failed",
+    );
     console.error(
       `[startup] ${step} failed:`,
       error instanceof Error ? error.stack ?? error.message : error,
     );
+    if (causeDetails) {
+      console.error(
+        `[startup] ${step} root cause${causeDetails.code ? ` (${causeDetails.code})` : ""}: ${causeDetails.message}`,
+      );
+    }
     throw error;
   }
 }
