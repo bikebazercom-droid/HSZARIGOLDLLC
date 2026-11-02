@@ -4,20 +4,13 @@ This is a prebuilt production package. One Node.js process serves the compiled R
 
 ## 1. Connect the app to Supabase PostgreSQL
 
-The app already uses PostgreSQL through `pg` and Drizzle. It reads `DATABASE_URL` in `lib/db/src/index.ts`; no Supabase JavaScript SDK or connection code change is required.
-
-The existing connection code is:
+The app uses PostgreSQL through `pg` and Drizzle. Set `DATABASE_URL` to the Supabase Session pooler string. The shared PostgreSQL pool uses TLS with server certificate verification disabled, to work around Hostinger's reported self-signed certificate chain:
 
 ```ts
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL must be set.");
-}
-
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-export const db = drizzle(pool, { schema });
+ssl: { rejectUnauthorized: false }
 ```
+
+TLS encryption remains enabled, but the app no longer verifies the database server's identity. This is vulnerable to a man-in-the-middle attack. The same shared pool is used by Drizzle, price seeding, and the PostgreSQL session store; no CA file or SSL-related environment variable is required.
 
 1. Create or open the Supabase project.
 2. In Supabase, select **Connect** and copy the **Session pooler** connection string. Use session mode on port `5432`; it supports IPv4 and prepared statements. Hostinger Web Apps may be on an IPv4-only network. Do not construct the pooler hostname yourself.

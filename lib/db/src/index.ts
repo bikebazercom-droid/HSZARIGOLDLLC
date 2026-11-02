@@ -11,28 +11,11 @@ if (!process.env.DATABASE_URL) {
 }
 
 function createPoolConfig(): PoolConfig {
-  const connectionString = process.env.DATABASE_URL!;
-  const caCertificate = process.env.DATABASE_SSL_CA
-    ?.replace(/\\n/g, "\n")
-    .trim();
-  const rejectUnauthorized =
-    process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false";
+  const url = new URL(process.env.DATABASE_URL!);
 
-  if (!caCertificate && rejectUnauthorized) {
-    return { connectionString };
-  }
-
-  if (
-    caCertificate &&
-    !caCertificate.includes("-----BEGIN CERTIFICATE-----")
-  ) {
-    throw new Error("DATABASE_SSL_CA must contain a PEM CA certificate.");
-  }
-
-  // pg-connection-string can replace PoolConfig.ssl when sslmode or related
-  // options are present in DATABASE_URL. Remove those URL options so the
-  // explicit TLS settings below take effect.
-  const url = new URL(connectionString);
+  // pg-connection-string can override PoolConfig.ssl when DATABASE_URL has
+  // sslmode or related query options. Remove them so this explicit TLS config
+  // is used consistently by the shared pool (including the session store).
   for (const option of [
     "ssl",
     "sslmode",
@@ -46,18 +29,13 @@ function createPoolConfig(): PoolConfig {
     url.searchParams.delete(option);
   }
 
-  if (!rejectUnauthorized) {
-    console.warn(
-      "[database] DATABASE_SSL_REJECT_UNAUTHORIZED=false disables TLS certificate verification; configure DATABASE_SSL_CA and remove this override.",
-    );
-  }
+  console.warn(
+    "[database] TLS certificate verification is disabled for the PostgreSQL connection.",
+  );
 
   return {
     connectionString: url.toString(),
-    ssl: {
-      ...(caCertificate ? { ca: caCertificate } : {}),
-      rejectUnauthorized,
-    },
+    ssl: { rejectUnauthorized: false },
   };
 }
 

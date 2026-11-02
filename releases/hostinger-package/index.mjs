@@ -56106,16 +56106,7 @@ __export(src_exports, {
   wholesaleTradersTable: () => wholesaleTradersTable
 });
 function createPoolConfig() {
-  const connectionString = process.env.DATABASE_URL;
-  const caCertificate = process.env.DATABASE_SSL_CA?.replace(/\\n/g, "\n").trim();
-  const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false";
-  if (!caCertificate && rejectUnauthorized) {
-    return { connectionString };
-  }
-  if (caCertificate && !caCertificate.includes("-----BEGIN CERTIFICATE-----")) {
-    throw new Error("DATABASE_SSL_CA must contain a PEM CA certificate.");
-  }
-  const url2 = new URL(connectionString);
+  const url2 = new URL(process.env.DATABASE_URL);
   for (const option of [
     "ssl",
     "sslmode",
@@ -56128,17 +56119,12 @@ function createPoolConfig() {
   ]) {
     url2.searchParams.delete(option);
   }
-  if (!rejectUnauthorized) {
-    console.warn(
-      "[database] DATABASE_SSL_REJECT_UNAUTHORIZED=false disables TLS certificate verification; configure DATABASE_SSL_CA and remove this override."
-    );
-  }
+  console.warn(
+    "[database] TLS certificate verification is disabled for the PostgreSQL connection."
+  );
   return {
     connectionString: url2.toString(),
-    ssl: {
-      ...caCertificate ? { ca: caCertificate } : {},
-      rejectUnauthorized
-    }
+    ssl: { rejectUnauthorized: false }
   };
 }
 var Pool3, pool, db;
