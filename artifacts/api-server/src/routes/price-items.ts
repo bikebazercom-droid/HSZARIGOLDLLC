@@ -106,11 +106,34 @@ async function seedIfEmpty(): Promise<void> {
   try {
     const existing = await db.select({ id: priceItemsTable.id }).from(priceItemsTable).limit(1);
     if (existing.length === 0) {
-      await db.insert(priceItemsTable).values(CORE_DEFAULTS);
-      logger.info("[price-items] Seeded default core items");
+      const inserted = await db
+        .insert(priceItemsTable)
+        .values(CORE_DEFAULTS)
+        .onConflictDoNothing()
+        .returning({ id: priceItemsTable.id });
+
+      if (inserted.length < CORE_DEFAULTS.length) {
+        logger.warn(
+          {
+            inserted: inserted.length,
+            skipped: CORE_DEFAULTS.length - inserted.length,
+          },
+          "[price-items] Some core defaults already existed; skipped conflicting rows",
+        );
+      } else {
+        logger.info("[price-items] Seeded default core items");
+      }
+    } else {
+      logger.warn(
+        { existingCount: existing.length },
+        "[price-items] Core items already exist; skipping default seed",
+      );
     }
   } catch (err) {
-    logger.warn({ err }, "[price-items] Seed failed");
+    logger.warn(
+      { err },
+      "[price-items] Seed failed; continuing without blocking server startup",
+    );
   }
 }
 
