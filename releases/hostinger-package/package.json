@@ -7,6 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "node scripts/verify-production-bundle.mjs",
     "start": "node index.mjs"
   },
   "dependencies": {
