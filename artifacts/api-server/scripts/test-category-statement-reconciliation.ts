@@ -136,18 +136,19 @@ async function createInvoice(
   grams: number,
   saleValue: number,
 ): Promise<{ id: number; invoiceNumber: string }> {
+  const vatAmount = Math.round((saleValue * 5 / 105) * 100) / 100;
   const res = await apiReq("/invoices", {
     method: "POST",
     headers: { "X-Pdf-E2e-Run-Id": suiteRunId },
     body: JSON.stringify({
       customerName: `${FIXTURE_PREFIX}-${label}`,
       paymentMethod: "cash",
-      subtotal: saleValue,
+      subtotal: saleValue - vatAmount,
       discount: 0,
       total: saleValue,
       vatRate: 5,
-      vatAmount: 0,
-      totalBeforeVat: saleValue,
+      vatAmount,
+      totalBeforeVat: saleValue - vatAmount,
       totalIncludingVat: saleValue,
       roundOffDiscount: 0,
       isPending: true,
@@ -172,7 +173,7 @@ type CategoryRow = { purchased: number; sold: number; remaining: number };
 type Statement = {
   financial: Record<string, number>;
   categories: Record<string, CategoryRow>;
-  sales: { invoice: string; cost: number; revenue: number; profit: number; batches: string }[];
+  sales: { invoice: string; cost: number; revenue: number; vat: number; profit: number; batches: string }[];
 };
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -194,12 +195,21 @@ async function getStatement(query = ""): Promise<Statement> {
   if (!summary || !statement) throw new Error("Statement workbook is missing Summary or Statement sheets");
 
   const financial: Record<string, number> = {};
-  for (let row = 2; row <= 6; row++) {
-    financial[cellText(summary.getCell(row, 1).value)] = Number(summary.getCell(row, 2).value);
+  for (let row = 2; row <= summary.rowCount; row++) {
+    const label = cellText(summary.getCell(row, 1).value);
+    if (!label || label === "Category Name") break;
+    financial[label] = Number(summary.getCell(row, 2).value);
   }
 
   const categories: Record<string, CategoryRow> = {};
-  for (let row = 9; row <= summary.rowCount; row++) {
+  let categoryStart = 0;
+  for (let row = 1; row <= summary.rowCount; row++) {
+    if (cellText(summary.getCell(row, 1).value) === "Category Name") {
+      categoryStart = row + 1;
+      break;
+    }
+  }
+  for (let row = categoryStart; categoryStart > 0 && row <= summary.rowCount; row++) {
     const label = cellText(summary.getCell(row, 1).value);
     if (!label || label === "TOTAL PHYSICAL METAL") break;
     categories[label] = {
@@ -225,8 +235,9 @@ async function getStatement(query = ""): Promise<Statement> {
       invoice,
       cost: Number(statement.getCell(row, 8).value),
       revenue: Number(statement.getCell(row, 9).value),
-      profit: Number(statement.getCell(row, 10).value),
-      batches: cellText(statement.getCell(row, 11).value),
+      vat: Number(statement.getCell(row, 10).value),
+      profit: Number(statement.getCell(row, 11).value),
+      batches: cellText(statement.getCell(row, 12).value),
     });
   }
   return { financial, categories, sales };
@@ -386,14 +397,20 @@ async function main(): Promise<void> {
     }
     equal(january.financial["Total Cash Outflow - Purchases Debit (AED)"], 6320, "January purchase cash total is exact");
     equal(january.financial["Total Cash Inflow - Sales Revenue Credit (AED)"], 6010, "January sales revenue is exact");
+    const expectedVat = [4500, 450, 360, 600, 100]
+      .reduce((sum, gross) => sum + Math.round((gross * 5 / 105) * 100) / 100, 0);
+    equal(january.financial["Total VAT on Invoices, including outstanding (AED)"], expectedVat, "invoice VAT is separately totaled");
+    equal(january.financial["Total VAT on Paid Invoices (AED)"], 0, "pending invoice VAT is not reported as collected");
+    equal(january.financial["Business Revenue, excluding VAT (AED)"], 6010 - expectedVat, "VAT is excluded from business revenue");
     equal(january.financial["Purchase Cost of Goods Sold - COGS (AED)"], 2990, "exact FIFO COGS is used");
-    equal(january.financial["Overall Net Realized Profit (AED)"], 3020, "realized profit reconciles to revenue minus FIFO COGS");
+    equal(january.financial["Overall Net Realized Profit (AED)"], 6010 - expectedVat - 2990, "realized profit reconciles to revenue excluding VAT minus FIFO COGS");
     const splitSale = january.sales.find((sale) => sale.invoice === goldSale.invoiceNumber);
     assert(splitSale !== undefined, "split FIFO invoice is present in statement sales");
     if (splitSale) {
       equal(splitSale.cost, 2000, "split FIFO invoice COGS uses both purchase rates");
       equal(splitSale.revenue, 4500, "split FIFO invoice revenue is retained");
-      equal(splitSale.profit, 2500, "split FIFO invoice profit is exact");
+      equal(splitSale.vat, 214.29, "invoice VAT is itemized in the statement");
+      equal(splitSale.profit, 4500 - 214.29 - 2000, "item-level profit excludes VAT");
       assert(
         splitSale.batches.includes(`#${goldFirst} (10g)`) && splitSale.batches.includes(`#${goldSecond} (5g)`),
         `split FIFO invoice names both consumed batches (got "${splitSale.batches}")`,
@@ -408,7 +425,9 @@ async function main(): Promise<void> {
     equal(filteredGold.remaining, (baseline.gold_9999 ?? 0) + 5, "gold remaining balance stays the current live vault balance");
     equal(goldOnly.financial["Total Cash Outflow - Purchases Debit (AED)"], 0, "filtered purchase cash total is zero");
     equal(goldOnly.financial["Total Cash Inflow - Sales Revenue Credit (AED)"], 4500, "category-filtered revenue is exact");
+    equal(goldOnly.financial["Total VAT on Invoices, including outstanding (AED)"], 214.29, "category filter prorates VAT to included items");
     equal(goldOnly.financial["Purchase Cost of Goods Sold - COGS (AED)"], 2000, "category-filtered FIFO COGS is exact");
+    equal(goldOnly.financial["Overall Net Realized Profit (AED)"], 2285.71, "category-filtered profit excludes allocated VAT");
     assert(Object.keys(goldOnly.categories).length === 1, "category filter excludes other category rows");
 
     console.log("\nTest 3: Long statement PDF preserves paginated report output");
@@ -426,6 +445,9 @@ async function main(): Promise<void> {
         encoding: "utf8",
         maxBuffer: 2_000_000,
       });
+      assert(renderedText.includes("Total VAT on Invoices"), "PDF includes a distinct invoiced VAT line");
+      assert(renderedText.includes("Total VAT on Paid Invoices"), "PDF distinguishes VAT on paid invoices");
+      assert(renderedText.includes("Business Revenue (excluding VAT)"), "PDF states revenue net of VAT");
       const pages = renderedText.split("\f").filter((page) => page.trim().length > 0);
       assert(pages.length >= 3, `long fixture spans multiple rendered PDF pages (got ${pages.length})`);
 

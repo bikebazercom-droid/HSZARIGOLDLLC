@@ -143490,6 +143490,12 @@ async function loadStatementData(startDate, endDate, category) {
              (CASE WHEN s.sum_items > 0
                    THEN ii.total_price::numeric * i.total::numeric / s.sum_items
                    ELSE ii.total_price::numeric END)::text AS amount,
+             (CASE WHEN s.sum_items > 0
+                   THEN COALESCE(i.vat_amount::numeric, 0) * ii.total_price::numeric / s.sum_items
+                   ELSE 0 END)::text AS vat_aed,
+             (CASE WHEN NOT i.is_pending AND s.sum_items > 0
+                   THEN COALESCE(i.vat_amount::numeric, 0) * ii.total_price::numeric / s.sum_items
+                   ELSE 0 END)::text AS collected_vat_aed,
              c.exact_cogs::text AS exact_cogs,
              c.batch_refs,
              'retail_sale'::text AS event_kind
@@ -143528,6 +143534,8 @@ async function loadStatementData(startDate, endDate, category) {
                           + wii.returned_making_aed::numeric
                           + wii.returned_metal_aed::numeric
                      ELSE wii.making_aed::numeric END)::text AS amount,
+               0::numeric::text AS vat_aed,
+               0::numeric::text AS collected_vat_aed,
                c.exact_cogs::text AS exact_cogs,
                c.batch_refs,
                'wholesale_delivery'::text AS event_kind
@@ -143557,6 +143565,8 @@ async function loadStatementData(startDate, endDate, category) {
                wii.category AS bucket,
                0::numeric::text AS grams,
                wsa.aed_amount::numeric::text AS amount,
+               0::numeric::text AS vat_aed,
+               0::numeric::text AS collected_vat_aed,
                0::numeric::text AS exact_cogs,
                NULL::text AS batch_refs,
                'wholesale_fix'::text AS event_kind
@@ -143575,6 +143585,8 @@ async function loadStatementData(startDate, endDate, category) {
                wii.category AS bucket,
                (-wrl.gross_weight_grams::numeric)::text AS grams,
                (-wrl.returned_aed::numeric)::text AS amount,
+               0::numeric::text AS vat_aed,
+               0::numeric::text AS collected_vat_aed,
                (-wrl.returned_cogs_aed::numeric)::text AS exact_cogs,
                NULL::text AS batch_refs,
                'wholesale_return'::text AS event_kind
@@ -143601,6 +143613,8 @@ async function loadStatementData(startDate, endDate, category) {
   ].filter((row) => isDashboardInventoryCategory(row.bucket ?? "custom"));
   const totalPurchaseAed = purchases.reduce((s, p) => s + Number(p.total_price_aed), 0);
   const totalSalesAed = sales.reduce((s, r) => s + Number(r.amount), 0);
+  const totalVatAed = sales.reduce((s, r) => s + Number(r.vat_aed), 0);
+  const collectedVatAed = sales.reduce((s, r) => s + Number(r.collected_vat_aed), 0);
   const avgCost = /* @__PURE__ */ new Map();
   const allPurch = await db.execute(sql`
     SELECT category, SUM(weight_grams::numeric)::text AS g, SUM(total_price_aed::numeric)::text AS aed
@@ -143614,7 +143628,7 @@ async function loadStatementData(startDate, endDate, category) {
   }
   const itemCogs = (r) => r.exact_cogs != null ? Number(r.exact_cogs) : Number(r.grams) * (avgCost.get(r.bucket ?? "") ?? 0);
   const cogs = sales.reduce((s, r) => s + itemCogs(r), 0);
-  const profit = totalSalesAed - cogs;
+  const profit = totalSalesAed - totalVatAed - cogs;
   const purchasedByCategory = /* @__PURE__ */ new Map();
   for (const row of purchases) {
     purchasedByCategory.set(
@@ -143665,6 +143679,8 @@ async function loadStatementData(startDate, endDate, category) {
       kg: grams / 1e3,
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
+      vatAed: 0,
+      collectedVatAed: 0,
       costAed: null,
       profitAed: null,
       batchRefs: null
@@ -143685,8 +143701,10 @@ async function loadStatementData(startDate, endDate, category) {
       kg: grams / 1e3,
       ratePerG: grams > 0 ? total / grams : 0,
       totalAed: total,
+      vatAed: Number(s.vat_aed),
+      collectedVatAed: Number(s.collected_vat_aed),
       costAed: itemCogs(s),
-      profitAed: total - itemCogs(s),
+      profitAed: total - Number(s.vat_aed) - itemCogs(s),
       batchRefs: s.batch_refs
     });
   }
@@ -143723,6 +143741,8 @@ async function loadStatementData(startDate, endDate, category) {
     kg: ledger.reduce((s, r) => s + r.kg, 0),
     soldGrams: ledger.reduce((s, r) => s + (r.type === "Purchase" ? 0 : r.grams), 0),
     revenueAed: totalSalesAed,
+    vatAed: totalVatAed,
+    collectedVatAed,
     cogsAed: cogs,
     profitAed: profit
   };
@@ -143735,6 +143755,8 @@ async function loadStatementData(startDate, endDate, category) {
     totals,
     totalPurchaseAed,
     totalSalesAed,
+    totalVatAed,
+    collectedVatAed,
     cogs,
     profit,
     categoryBreakdown
@@ -143856,24 +143878,26 @@ router5.get("/dashboard/statement-pdf", requireAdmin, async (req, res) => {
     y += 20;
   } else {
     gridHeader([
-      ["Date", 70],
+      ["Date", 60],
       ["Invoice Ref", 80],
-      ["Customer", 150],
-      ["Category", 140],
-      ["Sold Weight (g)", 100, true],
-      ["Selling Rate (AED/g)", 100, true],
-      ["Cash Inflow (AED)", 122, true]
+      ["Customer", 130],
+      ["Category", 120],
+      ["Sold Weight (g)", 90, true],
+      ["Selling Rate (AED/g)", 80, true],
+      ["VAT (AED)", 90, true],
+      ["Sales Total (AED)", 112, true]
     ]);
     saleRows.forEach((r) => {
       const itemCat = r.itemName === r.category ? r.itemName : `${r.itemName} (${r.category})`;
       gridRow([
-        [r.date, 70],
+        [r.date, 60],
         [r.invoiceRef || "-", 80],
-        [r.party.substring(0, 32), 150],
-        [itemCat.substring(0, 30), 140],
-        [num3(r.grams), 100, true],
-        [num2(r.ratePerG), 100, true],
-        [num2(r.totalAed), 122, true]
+        [r.party.substring(0, 32), 130],
+        [itemCat.substring(0, 30), 120],
+        [num3(r.grams), 90, true],
+        [num2(r.ratePerG), 80, true],
+        [num2(r.vatAed), 90, true],
+        [num2(r.totalAed), 112, true]
       ]);
     });
     gridRow([
@@ -143916,6 +143940,9 @@ router5.get("/dashboard/statement-pdf", requireAdmin, async (req, res) => {
     ["Total Sold Weight:", `${num3(totals.soldGrams)} g`, false],
     ["Total Cash Outflow - Purchases Debit:", `AED ${num2(totalPurchaseAed)}`, false],
     ["Total Cash Inflow - Sales Revenue Credit:", `AED ${num2(totalSalesAed)}`, false],
+    ["Total VAT on Invoices (includes outstanding):", `AED ${num2(totals.vatAed)}`, false],
+    ["Total VAT on Paid Invoices:", `AED ${num2(totals.collectedVatAed)}`, false],
+    ["Business Revenue (excluding VAT):", `AED ${num2(totalSalesAed - totals.vatAed)}`, false],
     ["Purchase Cost of Goods Sold (COGS):", `AED ${num2(cogs)}`, false],
     ["OVERALL NET REALIZED PROFIT:", `${profit >= 0 ? "+" : "-"}AED ${num2(Math.abs(profit))}`, true],
     ["TOTAL PHYSICAL METAL REMAINING:", `${num3(liveMetalG)} g  (${(liveMetalG / 1e3).toFixed(3)} kg)`, true]
@@ -143973,6 +144000,7 @@ router5.get("/dashboard/statement-xlsx", requireAdmin, async (req, res) => {
     { width: 14 },
     { width: 18 },
     { width: 18 },
+    { width: 14 },
     { width: 18 },
     { width: 30 }
   ];
@@ -144009,7 +144037,7 @@ router5.get("/dashboard/statement-xlsx", requireAdmin, async (req, res) => {
   p1.getCell(5).numFmt = "#,##0.000";
   p1.getCell(7).numFmt = "#,##0.00";
   sectionTitle("SECTION 2: SALES & PROFIT");
-  styleHeader(ws.addRow(["SL", "Date", "Invoice", "Customer", "Item Name", "Category", "Sold Wt (g)", "Purchase Cost (AED)", "Sale Value (AED)", "Profit / Loss (AED)", "Consumed Batch"]));
+  styleHeader(ws.addRow(["SL", "Date", "Invoice", "Customer", "Item Name", "Category", "Sold Wt (g)", "Purchase Cost (AED)", "Sale Total incl. VAT (AED)", "VAT (AED)", "Profit excl. VAT (AED)", "Consumed Batch"]));
   const saleRows = ledger.filter((r) => r.type !== "Purchase");
   for (const [i, r] of saleRows.entries()) {
     const row = ws.addRow([
@@ -144022,26 +144050,31 @@ router5.get("/dashboard/statement-xlsx", requireAdmin, async (req, res) => {
       r.grams,
       r.costAed ?? "-",
       r.totalAed,
+      r.vatAed,
       r.profitAed ?? "-",
       r.batchRefs ?? "-"
     ]);
     row.eachCell((cell, col) => {
       cell.border = allBorders;
       if (col === 7) cell.numFmt = "#,##0.000";
-      if (col >= 8 && col <= 10 && typeof cell.value === "number") cell.numFmt = "#,##0.00";
-      if (col >= 7 && col <= 10 && typeof cell.value !== "number") cell.alignment = { horizontal: "right" };
+      if (col >= 8 && col <= 11 && typeof cell.value === "number") cell.numFmt = "#,##0.00";
+      if (col >= 7 && col <= 11 && typeof cell.value !== "number") cell.alignment = { horizontal: "right" };
     });
   }
   const salesTotals = [
     ["Total Sold Weight (g)", totals.soldGrams, "#,##0.000", "FFE2E8F0"],
+    ["Total Sales Value, including VAT (AED)", totals.revenueAed, "#,##0.00", "FFE2E8F0"],
+    ["Total VAT on Invoices (including outstanding) (AED)", totals.vatAed, "#,##0.00", "FFFDF6E3"],
+    ["Total VAT on Paid Invoices (AED)", totals.collectedVatAed, "#,##0.00", "FFFDF6E3"],
+    ["Business Revenue, excluding VAT (AED)", totals.revenueAed - totals.vatAed, "#,##0.00", "FFE2E8F0"],
     ["Purchase Cost of Sold - COGS (AED)", totals.cogsAed, "#,##0.00", "FFFDF6E3"],
     ["Total Revenue Received (AED)", totals.revenueAed, "#,##0.00", "FFE2E8F0"],
     ["Total Net Profit Earned (AED)", totals.profitAed, "#,##0.00", "FFE7F5EC"]
   ];
   for (const [label, val, fmt, argb] of salesTotals) {
-    const row = ws.addRow(["", "", "", "", "", "", "", "", "", label, val]);
+    const row = ws.addRow(["", "", "", "", "", "", "", "", "", "", label, val]);
     styleTotal(row, argb);
-    row.getCell(11).numFmt = fmt;
+    row.getCell(12).numFmt = fmt;
   }
   sectionTitle("SECTION 3: CATEGORY-WISE VAULT BREAKDOWN");
   styleHeader(ws.addRow([
@@ -144117,6 +144150,9 @@ router5.get("/dashboard/statement-xlsx", requireAdmin, async (req, res) => {
   const sumRows = [
     ["Total Cash Outflow - Purchases Debit (AED)", totalPurchaseAed, "#,##0.00"],
     ["Total Cash Inflow - Sales Revenue Credit (AED)", totalSalesAed, "#,##0.00"],
+    ["Total VAT on Invoices, including outstanding (AED)", totals.vatAed, "#,##0.00"],
+    ["Total VAT on Paid Invoices (AED)", totals.collectedVatAed, "#,##0.00"],
+    ["Business Revenue, excluding VAT (AED)", totalSalesAed - totals.vatAed, "#,##0.00"],
     ["Purchase Cost of Goods Sold - COGS (AED)", cogs, "#,##0.00"],
     ["Overall Net Realized Profit (AED)", profit, "#,##0.00"],
     ["Total Physical Metal Remaining (g)", categoryRemainingTotal, "#,##0.000"]
