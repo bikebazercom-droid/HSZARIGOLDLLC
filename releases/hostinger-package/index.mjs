@@ -139833,24 +139833,26 @@ var GetDashboardKpisResponse = objectType({
   "stockInGrams": numberType().describe("Total purchased weight from suppliers in the range"),
   "stockOutGrams": numberType().describe("Total sold weight (invoice item gross weight) in the range"),
   "netStockGrams": numberType().describe("stockInGrams - stockOutGrams"),
-  "totalRevenueAed": numberType(),
+  "totalRevenueAed": numberType().describe("Gross invoiced revenue including VAT"),
+  "totalVatAed": numberType().describe("Stored invoiced VAT in the selected range, including pending invoices"),
   "cashReceivedAed": numberType().describe("Collected amount (non-pending invoices)"),
   "outstandingDueAed": numberType().describe("Pending invoice totals"),
   "makingChargesAed": numberType(),
   "invoiceCount": numberType(),
   "avgInvoiceAed": numberType(),
   "purchaseCostAed": numberType().describe("AED spent purchasing stock from suppliers in the range"),
-  "cogsAed": numberType().describe("Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams)"),
-  "netProfitAed": numberType().describe("totalRevenueAed - cogsAed")
+  "cogsAed": numberType().describe("Exact FIFO cost of sold items"),
+  "netProfitAed": numberType().describe("totalRevenueAed - totalVatAed - cogsAed")
 });
 var GetDashboardSummaryCardsResponse = objectType({
   "availableStockGrams": numberType().describe("Non-silver purchased grams minus sold grams (live remaining main stock)"),
   "availableStockCostAed": numberType().describe("Non-silver purchase cost minus COGS of sold non-silver items (remaining stock at cost)"),
   "silverStockGrams": numberType().describe("Silver purchased grams minus silver sold grams"),
   "silverStockCostAed": numberType().describe("Silver purchase cost minus COGS of sold silver items"),
-  "totalRevenueAed": numberType().describe("Cumulative invoiced revenue (all-time)"),
+  "totalRevenueAed": numberType().describe("Cumulative gross invoiced revenue including VAT (all-time)"),
+  "totalVatAed": numberType().describe("All-time stored invoiced VAT, including pending invoices"),
   "soldCostAed": numberType().describe("All-time exact FIFO purchase cost (COGS) of sold items"),
-  "netProfitAed": numberType().describe("totalRevenueAed - all-time COGS"),
+  "netProfitAed": numberType().describe("totalRevenueAed - totalVatAed - all-time COGS"),
   "totalPhysicalRemainingGrams": numberType().describe("Current live physical metal balance across every stock category"),
   "totalPurchaseDebitAed": numberType().describe("All-time purchase cash outflow (cash debit)"),
   "totalSalesCreditAed": numberType().describe("All-time invoiced sales revenue (cash credit)"),
@@ -142668,6 +142670,7 @@ router5.get("/dashboard/kpis", async (req, res) => {
     db.execute(sql`
       SELECT COUNT(*)::text AS invoice_count,
              COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
+             COALESCE(SUM(COALESCE(i.vat_amount::numeric, 0)), 0)::text AS total_vat,
              COALESCE(SUM(CASE WHEN NOT i.is_pending THEN i.total::numeric ELSE 0 END), 0)::text AS cash_received,
              COALESCE(SUM(CASE WHEN i.is_pending THEN i.total::numeric ELSE 0 END), 0)::text AS outstanding_due
       FROM invoices i
@@ -142757,11 +142760,13 @@ router5.get("/dashboard/kpis", async (req, res) => {
   const invoiceCount = Number(invAgg.invoice_count) + Number(wholesaleAgg.invoice_count);
   const totalRevenueAed = Number(invAgg.total_revenue) + Number(wholesaleAgg.total_revenue);
   const totalCogsAed = Number(cogsAgg.cogs) + Number(wholesaleCogsAgg.cogs);
+  const totalVatAed = Number(invAgg.total_vat);
   res.json({
     stockInGrams,
     stockOutGrams,
     netStockGrams: stockInGrams - stockOutGrams,
     totalRevenueAed,
+    totalVatAed,
     cashReceivedAed: Number(invAgg.cash_received) + Number(wholesaleAgg.cash_received),
     outstandingDueAed: Number(invAgg.outstanding_due) + Number(wholesaleAgg.outstanding_due),
     makingChargesAed: Number(itemAgg.making_charges) + Number(wholesaleAgg.making_charges),
@@ -142769,7 +142774,7 @@ router5.get("/dashboard/kpis", async (req, res) => {
     avgInvoiceAed: invoiceCount > 0 ? totalRevenueAed / invoiceCount : 0,
     purchaseCostAed: Number(purchaseAgg.purchase_cost),
     cogsAed: totalCogsAed,
-    netProfitAed: totalRevenueAed - totalCogsAed
+    netProfitAed: totalRevenueAed - totalVatAed - totalCogsAed
   });
 });
 router5.get("/dashboard/summary-cards", async (_req, res) => {
@@ -142793,7 +142798,12 @@ router5.get("/dashboard/summary-cards", async (_req, res) => {
           FROM wholesale_invoices wi
           WHERE ${dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`)}
         ), 0)
-      )::text AS total_revenue
+      )::text AS total_revenue,
+      COALESCE((
+        SELECT SUM(COALESCE(i.vat_amount::numeric, 0))
+        FROM invoices i
+        WHERE ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
+      ), 0)::text AS total_vat
     `).then((r) => r.rows[0]),
     db.execute(sql`
       SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN net_cost ELSE 0 END), 0)::text AS main_cogs,
@@ -142886,8 +142896,9 @@ router5.get("/dashboard/summary-cards", async (_req, res) => {
     silverStockGrams: round3(remainingMap.get("silver") ?? 0),
     silverStockCostAed: round2(Number(purchaseAgg.silver_cost)),
     totalRevenueAed: round2(revenue),
+    totalVatAed: round2(Number(salesAgg.total_vat)),
     soldCostAed: round2(mainCogs + silverCogs),
-    netProfitAed: round2(revenue - mainCogs - silverCogs),
+    netProfitAed: round2(revenue - Number(salesAgg.total_vat) - mainCogs - silverCogs),
     totalPhysicalRemainingGrams,
     totalPurchaseDebitAed: round2(Number(purchaseAgg.purchase_debit)),
     totalSalesCreditAed: round2(revenue),
