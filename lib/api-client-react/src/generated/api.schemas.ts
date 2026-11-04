@@ -20,7 +20,10 @@ export interface DashboardKpis {
   stockOutGrams: number;
   /** stockInGrams - stockOutGrams */
   netStockGrams: number;
+  /** Gross invoiced revenue including VAT */
   totalRevenueAed: number;
+  /** Stored invoiced VAT in the selected range, including pending invoices */
+  totalVatAed: number;
   /** Collected amount (non-pending invoices) */
   cashReceivedAed: number;
   /** Pending invoice totals */
@@ -30,9 +33,9 @@ export interface DashboardKpis {
   avgInvoiceAed: number;
   /** AED spent purchasing stock from suppliers in the range */
   purchaseCostAed: number;
-  /** Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams) */
+  /** Exact FIFO cost of sold items */
   cogsAed: number;
-  /** totalRevenueAed - cogsAed */
+  /** totalRevenueAed - totalVatAed - cogsAed */
   netProfitAed: number;
 }
 
@@ -56,11 +59,13 @@ export interface DashboardSummaryCards {
   silverStockGrams: number;
   /** Silver purchase cost minus COGS of sold silver items */
   silverStockCostAed: number;
-  /** Cumulative invoiced revenue (all-time) */
+  /** Cumulative gross invoiced revenue including VAT (all-time) */
   totalRevenueAed: number;
+  /** All-time stored invoiced VAT, including pending invoices */
+  totalVatAed: number;
   /** All-time exact FIFO purchase cost (COGS) of sold items */
   soldCostAed: number;
-  /** totalRevenueAed - all-time COGS */
+  /** totalRevenueAed - totalVatAed - all-time COGS */
   netProfitAed: number;
   /** Current live physical metal balance across every stock category */
   totalPhysicalRemainingGrams: number;

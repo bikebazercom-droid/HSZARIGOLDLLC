@@ -1224,7 +1224,7 @@ components:
 
     DashboardKpis:
       type: object
-      required: [stockInGrams, stockOutGrams, netStockGrams, totalRevenueAed, cashReceivedAed, outstandingDueAed, makingChargesAed, invoiceCount, avgInvoiceAed, purchaseCostAed, cogsAed, netProfitAed]
+      required: [stockInGrams, stockOutGrams, netStockGrams, totalRevenueAed, totalVatAed, cashReceivedAed, outstandingDueAed, makingChargesAed, invoiceCount, avgInvoiceAed, purchaseCostAed, cogsAed, netProfitAed]
       properties:
         stockInGrams:
           type: number
@@ -1237,6 +1237,10 @@ components:
           description: stockInGrams - stockOutGrams
         totalRevenueAed:
           type: number
+          description: Gross invoiced revenue including VAT
+        totalVatAed:
+          type: number
+          description: Stored invoiced VAT in the selected range, including pending invoices
         cashReceivedAed:
           type: number
           description: Collected amount (non-pending invoices)
@@ -1254,14 +1258,14 @@ components:
           description: AED spent purchasing stock from suppliers in the range
         cogsAed:
           type: number
-          description: Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams)
+          description: Exact FIFO cost of sold items
         netProfitAed:
           type: number
-          description: totalRevenueAed - cogsAed
+          description: totalRevenueAed - totalVatAed - cogsAed
 
     DashboardSummaryCards:
       type: object
-      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, soldCostAed, netProfitAed, totalPhysicalRemainingGrams, totalPurchaseDebitAed, totalSalesCreditAed, categoryBreakdown]
+      required: [availableStockGrams, availableStockCostAed, silverStockGrams, silverStockCostAed, totalRevenueAed, totalVatAed, soldCostAed, netProfitAed, totalPhysicalRemainingGrams, totalPurchaseDebitAed, totalSalesCreditAed, categoryBreakdown]
       properties:
         availableStockGrams:
           type: number
@@ -1277,13 +1281,16 @@ components:
           description: Silver purchase cost minus COGS of sold silver items
         totalRevenueAed:
           type: number
-          description: Cumulative invoiced revenue (all-time)
+          description: Cumulative gross invoiced revenue including VAT (all-time)
+        totalVatAed:
+          type: number
+          description: All-time stored invoiced VAT, including pending invoices
         soldCostAed:
           type: number
           description: All-time exact FIFO purchase cost (COGS) of sold items
         netProfitAed:
           type: number
-          description: totalRevenueAed - all-time COGS
+          description: totalRevenueAed - totalVatAed - all-time COGS
         totalPhysicalRemainingGrams:
           type: number
           description: Current live physical metal balance across every stock category

@@ -74,6 +74,7 @@ async function main() {
         if (typeof value === "number") assert.ok(Number.isFinite(value));
       }
       assert.equal(path === "/dashboard/summary-cards" ? result.totalRevenueAed : result.invoiceCount, 0);
+      if (path !== "/wholesale/dashboard") assert.equal(result.totalVatAed, 0);
     }
     console.log("PASS: complete schema parity, repeated bootstrap, empty dashboard JSON");
     const billResponse = await request("/purchase-bills", "POST", {
@@ -87,12 +88,14 @@ async function main() {
     const bill = await billResponse.json() as { id: number };
     const invoiceInput = {
       customerName: "Runtime Customer", paymentMethod: "cash",
-      subtotal: 320, discount: 0, total: 320, isPending: false,
+      subtotal: 400, discount: 10, total: 409.5, isPending: false,
+      vatAmount: 19.5, vatRate: 5, totalBeforeVat: 390, totalIncludingVat: 409.5,
       items: [{ description: "GOLD 9999", category: "gold_9999", quantity: 1,
-        grossWeight: 1, unitPrice: 320, totalPrice: 320 }],
+        grossWeight: 1, unitPrice: 400, totalPrice: 400 }],
     };
     const invoiceResponses = await Promise.all([
-      request("/invoices", "POST", invoiceInput), request("/invoices", "POST", invoiceInput),
+      request("/invoices", "POST", { ...invoiceInput, createdAt: "2026-11-03T12:00:00.000Z" }),
+      request("/invoices", "POST", { ...invoiceInput, isPending: true, createdAt: "2026-11-04T12:00:00.000Z" }),
     ]);
     const invoices: Array<{ id: number; invoiceNumber: string }> = [];
     for (const response of invoiceResponses) {
@@ -100,6 +103,29 @@ async function main() {
       invoices.push(await response.json() as { id: number; invoiceNumber: string });
     }
     assert.notEqual(invoices[0].invoiceNumber, invoices[1].invoiceNumber);
+    for (const path of ["/dashboard/kpis", "/dashboard/summary-cards"]) {
+      const metrics = await (await request(path)).json() as Record<string, number>;
+      assert.equal(metrics.totalRevenueAed, 819);
+      assert.equal(metrics.totalVatAed, 39, "VAT includes pending invoices, matching revenue scope");
+      assert.equal(metrics.netProfitAed, 140, "819 gross − 39 VAT − 640 FIFO COGS");
+    }
+    const filtered = await (await request("/dashboard/kpis?startDate=2026-11-03&endDate=2026-11-03")).json() as Record<string, number>;
+    assert.equal(filtered.totalRevenueAed, 409.5);
+    assert.equal(filtered.totalVatAed, 19.5);
+    assert.equal(filtered.netProfitAed, 70);
+    const empty = await (await request("/dashboard/kpis?startDate=2020-01-01&endDate=2020-01-01")).json() as Record<string, number>;
+    assert.equal(empty.totalVatAed, 0);
+    assert.equal(empty.netProfitAed, 0);
+    // Simulate an older schema only inside this owned test namespace.
+    // Never infer missing historical VAT from today's tax rate.
+    await pool.query("ALTER TABLE invoices ALTER COLUMN vat_amount DROP NOT NULL");
+    await pool.query("UPDATE invoices SET vat_amount = NULL WHERE id=$1", [invoices[0].id]);
+    const legacy = await (await request("/dashboard/kpis")).json() as Record<string, number>;
+    assert.equal(legacy.totalVatAed, 19.5);
+    assert.equal(legacy.netProfitAed, 159.5);
+    await pool.query("UPDATE invoices SET vat_amount = 19.5 WHERE id=$1", [invoices[0].id]);
+    await pool.query("ALTER TABLE invoices ALTER COLUMN vat_amount SET NOT NULL");
+    console.log("PASS: VAT separated from profit, discounted invoices, pending invoices, date filters, empty metrics, legacy NULL VAT");
     assert.equal(Number((await pool.query("SELECT weight_grams FROM stock_levels WHERE category='gold_9999'")).rows[0].weight_grams), 8);
     assert.equal((await request(`/purchase-bills/${bill.id}`, "DELETE", undefined, { "x-allow-paid-delete": "true" })).status, 409);
     assert.equal(Number((await pool.query("SELECT count(*) FROM purchase_bills")).rows[0].count), 1);

@@ -1164,15 +1164,16 @@ export const GetDashboardKpisResponse = zod.object({
   "stockInGrams": zod.number().describe('Total purchased weight from suppliers in the range'),
   "stockOutGrams": zod.number().describe('Total sold weight (invoice item gross weight) in the range'),
   "netStockGrams": zod.number().describe('stockInGrams - stockOutGrams'),
-  "totalRevenueAed": zod.number(),
+  "totalRevenueAed": zod.number().describe('Gross invoiced revenue including VAT'),
+  "totalVatAed": zod.number().describe('Stored invoiced VAT in the selected range, including pending invoices'),
   "cashReceivedAed": zod.number().describe('Collected amount (non-pending invoices)'),
   "outstandingDueAed": zod.number().describe('Pending invoice totals'),
   "makingChargesAed": zod.number(),
   "invoiceCount": zod.number(),
   "avgInvoiceAed": zod.number(),
   "purchaseCostAed": zod.number().describe('AED spent purchasing stock from suppliers in the range'),
-  "cogsAed": zod.number().describe('Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams)'),
-  "netProfitAed": zod.number().describe('totalRevenueAed - cogsAed')
+  "cogsAed": zod.number().describe('Exact FIFO cost of sold items'),
+  "netProfitAed": zod.number().describe('totalRevenueAed - totalVatAed - cogsAed')
 })
 
 
@@ -1184,9 +1185,10 @@ export const GetDashboardSummaryCardsResponse = zod.object({
   "availableStockCostAed": zod.number().describe('Non-silver purchase cost minus COGS of sold non-silver items (remaining stock at cost)'),
   "silverStockGrams": zod.number().describe('Silver purchased grams minus silver sold grams'),
   "silverStockCostAed": zod.number().describe('Silver purchase cost minus COGS of sold silver items'),
-  "totalRevenueAed": zod.number().describe('Cumulative invoiced revenue (all-time)'),
+  "totalRevenueAed": zod.number().describe('Cumulative gross invoiced revenue including VAT (all-time)'),
+  "totalVatAed": zod.number().describe('All-time stored invoiced VAT, including pending invoices'),
   "soldCostAed": zod.number().describe('All-time exact FIFO purchase cost (COGS) of sold items'),
-  "netProfitAed": zod.number().describe('totalRevenueAed - all-time COGS'),
+  "netProfitAed": zod.number().describe('totalRevenueAed - totalVatAed - all-time COGS'),
   "totalPhysicalRemainingGrams": zod.number().describe('Current live physical metal balance across every stock category'),
   "totalPurchaseDebitAed": zod.number().describe('All-time purchase cash outflow (cash debit)'),
   "totalSalesCreditAed": zod.number().describe('All-time invoiced sales revenue (cash credit)'),

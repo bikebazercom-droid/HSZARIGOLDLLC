@@ -16,11 +16,13 @@ export interface DashboardSummaryCards {
   silverStockGrams: number;
   /** Silver purchase cost minus COGS of sold silver items */
   silverStockCostAed: number;
-  /** Cumulative invoiced revenue (all-time) */
+  /** Cumulative gross invoiced revenue including VAT (all-time) */
   totalRevenueAed: number;
+  /** All-time stored invoiced VAT, including pending invoices */
+  totalVatAed: number;
   /** All-time exact FIFO purchase cost (COGS) of sold items */
   soldCostAed: number;
-  /** totalRevenueAed - all-time COGS */
+  /** totalRevenueAed - totalVatAed - all-time COGS */
   netProfitAed: number;
   /** Current live physical metal balance across every stock category */
   totalPhysicalRemainingGrams: number;

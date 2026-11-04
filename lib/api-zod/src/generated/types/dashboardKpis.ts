@@ -13,7 +13,10 @@ export interface DashboardKpis {
   stockOutGrams: number;
   /** stockInGrams - stockOutGrams */
   netStockGrams: number;
+  /** Gross invoiced revenue including VAT */
   totalRevenueAed: number;
+  /** Stored invoiced VAT in the selected range, including pending invoices */
+  totalVatAed: number;
   /** Collected amount (non-pending invoices) */
   cashReceivedAed: number;
   /** Pending invoice totals */
@@ -23,8 +26,8 @@ export interface DashboardKpis {
   avgInvoiceAed: number;
   /** AED spent purchasing stock from suppliers in the range */
   purchaseCostAed: number;
-  /** Estimated cost of sold items (weighted-average purchase cost per gram per category x sold grams) */
+  /** Exact FIFO cost of sold items */
   cogsAed: number;
-  /** totalRevenueAed - cogsAed */
+  /** totalRevenueAed - totalVatAed - cogsAed */
   netProfitAed: number;
 }

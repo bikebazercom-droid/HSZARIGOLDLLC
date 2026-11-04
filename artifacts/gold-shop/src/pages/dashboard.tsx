@@ -155,13 +155,18 @@ export default function Dashboard() {
     },
     {
       title: "Total Sales Revenue", icon: Banknote,
-      value: `AED ${fmtAED(kpis.totalRevenueAed)}`, sub: "All generated invoices",
+      value: `AED ${fmtAED(kpis.totalRevenueAed)}`, sub: "All generated invoices • includes VAT",
       tone: "profit" as const,
+    },
+    {
+      title: "Total VAT", icon: ReceiptText,
+      value: `AED ${fmtAED(kpis.totalVatAed)}`, sub: "Invoiced VAT • includes pending invoices",
+      tone: "vault" as const,
     },
     {
       title: "Net Profit", icon: TrendingUp,
       value: `AED ${fmtAED(kpis.netProfitAed)}`,
-      sub: `Revenue − est. cost of sold items (AED ${fmtAED(kpis.cogsAed)})`,
+      sub: `Revenue excl. VAT − FIFO cost (AED ${fmtAED(kpis.cogsAed)})`,
       green: kpis.netProfitAed >= 0, danger: kpis.netProfitAed < 0,
       tone: kpis.netProfitAed < 0 ? ("expense" as const) : ("profit" as const),
     },
@@ -289,6 +294,7 @@ export default function Dashboard() {
                   <p className={`font-mono text-2xl font-bold ${summary.netProfitAed < 0 ? "text-rose-700" : "text-emerald-700"}`}>
                     {fmtAED(summary.netProfitAed)}
                   </p>
+                  <p className="mt-1 text-[10px] text-slate-600">Excludes VAT: AED {fmtAED(summary.totalVatAed)}</p>
                 </div>
               </div>
             </CardContent>
@@ -454,7 +460,7 @@ export default function Dashboard() {
           {kpisError && !kpis
             ? <DashboardLoadError onRetry={() => void retryKpis()} />
             : kpisLoading || !kpis
-            ? [...Array(8)].map((_, i) => <Skeleton key={i} className="h-[112px] rounded-xl" />)
+            ? [...Array(11)].map((_, i) => <Skeleton key={i} className="h-[112px] rounded-xl" />)
             : kpiCards.map((c) => {
                 const tone = KPI_CARD_TONES[c.tone];
                 return (

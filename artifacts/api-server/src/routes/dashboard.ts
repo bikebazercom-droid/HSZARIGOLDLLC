@@ -62,7 +62,7 @@ function getCatStats(rows: CatRow[], category: string) {
   };
 }
 
-// Aggregated KPI metrics for the dashboard 8-card grid. Optional
+// Aggregated KPI metrics for the dashboard grid. Optional
 // startDate/endDate (yyyy-MM-dd) filter every metric to that range.
 router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   const q = req.query as Record<string, string | undefined>;
@@ -134,9 +134,10 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
         ELSE ii.category END)`;
 
   const [invAgg, itemAgg, purchaseAgg, cogsAgg, wholesaleAgg, wholesaleCogsAgg] = await Promise.all([
-    db.execute<{ invoice_count: string; total_revenue: string; cash_received: string; outstanding_due: string }>(sql`
+    db.execute<{ invoice_count: string; total_revenue: string; total_vat: string; cash_received: string; outstanding_due: string }>(sql`
       SELECT COUNT(*)::text AS invoice_count,
              COALESCE(SUM(i.total::numeric), 0)::text AS total_revenue,
+             COALESCE(SUM(COALESCE(i.vat_amount::numeric, 0)), 0)::text AS total_vat,
              COALESCE(SUM(CASE WHEN NOT i.is_pending THEN i.total::numeric ELSE 0 END), 0)::text AS cash_received,
              COALESCE(SUM(CASE WHEN i.is_pending THEN i.total::numeric ELSE 0 END), 0)::text AS outstanding_due
       FROM invoices i
@@ -234,12 +235,16 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
   const invoiceCount = Number(invAgg.invoice_count) + Number(wholesaleAgg.invoice_count);
   const totalRevenueAed = Number(invAgg.total_revenue) + Number(wholesaleAgg.total_revenue);
   const totalCogsAed = Number(cogsAgg.cogs) + Number(wholesaleCogsAgg.cogs);
+  // VAT is a liability, not business profit. Use the historical invoice snapshot,
+  // never a current rate or a recalculation from invoice items.
+  const totalVatAed = Number(invAgg.total_vat);
 
   res.json({
     stockInGrams,
     stockOutGrams,
     netStockGrams: stockInGrams - stockOutGrams,
     totalRevenueAed,
+    totalVatAed,
     cashReceivedAed: Number(invAgg.cash_received) + Number(wholesaleAgg.cash_received),
     outstandingDueAed: Number(invAgg.outstanding_due) + Number(wholesaleAgg.outstanding_due),
     makingChargesAed: Number(itemAgg.making_charges) + Number(wholesaleAgg.making_charges),
@@ -247,14 +252,14 @@ router.get("/dashboard/kpis", async (req, res): Promise<void> => {
     avgInvoiceAed: invoiceCount > 0 ? totalRevenueAed / invoiceCount : 0,
     purchaseCostAed: Number(purchaseAgg.purchase_cost),
     cogsAed: totalCogsAed,
-    netProfitAed: totalRevenueAed - totalCogsAed,
+    netProfitAed: totalRevenueAed - totalVatAed - totalCogsAed,
   });
 });
 
 // All-time live totals for the dashboard profit/stock summary. Not date-filtered:
 // Card 1 shows remaining stock (purchased − sold) and its value at purchase
 // cost (total purchase spend − COGS of everything sold so far); Card 2 shows
-// cumulative invoiced revenue and net profit (revenue − COGS; making charges
+// cumulative invoiced revenue and net profit (revenue − VAT − COGS; making charges
 // are already inside invoice totals, so they are not added again).
 router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
   // Silver is tracked in its own dedicated card; everything else (gold,
@@ -270,7 +275,7 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
       FROM stock_purchases
       WHERE ${dashboardCategoryIsVisibleSql(sql`category`)}
     `).then((r) => r.rows[0]),
-    db.execute<{ total_revenue: string }>(sql`
+    db.execute<{ total_revenue: string; total_vat: string }>(sql`
       SELECT (
         COALESCE((
           SELECT SUM(i.total::numeric)
@@ -282,7 +287,12 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
           FROM wholesale_invoices wi
           WHERE ${dashboardWholesaleInvoiceIsVisibleSql(sql`wi.id`)}
         ), 0)
-      )::text AS total_revenue
+      )::text AS total_revenue,
+      COALESCE((
+        SELECT SUM(COALESCE(i.vat_amount::numeric, 0))
+        FROM invoices i
+        WHERE ${dashboardRetailInvoiceIsVisibleSql(sql`i.id`)}
+      ), 0)::text AS total_vat
     `).then((r) => r.rows[0]),
     db.execute<{ main_cogs: string; silver_cogs: string }>(sql`
       SELECT COALESCE(SUM(CASE WHEN category <> 'silver' THEN net_cost ELSE 0 END), 0)::text AS main_cogs,
@@ -380,8 +390,9 @@ router.get("/dashboard/summary-cards", async (_req, res): Promise<void> => {
     silverStockGrams: round3(remainingMap.get("silver") ?? 0),
     silverStockCostAed: round2(Number(purchaseAgg.silver_cost)),
     totalRevenueAed: round2(revenue),
+    totalVatAed: round2(Number(salesAgg.total_vat)),
     soldCostAed: round2(mainCogs + silverCogs),
-    netProfitAed: round2(revenue - mainCogs - silverCogs),
+    netProfitAed: round2(revenue - Number(salesAgg.total_vat) - mainCogs - silverCogs),
     totalPhysicalRemainingGrams,
     totalPurchaseDebitAed: round2(Number(purchaseAgg.purchase_debit)),
     totalSalesCreditAed: round2(revenue),
