@@ -46,6 +46,20 @@ function kg(n: number | undefined | null): string {
 
 type RangeKey = "today" | "week" | "month" | "custom";
 
+function DashboardLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="col-span-full border-red-200 bg-red-50" role="alert">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <p className="font-semibold text-red-900">Dashboard data could not be loaded</p>
+          <p className="text-sm text-red-800">Totals are unavailable, not zero. Please retry.</p>
+        </div>
+        <Button variant="outline" onClick={onRetry}>Retry</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 const KPI_CARD_TONES = {
   profit: {
     card: "border-emerald-200 border-t-4 border-t-emerald-600 bg-emerald-50/80",
@@ -89,13 +103,13 @@ export default function Dashboard() {
   }, [range, customStart, customEnd]);
 
   const kpiParams = { startDate, endDate };
-  const { data: kpis, isLoading: kpisLoading } = useGetDashboardKpis(kpiParams, {
+  const { data: kpis, isLoading: kpisLoading, isError: kpisError, refetch: retryKpis } = useGetDashboardKpis(kpiParams, {
     query: { queryKey: getGetDashboardKpisQueryKey(kpiParams) },
   });
-  const { data: summary, isLoading: summaryLoading } = useGetDashboardSummaryCards({
+  const { data: summary, isLoading: summaryLoading, isError: summaryError, refetch: retrySummary } = useGetDashboardSummaryCards({
     query: { queryKey: getGetDashboardSummaryCardsQueryKey() },
   });
-  const { data: wholesaleDash, isLoading: wholesaleLoading } = useGetWholesaleDashboard(
+  const { data: wholesaleDash, isError: wholesaleError, refetch: retryWholesale } = useGetWholesaleDashboard(
     {},
     { query: { queryKey: getGetWholesaleDashboardQueryKey({}) } }
   );
@@ -240,7 +254,9 @@ export default function Dashboard() {
       </div>
 
       {/* Hero Control Desk */}
-      {summaryLoading || !summary ? (
+      {summaryError && !summary ? (
+        <DashboardLoadError onRetry={() => void retrySummary()} />
+      ) : summaryLoading || !summary ? (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <Skeleton className="h-[140px] xl:col-span-2" />
           <Skeleton className="h-[140px] xl:col-span-1" />
@@ -311,6 +327,9 @@ export default function Dashboard() {
       )}
 
       {/* Wholesale Overview */}
+      {wholesaleError && !wholesaleDash && (
+        <DashboardLoadError onRetry={() => void retryWholesale()} />
+      )}
       {wholesaleDash && (
         <Card className="overflow-hidden border-slate-200 bg-white shadow-md shadow-slate-900/[0.04]">
           <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 bg-white py-4">
@@ -345,7 +364,7 @@ export default function Dashboard() {
       )}
 
       {/* Category Breakdown Table */}
-      {summaryLoading || !summary ? (
+      {summaryError && !summary ? null : summaryLoading || !summary ? (
         <Skeleton className="h-64 mt-6" />
       ) : (
         <Card className="overflow-hidden border-slate-200 bg-white shadow-md shadow-slate-900/[0.04]">
@@ -432,7 +451,9 @@ export default function Dashboard() {
 
         {/* 8-card KPI grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          {kpisLoading || !kpis
+          {kpisError && !kpis
+            ? <DashboardLoadError onRetry={() => void retryKpis()} />
+            : kpisLoading || !kpis
             ? [...Array(8)].map((_, i) => <Skeleton key={i} className="h-[112px] rounded-xl" />)
             : kpiCards.map((c) => {
                 const tone = KPI_CARD_TONES[c.tone];

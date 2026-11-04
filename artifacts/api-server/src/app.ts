@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type ErrorRequestHandler } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
@@ -130,6 +130,39 @@ if (staticDir) {
     res.sendFile("index.html", { root: resolvedStaticDir });
   });
 }
+
+// Express 5 forwards async route failures here. Never return its default HTML
+// error page or expose SQL/financial input values in an API response or log.
+const apiErrorHandler: ErrorRequestHandler = (error, req, res, next) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+  let cause = error;
+  for (let depth = 0; depth < 8 && cause?.cause; depth++) cause = cause.cause;
+  const code = typeof cause?.code === "string" ? cause.code : undefined;
+  const requestId = req.id;
+  logger.error({
+    requestId, method: req.method, path: req.path, code,
+    table: cause?.table, column: cause?.column, constraint: cause?.constraint,
+    schemaMessage: code === "42P01" || code === "42703" ? cause?.message : undefined,
+  }, "API request failed");
+  if (code === "23503" || code === "23505") {
+    res.status(409).json({
+      error: code === "23503"
+        ? "This record is linked to another record that is missing or still in use."
+        : "A record with this unique reference already exists. Please refresh and retry.",
+      requestId,
+    });
+    return;
+  }
+  if (error?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Request body must be valid JSON.", requestId });
+    return;
+  }
+  res.status(500).json({ error: "Unable to complete this request. Please retry and provide this request reference to the administrator if it persists.", requestId });
+};
+app.use(apiErrorHandler);
 
 export async function initializeAppDependencies(): Promise<void> {
   await postgresSessionStore?.waitUntilReady();

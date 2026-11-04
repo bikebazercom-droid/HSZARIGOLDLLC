@@ -264,18 +264,19 @@ router.post("/invoices", async (req, res): Promise<void> => {
     invoiceCreatedAt = parsedDate;
   }
 
-  // Generate invoice number based on max existing number (not count, to handle deletions)
-  const [maxRow] = await db.execute<{ max_num: string | null }>(
-    sql`SELECT MAX(CAST(SUBSTRING(invoice_number FROM 5) AS INTEGER)) AS max_num FROM invoices WHERE invoice_number ~ '^INV-[0-9]+$'`
-  ).then((r) => r.rows);
-  const nextNum = (maxRow?.max_num != null ? parseInt(maxRow.max_num, 10) : 0) + 1;
-  const invoiceNumber = `INV-${String(nextNum).padStart(5, "0")}`;
-
   // Invoice row, items, stock deltas, and FIFO batch consumption are all
   // committed in ONE transaction: an invoice can never exist without its
   // stock movements and exact-COGS consumption rows (and vice versa).
   const stockWarnings: string[] = [];
   const { invoice, savedItems, hadDeductions } = await db.transaction(async (tx) => {
+  // Allocation and insertion share a transaction-scoped lock so concurrent
+  // requests cannot produce the same unique invoice number.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('retail_invoice_number'))`);
+  const [maxRow] = await tx.execute<{ max_num: string | null }>(
+    sql`SELECT MAX(CAST(SUBSTRING(invoice_number FROM 5) AS INTEGER)) AS max_num FROM invoices WHERE invoice_number ~ '^INV-[0-9]+$'`
+  ).then((r) => r.rows);
+  const nextNum = (maxRow?.max_num != null ? parseInt(maxRow.max_num, 10) : 0) + 1;
+  const invoiceNumber = `INV-${String(nextNum).padStart(5, "0")}`;
   const [invoice] = await tx
     .insert(invoicesTable)
     .values({

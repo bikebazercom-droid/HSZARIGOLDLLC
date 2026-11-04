@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { logger } from "./logger.js";
+import { applyRuntimeTablesMigration } from "./runtimeTablesMigration.js";
 
 export type StartupTablesSqlExecutor = (query: SQL) => Promise<void>;
 
@@ -241,6 +242,7 @@ export async function applyStartupTablesMigration(
   for (const statement of STARTUP_TABLES) {
     await execute(statement);
   }
+  await applyRuntimeTablesMigration(execute);
 }
 
 export async function ensureStartupTables(): Promise<void> {
